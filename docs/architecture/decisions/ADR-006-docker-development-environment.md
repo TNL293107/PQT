@@ -84,6 +84,13 @@ initialisation and its first migration attempt fails intermittently.
   ASP.NET runtime image ships no HTTP client.
 - The backend applies migrations on start-up **in this environment only**, via
   an explicit configuration flag that defaults to `false` elsewhere.
+- **Health conditions order the first boot, not every boot.** They are
+  evaluated by `docker compose up`; when the Docker daemon restarts and brings
+  containers back under their `restart:` policy, they are not re-applied. The
+  API therefore has to tolerate an unavailable database at start-up on its own,
+  which it does by retrying migration with backoff and degrading readiness
+  rather than failing host start-up. Found by restarting the daemon under a
+  running stack, not by reading the documentation.
 - The frontend is compiled and served by nginx rather than running the Vite dev
   server in a container — closer to how it would be deployed, and it makes the
   production build path part of the routine.
