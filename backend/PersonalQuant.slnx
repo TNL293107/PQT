@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PersonalQuant.Api/PersonalQuant.Api.csproj" />
+    <Project Path="src/PersonalQuant.Application/PersonalQuant.Application.csproj" />
+    <Project Path="src/PersonalQuant.Domain/PersonalQuant.Domain.csproj" />
+    <Project Path="src/PersonalQuant.Infrastructure/PersonalQuant.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PersonalQuant.IntegrationTests/PersonalQuant.IntegrationTests.csproj" />
+    <Project Path="tests/PersonalQuant.UnitTests/PersonalQuant.UnitTests.csproj" />
+  </Folder>
+</Solution>

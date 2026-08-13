@@ -1,0 +1,67 @@
+<Project>
+
+  <!--
+    Central Package Management.
+    Every NuGet version for the backend solution is declared exactly once here;
+    project files reference packages without a Version attribute.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="ASP.NET Core / OpenAPI">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <!--
+      Pinned explicitly: Microsoft.AspNetCore.OpenApi 10.0.x resolves
+      Microsoft.OpenApi 2.0.0, which carries advisory GHSA-v5pm-xwqc-g5wc.
+      2.12.0 is the patched release on the same major line.
+    -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.12.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.16.19" />
+  </ItemGroup>
+
+  <ItemGroup Label="Persistence">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <!--
+      Npgsql 10.0.3 resolves EF Core Relational 10.0.4. Pinned to the same
+      patch level as the rest of EF Core so the build does not have to unify
+      two assembly versions at runtime (MSB3277).
+    -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Cache / realtime">
+    <PackageVersion Include="StackExchange.Redis" Version="3.1.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Extensions">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.13.0" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup Label="Transitive pins (security)">
+    <!--
+      Testcontainers 4.13.0 resolves SSH.NET 2025.1.0, which carries advisory
+      GHSA-q939-rpr3-3284. Transitive pinning lifts it to the patched release.
+      Remove this pin once Testcontainers ships a fixed reference itself.
+    -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
+  </ItemGroup>
+
+</Project>

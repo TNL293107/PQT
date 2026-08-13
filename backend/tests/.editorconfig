@@ -1,0 +1,22 @@
+# ===========================================================================
+# Test-project overrides.
+#
+# Test code is read as documentation of behaviour, so it follows different
+# conventions from production code. Everything not listed here is inherited
+# from backend/.editorconfig.
+# ===========================================================================
+
+[*.cs]
+
+# CA1707: test method names use underscores on purpose. A name such as
+# 'Readiness_reports_unavailable_dependencies_as_service_unavailable' is the
+# failure message a developer reads first, and PascalCase makes it harder to
+# scan. This is the only place the rule is relaxed.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1861: constant arrays passed as expected values in assertions are clearer
+# inline than hoisted into static fields.
+dotnet_diagnostic.CA1861.severity = none
+
+# xUnit fixtures expose public members that nothing else calls.
+dotnet_diagnostic.CA1034.severity = none

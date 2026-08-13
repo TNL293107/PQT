@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+    Settings shared by every project in the backend solution.
+    Individual projects should only override these deliberately.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Nullable reference types are non-negotiable for this codebase. -->
+    <Nullable>enable</Nullable>
+
+    <!-- Static analysis. Warnings are errors so problems cannot accumulate. -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Determinism / provenance. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Deterministic>true</Deterministic>
+
+    <!-- Nothing in this repository is published to a package feed. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>
