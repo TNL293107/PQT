@@ -1,0 +1,74 @@
+/*
+ * Design tokens.
+ *
+ * The visual direction is a trading terminal, not a web dashboard: dark
+ * ground, dense rows, tabular numerals, and colour reserved for state rather
+ * than decoration. Every value used by a component comes from here.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Surfaces: four steps of elevation, not one flat grey ------------- */
+  --surface-void: oklch(16% 0.012 250);
+  --surface-base: oklch(20% 0.014 250);
+  --surface-raised: oklch(24% 0.016 250);
+  --surface-overlay: oklch(28% 0.018 250);
+
+  --border-subtle: oklch(32% 0.018 250);
+  --border-strong: oklch(42% 0.022 250);
+
+  /* --- Text ------------------------------------------------------------ */
+  --text-primary: oklch(94% 0.006 250);
+  --text-secondary: oklch(74% 0.012 250);
+  --text-muted: oklch(58% 0.014 250);
+
+  /* --- Accent: terminal amber ------------------------------------------ */
+  --accent: oklch(80% 0.16 78);
+  --accent-dim: oklch(62% 0.13 78);
+  --accent-wash: oklch(80% 0.16 78 / 0.1);
+
+  /* --- Semantic state --------------------------------------------------
+   * Used for service status and, later, for P&L direction. Never used as
+   * decoration.
+   */
+  --state-online: oklch(78% 0.17 152);
+  --state-online-wash: oklch(78% 0.17 152 / 0.12);
+  --state-offline: oklch(66% 0.21 22);
+  --state-offline-wash: oklch(66% 0.21 22 / 0.12);
+  --state-degraded: oklch(80% 0.16 78);
+  --state-degraded-wash: oklch(80% 0.16 78 / 0.12);
+  --state-unknown: oklch(58% 0.014 250);
+  --state-unknown-wash: oklch(58% 0.014 250 / 0.12);
+
+  /* --- Typography ------------------------------------------------------ */
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: clamp(1.375rem, 1.1rem + 1vw, 1.875rem);
+
+  --tracking-wide: 0.08em;
+  --tracking-wider: 0.14em;
+
+  /* --- Spacing: a 4px rhythm, deliberately tight ----------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+
+  --duration-fast: 120ms;
+  --duration-normal: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
