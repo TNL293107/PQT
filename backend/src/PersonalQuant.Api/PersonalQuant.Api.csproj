@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The API host. It owns HTTP concerns only: configuration binding, the
+    middleware pipeline, diagnostics endpoints and OpenAPI. Business behaviour
+    belongs in the application layer.
+  -->
+
+  <PropertyGroup>
+    <UserSecretsId>personal-quant-terminal-api</UserSecretsId>
+    <RootNamespace>PersonalQuant.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalQuant.Application\PersonalQuant.Application.csproj" />
+    <ProjectReference Include="..\PersonalQuant.Infrastructure\PersonalQuant.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PersonalQuant.UnitTests" />
+    <InternalsVisibleTo Include="PersonalQuant.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
