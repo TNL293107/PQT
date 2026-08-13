@@ -1,0 +1,244 @@
+# ===========================================================================
+# Personal Quantitative Trading & Market Intelligence Terminal
+# Multi-stack .gitignore: .NET / Node / Python / C++ / Docker
+#
+# Guiding rules:
+#   * Never commit secrets or credentials.
+#   * Never commit build output.
+#   * Never commit bulk market data (see data/README.md for the data policy).
+#   * DO keep documentation, schemas and small deterministic fixtures.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Secrets and credentials  (highest priority — keep this block first)
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+credentials/
+secrets/
+secrets.json
+appsettings.Local.json
+appsettings.*.Local.json
+.npmrc.local
+.pgpass
+
+# ---------------------------------------------------------------------------
+# .NET
+# ---------------------------------------------------------------------------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]64/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+TestResults/
+[Tt]est[Rr]esult*/
+BenchmarkDotNet.Artifacts/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+.nuget/
+msbuild.log
+msbuild.err
+msbuild.wrn
+coverage.cobertura.xml
+coverage.opencover.xml
+*.coverage
+*.coveragexml
+
+# ---------------------------------------------------------------------------
+# Node / frontend
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+build/
+.next/
+out/
+.nuxt/
+.svelte-kit/
+.turbo/
+.vite/
+coverage/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.yarn/cache/
+.yarn/install-state.gz
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.dmypy.json
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.ipynb_checkpoints/
+pip-wheel-metadata/
+
+# ---------------------------------------------------------------------------
+# C / C++ / CMake
+# ---------------------------------------------------------------------------
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CMakeScripts/
+cmake_install.cmake
+CTestTestfile.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+Testing/
+compile_commands.json
+_deps/
+install_manifest.txt
+*.o
+*.obj
+*.so
+*.so.*
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.out
+*.app
+*.d
+*.gcda
+*.gcno
+*.gcov
+*.ilk
+*.pdb
+vcpkg_installed/
+
+# ---------------------------------------------------------------------------
+# IDE / editor
+# ---------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+.fleet/
+.cache/
+.history/
+
+# VS Code: ignore local machine state, but allow intentionally shared config.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# ---------------------------------------------------------------------------
+# Operating system
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+logs/
+
+# ---------------------------------------------------------------------------
+# Local data
+#
+# NOTE: the data/ directory itself is tracked. Only bulk / derived / vendor
+# payloads are ignored. data/README.md and data/schemas/ stay in Git.
+# ---------------------------------------------------------------------------
+data/raw/
+data/cache/
+data/tmp/
+data/interim/
+data/external/
+datasets/raw/
+datasets/cache/
+datasets/tmp/
+*.csv.gz
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.hdf5
+
+# ---------------------------------------------------------------------------
+# Local databases
+# ---------------------------------------------------------------------------
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+pgdata/
+
+# ---------------------------------------------------------------------------
+# AI / model artifacts
+# ---------------------------------------------------------------------------
+models/
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# ---------------------------------------------------------------------------
+# Generated artifacts and reports
+# ---------------------------------------------------------------------------
+reports/generated/
+screenshots/
+playwright-report/
+test-results/
+.scannerwork/
+tmp/
