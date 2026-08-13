@@ -30,5 +30,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 # nginx's own health path, used by the Compose health check.
+#
+# 127.0.0.1 rather than localhost: in this image 'localhost' resolves to ::1
+# first, and 'listen 80' binds IPv4 only, so the probe would be refused while
+# nginx was serving traffic perfectly well.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
-    CMD wget --quiet --tries=1 --spider http://localhost/healthz || exit 1
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1/healthz || exit 1
