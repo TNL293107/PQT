@@ -1,0 +1,91 @@
+[project]
+name = "personal-quant"
+version = "0.1.0"
+description = "Quantitative research layer for the Personal Quant Terminal."
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+
+# Phase 0 has no runtime dependencies. Numerical and data libraries
+# (numpy, pandas, polars, pyarrow) arrive with Phase 7 — Quant Research —
+# when there is something to compute.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+filterwarnings = ["error"]
+
+# ---------------------------------------------------------------------------
+# ruff — linting and formatting
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "N",    # pep8 naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "A",    # builtin shadowing
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "PT",   # pytest style
+    "RUF",  # ruff-specific
+    "S",    # bandit security rules
+    "ANN",  # missing annotations
+    "D",    # docstrings
+]
+ignore = [
+    "D203",  # conflicts with D211
+    "D213",  # conflicts with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+# S101: assert is how pytest expresses expectations.
+# S105/S106: test fixtures use obviously-fake credentials on purpose; the
+#            point of several tests is that such a value is handled safely.
+# D100/D103: module and test-function docstrings; the test name is the
+#            description.
+"tests/**" = ["S101", "S105", "S106", "D100", "D103"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
