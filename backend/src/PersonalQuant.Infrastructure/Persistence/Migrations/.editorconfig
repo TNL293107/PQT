@@ -1,0 +1,22 @@
+# ===========================================================================
+# EF Core writes the files in this directory. Its scaffolder emits
+# block-scoped namespaces and does not honour the solution's style rules, so
+# 'dotnet ef migrations add' would break the build on every new migration if
+# those rules applied here.
+#
+# Only cosmetic rules are relaxed. Correctness and security analyzers still
+# apply to migration code.
+# ===========================================================================
+
+[*.cs]
+generated_code = true
+
+# IDE0161: file-scoped namespace.
+dotnet_diagnostic.IDE0161.severity = none
+
+# IDE0300 / IDE0301: collection expression preferences.
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.IDE0301.severity = none
+
+# CA1861: constant arrays in generated column definitions.
+dotnet_diagnostic.CA1861.severity = none
