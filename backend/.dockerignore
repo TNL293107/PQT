@@ -1,0 +1,13 @@
+# Keep the build context small and make sure no local secret or build output
+# can end up inside an image layer.
+**/bin/
+**/obj/
+**/.vs/
+**/TestResults/
+**/*.user
+**/.env
+**/.env.*
+**/appsettings.Local.json
+**/*.log
+Dockerfile
+.dockerignore
