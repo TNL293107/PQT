@@ -1,0 +1,271 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run: only the latest
+# commit's result is interesting, and private-repository minutes are metered.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend — restore, build, unit tests, integration tests.
+  #
+  # Integration tests use Testcontainers, which needs a Docker daemon. The
+  # ubuntu runner has one, so they execute here rather than skipping.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend (.NET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'backend/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore backend/PersonalQuant.slnx
+
+      - name: Build
+        run: dotnet build backend/PersonalQuant.slnx --configuration Release --no-restore
+
+      # Fails the build on a dependency with a known advisory. Central Package
+      # Management already pins the transitive fixes; this catches new ones.
+      - name: Audit dependencies for known vulnerabilities
+        run: |
+          # 'dotnet list package --vulnerable' reports findings but always
+          # exits 0, so the output has to be inspected explicitly.
+          dotnet list backend/PersonalQuant.slnx package --vulnerable --include-transitive | tee audit.log
+          if grep -q "has the following vulnerable packages" audit.log; then
+            echo "::error::Vulnerable NuGet packages detected. Pin a patched version in Directory.Packages.props."
+            exit 1
+          fi
+
+      - name: Unit tests
+        run: >
+          dotnet test backend/tests/PersonalQuant.UnitTests/PersonalQuant.UnitTests.csproj
+          --configuration Release --no-build --logger "trx;LogFileName=unit.trx"
+
+      - name: Integration tests
+        run: >
+          dotnet test backend/tests/PersonalQuant.IntegrationTests/PersonalQuant.IntegrationTests.csproj
+          --configuration Release --no-build --logger "trx;LogFileName=integration.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: "**/TestResults/*.trx"
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Frontend — install, lint, typecheck, test, build.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # 'ci' rather than 'install': it installs exactly what the lock file
+      # pins and fails if package.json and the lock file disagree.
+      - name: Install
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Quant — install, lint, format check, type check, test.
+  # ---------------------------------------------------------------------------
+  quant:
+    name: Quant (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: quant
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: quant/pyproject.toml
+
+      - name: Install
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Test
+        run: pytest --cov=personal_quant --cov-report=term-missing
+
+  # ---------------------------------------------------------------------------
+  # C++ engine — configure, build, test.
+  #
+  # Runs on Linux and Windows: the code compiles under both GCC and MSVC, and
+  # the two disagree often enough that testing one proves little about the
+  # other.
+  # ---------------------------------------------------------------------------
+  cpp-engine:
+    name: C++ engine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    defaults:
+      run:
+        working-directory: cpp-engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # GoogleTest is fetched at configure time; caching _deps avoids cloning
+      # it on every run.
+      - name: Cache CMake dependencies
+        uses: actions/cache@v4
+        with:
+          path: cpp-engine/build/ci/_deps
+          key: cmake-deps-${{ runner.os }}-${{ hashFiles('cpp-engine/tests/CMakeLists.txt') }}
+          restore-keys: cmake-deps-${{ runner.os }}-
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci
+
+      - name: Test
+        run: ctest --preset ci
+
+  # ---------------------------------------------------------------------------
+  # Repository hygiene — secrets, Compose validity, environment template.
+  # ---------------------------------------------------------------------------
+  repository:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks scans history, which needs more than the default shallow
+          # clone of one commit.
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail if a real .env is tracked
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env is tracked by Git. It must be ignored."
+            exit 1
+          fi
+
+      - name: Fail if live trading was enabled in the template
+        run: |
+          if ! grep -q '^LIVE_TRADING_ENABLED=false$' .env.example; then
+            echo "::error::LIVE_TRADING_ENABLED must default to false in .env.example."
+            exit 1
+          fi
+
+      # Compose interpolates variables while validating, so the example file
+      # stands in for a real .env. It is committed and contains no secret.
+      - name: Validate Docker Compose configuration
+        run: docker compose --env-file .env.example config --quiet
+
+  # ---------------------------------------------------------------------------
+  # Single required status for branch protection.
+  # ---------------------------------------------------------------------------
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, quant, cpp-engine, repository]
+    if: always()
+
+    steps:
+      - name: Verify every job succeeded
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "::error::At least one CI job did not succeed."
+            exit 1
+          fi
+          echo "All CI jobs succeeded."
