@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The application layer holds use cases and the abstractions the
+    infrastructure layer implements. It depends on the domain only.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalQuant.Domain\PersonalQuant.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

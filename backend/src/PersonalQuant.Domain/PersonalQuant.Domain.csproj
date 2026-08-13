@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The domain layer holds the financial model: instruments, market structure,
+    positions, orders, risk. It is deliberately empty in Phase 0 — the first
+    real entities arrive with Phase 1 (Instrument Master).
+
+    This project must never reference another project in the solution.
+  -->
+
+</Project>
