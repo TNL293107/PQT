@@ -48,4 +48,21 @@ internal static partial class InfrastructureLog
         Level = LogLevel.Information,
         Message = "Database schema migration completed.")]
     public static partial void MigrationCompleted(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 1104,
+        Level = LogLevel.Warning,
+        Message = "Database not ready for migration (attempt {Attempt} of {MaxAttempts}). Retrying in {DelaySeconds}s.")]
+    public static partial void MigrationAttemptFailed(
+        ILogger logger,
+        Exception exception,
+        int attempt,
+        int maxAttempts,
+        double delaySeconds);
+
+    [LoggerMessage(
+        EventId = 1105,
+        Level = LogLevel.Error,
+        Message = "Could not apply migrations after {MaxAttempts} attempts. The API will start, but readiness will report PostgreSQL as unavailable until the schema is up to date.")]
+    public static partial void MigrationAbandoned(ILogger logger, Exception exception, int maxAttempts);
 }
