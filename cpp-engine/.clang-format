@@ -1,0 +1,20 @@
+# Formatting is settled by the tool, not by review comments.
+# Run: clang-format -i $(git ls-files '*.cpp' '*.hpp')
+BasedOnStyle: Google
+
+Language: Cpp
+Standard: c++20
+
+ColumnLimit: 88
+IndentWidth: 4
+AccessModifierOffset: -4
+
+AllowShortFunctionsOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+
+SeparateDefinitionBlocks: Always

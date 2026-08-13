@@ -1,0 +1,8 @@
+# CMake writes every configuration under build/<preset>/, and FetchContent
+# places GoogleTest's source and binaries under build/<preset>/_deps/.
+# The root .gitignore already covers build/, this file documents the intent
+# locally and catches IDE-chosen directories.
+build/
+out/
+cmake-build-*/
+compile_commands.json
