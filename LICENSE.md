@@ -9,7 +9,9 @@ No permission is granted to use, copy, modify, distribute,
 sublicense, or commercially exploit this software or its
 source code without prior written permission from the copyright holder.
 
-This repository is maintained as a private repository for
+This repository is public so that the work can be read and
+reviewed. Public visibility grants no licence: it is published
+for reading, not for reuse. The repository is maintained for
 personal development, research, educational purposes, and
 version control.
 

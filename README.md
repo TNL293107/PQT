@@ -254,8 +254,9 @@ Recorded now because they are expensive to retrofit:
 
 ## License
 
-**Proprietary — all rights reserved.** This is a private repository and is
-**not** an open-source project. See [LICENSE.md](LICENSE.md).
+**Proprietary — all rights reserved.** This repository is public to be read,
+but it is **not** an open-source project and no rights are granted to reuse
+the code. See [LICENSE.md](LICENSE.md).
 
 Third-party dependencies remain under their own licences. Market data is
 governed by provider terms, not by this licence.
