@@ -55,6 +55,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(CorsOptions.PolicyName);
 
 app.MapDiagnosticsEndpoints();
+app.MapInstrumentEndpoints();
 
 await app.RunAsync();
 
