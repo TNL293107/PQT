@@ -25,7 +25,7 @@ through CTest.
 
 Phase 0 builds a static library, a CLI and a passing test suite. It contains no
 trading logic. The engine is not referenced by the backend and will not be
-until Phase 15.
+until Phase 16.
 
 ## Alternatives
 
@@ -34,13 +34,13 @@ and server GC; a great deal of low-latency work is done in C# today.
 
 **Rust**, for the same performance with memory safety.
 
-**Defer the decision entirely** until Phase 15.
+**Defer the decision entirely** until Phase 16.
 
 ## Reasoning
 
 The honest position is that .NET would probably be fast enough, and it must be
 measured before any component is rewritten. This ADR does not claim otherwise.
-What it establishes is the *option*, at close to zero cost, before Phase 15 is
+What it establishes is the *option*, at close to zero cost, before Phase 16 is
 under time pressure.
 
 C++ over Rust is a deliberately pragmatic call rather than a technical
@@ -54,7 +54,7 @@ actually uses is part of the value.
 
 Deferring entirely was rejected for one reason: a toolchain is far easier to
 stand up when nothing depends on it. Discovering a CMake, compiler, or CI
-problem in Phase 15, while also designing an order book, means debugging two
+problem in Phase 16, while also designing an order book, means debugging two
 unfamiliar things simultaneously. Proving the build now costs a day.
 
 ## Trade-offs
@@ -78,4 +78,4 @@ unfamiliar things simultaneously. Proving the build now costs a day.
 - Tests run under CTest, which is also what GoogleTest registers with — so the
   harness does not change when the suite grows.
 - **Open:** the interop mechanism (P/Invoke, native library, or separate
-  process) is a Phase 15 decision.
+  process) is a Phase 16 decision.

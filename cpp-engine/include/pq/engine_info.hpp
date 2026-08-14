@@ -8,7 +8,7 @@
 /// Phase 0 contains no trading logic. This namespace exists so the C++
 /// toolchain, the CMake build and CTest are proven end to end before any
 /// latency-sensitive component is written. The order book, market data
-/// decoding and the event bus arrive in Phase 15.
+/// decoding and the event bus arrive in Phase 16.
 namespace pq {
 
 /// Build and toolchain identification for the engine.

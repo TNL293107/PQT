@@ -12,7 +12,7 @@ worth a durable write:
 - Fan-out of tick updates to connected terminal clients.
 - Rate limiting against provider API quotas — a hard requirement, since
   exceeding a quota can suspend an account.
-- Expensive computed results, such as screener runs (Phase 6).
+- Expensive computed results, such as screener and factor runs (Phase 6).
 
 Writing all of that to PostgreSQL would mean durable writes for data whose
 value expires in seconds, and polling where push is wanted.
@@ -65,7 +65,7 @@ dependency, which inverts the intended failure model.
 - Redis persistence is weaker than PostgreSQL's. Accepted: nothing that matters
   is stored only in Redis, ever.
 - Pub/sub has no delivery guarantee and no replay. Accepted for realtime
-  display; unacceptable for order events, which is why the OMS (Phase 12) will
+  display; unacceptable for order events, which is why the OMS (Phase 13) will
   write to PostgreSQL.
 - Cache invalidation becomes a real design concern from Phase 2.
 
@@ -78,4 +78,4 @@ dependency, which inverts the intended failure model.
 - The password is supported through configuration and left unset locally, where
   Redis is not reachable outside the Compose network.
 - Revisit if a durable, replayable event log becomes a requirement — most
-  likely alongside the OMS in Phase 12.
+  likely alongside the OMS in Phase 13.

@@ -72,7 +72,7 @@ the boundary will have been proven by use.
   by project references and reviewed dependencies, but it does require
   discipline.
 - A crash takes the whole backend down. Acceptable for personal research;
-  revisited in Phase 17 if any component becomes latency- or uptime-critical.
+  revisited in Phase 18 if any component becomes latency- or uptime-critical.
 - Everything is one language and runtime. The Python and C++ layers are
   deliberately outside this boundary for exactly that reason.
 
@@ -83,6 +83,6 @@ the boundary will have been proven by use.
   eventual consistency to reason about.
 - The build fails on an inward-pointing dependency violation.
 - Extraction remains available. Candidates, if they ever justify it: realtime
-  market data ingestion (Phase 2) and the execution path (Phase 12).
+  market data ingestion (Phase 2) and the execution path (Phase 13).
 - No Kubernetes, no service mesh, no message broker in Phase 0. Adding any of
   them requires a superseding ADR that names the specific problem it solves.

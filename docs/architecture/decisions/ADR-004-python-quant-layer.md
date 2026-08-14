@@ -4,7 +4,7 @@
 
 ## Context
 
-From Phase 7 the system needs factor research, backtesting and performance
+From Phase 8 the system needs factor research, backtesting and performance
 analytics. That work is exploratory: hypotheses are cheap, most are wrong, and
 the cost that matters is the time between an idea and a chart that refutes it.
 
@@ -18,7 +18,7 @@ mode.
 
 Phase 0 establishes the environment only. It has no runtime dependencies and
 no financial code. The numerical stack (numpy, pandas or polars, pyarrow)
-arrives in Phase 7, when there is something to compute.
+arrives in Phase 8, when there is something to compute.
 
 ## Alternatives
 
@@ -75,5 +75,5 @@ code; typing it from the start is far cheaper than retrofitting.
 - `POSTGRES_PASSWORD` has no default in this layer. Loading configuration
   without it raises.
 - **Open:** how the backend and the quant layer exchange work — shared
-  database, job queue, or local service — is a Phase 7 decision, taken when
+  database, job queue, or local service — is a Phase 8 decision, taken when
   there is a real workload to size it against.

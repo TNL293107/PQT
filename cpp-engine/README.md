@@ -4,7 +4,7 @@ Performance-sensitive components of the terminal.
 
 **Phase 0 status:** toolchain only. There is no order book, no market data
 decoder, and no execution logic here. The engine exists so the C++ build and
-test path is proven before Phase 15 needs it.
+test path is proven before Phase 16 needs it.
 
 ## Layout
 
@@ -58,7 +58,7 @@ implicit conversions.
 
 ## What goes here later
 
-Phase 15 — C++ Performance. Candidates are the components where managed
+Phase 16 — C++ Performance. Candidates are the components where managed
 allocation and GC pauses are the constraint: order book maintenance, market
 data decoding, and the event bus. Everything else stays in .NET or Python,
 where it is faster to write and easier to change.

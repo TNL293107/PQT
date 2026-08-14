@@ -13,11 +13,11 @@ quant/
 ├── pyproject.toml              packaging, pytest, ruff and mypy configuration
 ├── src/personal_quant/
 │   ├── environment.py          reads the shared POSTGRES_* configuration
-│   ├── research/               exploratory analysis            (Phase 7)
-│   ├── factors/                factor definitions              (Phase 7)
-│   ├── strategies/             signal generation               (Phase 7)
-│   ├── backtesting/            historical simulation           (Phase 8)
-│   └── analytics/              performance and attribution     (Phase 8)
+│   ├── research/               exploratory analysis            (Phase 8)
+│   ├── factors/                factor definitions              (Phase 8)
+│   ├── strategies/             signal generation               (Phase 8)
+│   ├── backtesting/            historical simulation           (Phase 9)
+│   └── analytics/              performance and attribution     (Phase 9)
 └── tests/
 ```
 

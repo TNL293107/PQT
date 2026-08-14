@@ -6,8 +6,8 @@ requires-python = ">=3.12"
 license = { text = "Proprietary" }
 
 # Phase 0 has no runtime dependencies. Numerical and data libraries
-# (numpy, pandas, polars, pyarrow) arrive with Phase 7 — Quant Research —
-# when there is something to compute.
+# (numpy, pandas, polars, pyarrow) arrive with Phase 8 — Quant Research
+# Framework — when there is something to compute.
 dependencies = []
 
 [project.optional-dependencies]
