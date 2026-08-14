@@ -1,7 +1,8 @@
 # Personal Quantitative Trading & Market Intelligence Terminal
 
-A Bloomberg-inspired quantitative research and trading workstation, built as a
-long-term personal engineering project.
+A Bloomberg-inspired quantitative research and trading workstation for the
+**Vietnam market** (HOSE, HNX, UPCOM), built as a long-term personal
+engineering project.
 
 > **Current phase: Phase 0 — Foundation & Architecture.**
 >
@@ -23,8 +24,8 @@ market data → research → signal → backtest → risk → execution → moni
 ```
 
 The system is data-first. The terminal UI is a view onto the domain, not the
-place behaviour lives — a chart on top of a model that cannot distinguish
-`AAPL` from `AAPL.US` is worth nothing.
+place behaviour lives — a chart on top of a model that cannot tell one
+provider's spelling of `FPT` from another's is worth nothing.
 
 ## Architecture
 
@@ -176,10 +177,10 @@ Phase 0 establishes hygiene, not a security model.
 - Health endpoints log failures in full and disclose nothing to the caller.
 - CI fails the build on a dependency with a known advisory, and scans history
   for secrets.
-- `LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 13.
+- `LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 14.
 
 **There is no authentication yet.** There is nothing to protect, and guessing
-the model now would be rework. It arrives in Phase 17, or sooner if any part of
+the model now would be rework. It arrives in Phase 18, or sooner if any part of
 this leaves localhost.
 
 ## Data policy
@@ -195,18 +196,28 @@ integration.
 
 ## Roadmap
 
-| Tier | Becomes           | Phases | Status   |
-| ---- | ----------------- | ------ | -------- |
-| —    | Foundation        | 0      | COMPLETE |
-| 1    | Research terminal | 1–6    | PLANNED  |
-| 2    | Quant platform    | 7–10   | PLANNED  |
-| 3    | Trading system    | 11–14  | PLANNED  |
-| 4    | Engineered system | 15–18  | PLANNED  |
+Twenty phases in four milestones. Phase 0 is complete; everything else is
+planned.
+
+| Milestone | Becomes           | Phases | Status      |
+| --------- | ----------------- | ------ | ----------- |
+| 1         | Data foundation   | 0–4    | Phase 0 done |
+| 2         | Quant platform    | 5–10   | PLANNED     |
+| 3         | Trading system    | 11–15  | PLANNED     |
+| 4         | Engineered system | 16–19  | PLANNED     |
+
+Five phases carry the dependency chain everything else inherits, and none may
+be done superficially: **2** (market data ingestion) → **3** (data quality) →
+**4** (corporate actions) → **9** (backtesting) → **10** (risk).
+
+> Data correct → research trustworthy → backtest trustworthy → risk
+> trustworthy → execution trustworthy.
+>
+> Data wrong → all of it wrong, quietly.
 
 Next up is **Phase 1 — Instrument Master**: know what an instrument *is* before
-storing anything about it. Done when searching `NVDA` resolves to exactly one
-security, and `AAPL`, `AAPL.US`, `US0378331005` and `BBG000B9XRY4` all resolve
-to the same canonical ID.
+storing anything about it. Done when searching `FPT` resolves to exactly one
+security and every provider's spelling of it maps to the same canonical ID.
 
 Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
 
@@ -215,14 +226,19 @@ Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
 Recorded now because they are expensive to retrofit:
 
 - **Canonical instrument identity.** Provider symbols are aliases, never keys.
+  In Vietnam this is forced rather than merely wise — tickers change on
+  exchange transfer and are reassigned after delisting.
 - **Point-in-time correctness.** Every fact carries both the period it
   describes and the moment it became knowable, so backtests cannot use
   information that did not exist yet.
-- **Data quality is a pipeline stage**, not an assumption.
+- **Data quality is a pipeline stage**, not an assumption. Thresholds are
+  per-exchange, matching the ±7% / ±10% / ±15% daily price limits.
+- **Raw data is never overwritten.** Corporate actions are applied as a
+  versioned adjustment layer over retained raw prices.
 - **Deterministic execution path.** `strategy → signal → portfolio → risk → OMS
   → execution → broker`. A strategy has no route to a broker; the risk engine
   can reject.
-- **AI advises, never trades.** The Phase 16 analyst has no path to the OMS.
+- **AI advises, never trades.** The Phase 17 analyst has no path to the OMS.
 
 ## Documentation
 
@@ -231,10 +247,10 @@ Recorded now because they are expensive to retrofit:
 | [Architecture overview](docs/architecture/overview.md)                         | Current and target architecture |
 | [System context](docs/architecture/system-context.md)                          | Actors and external systems     |
 | [Data policy](docs/architecture/data-policy.md)                                | Market data licensing           |
-| [ADRs](docs/architecture/decisions/)                                           | Seven recorded decisions        |
+| [ADRs](docs/architecture/decisions/)                                           | Eight recorded decisions        |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
 | [Git workflow](docs/development/git-workflow.md)                               | Branching and commit standards  |
-| [Roadmap](docs/roadmap/phases.md)                                              | All nineteen phases             |
+| [Roadmap](docs/roadmap/phases.md)                                              | All twenty phases               |
 
 ## License
 
