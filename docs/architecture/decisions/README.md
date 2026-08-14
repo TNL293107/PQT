@@ -17,6 +17,7 @@ reasoning at the time is preserved.
 | [006](ADR-006-docker-development-environment.md)             | Docker Compose for development  | Accepted |
 | [007](ADR-007-private-proprietary-repository.md)             | Private, proprietary repository | Accepted |
 | [008](ADR-008-vietnam-market-first.md)                       | Vietnam market first            | Accepted |
+| [009](ADR-009-instrument-identity-and-ticker-lifecycle.md)   | Instrument identity and ticker lifecycle | Accepted |
 
 ## Format
 

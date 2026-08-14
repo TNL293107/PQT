@@ -4,12 +4,13 @@ A Bloomberg-inspired quantitative research and trading workstation for the
 **Vietnam market** (HOSE, HNX, UPCOM), built as a long-term personal
 engineering project.
 
-> **Current phase: Phase 0 — Foundation & Architecture.**
+> **Current phase: Phase 1 — Instrument Master (in progress).**
 >
-> This repository contains a working, tested engineering foundation and **no
-> financial functionality**. There is no market data, no research, no
-> backtesting, no portfolio, no trading, and no AI. The
-> [roadmap](docs/roadmap/phases.md) describes where those arrive.
+> Phase 0 is complete. Phase 1 workstream 1 has landed the instrument identity
+> model and its persistence. There is still **no market data, no research, no
+> backtesting, no portfolio, no trading, and no AI**, and no HTTP surface for
+> instruments yet. The [roadmap](docs/roadmap/phases.md) describes where those
+> arrive.
 
 ---
 
@@ -133,6 +134,13 @@ Everything in this list is implemented and covered by tests.
   driver detail while doing so.
 - **EF Core migration pipeline** — a baseline migration creates the `quant`
   schema and the migrations history table.
+- **Instrument master (Phase 1, workstream 1)** — `Exchange` and `Instrument`
+  aggregates with strongly-typed identity, value objects instead of bare
+  strings, and a listing lifecycle that rejects every illegal transition.
+  Ticker uniqueness is enforced per exchange over active instruments only, so
+  a ticker released on delisting can be reissued without destroying the
+  previous holder's history. Instruments are never deleted. See
+  [ADR-009](docs/architecture/decisions/ADR-009-instrument-identity-and-ticker-lifecycle.md).
 - **Terminal system status page** — live per-service state with real loading
   and error handling.
 - **Four independent test suites** — .NET, Vitest, pytest, CTest.

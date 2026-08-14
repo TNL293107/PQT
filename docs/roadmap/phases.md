@@ -50,7 +50,7 @@ Everything else in the system rests on them.
 | Phase | Name                                | Milestone | Status   |
 | ----- | ----------------------------------- | --------- | -------- |
 | 0     | Foundation & Architecture           | 1         | COMPLETE |
-| 1     | Instrument Master                   | 1         | PLANNED  |
+| 1     | Instrument Master                   | 1         | IN PROGRESS |
 | 2     | Market Data Ingestion               | 1         | PLANNED  |
 | 3     | Data Normalization & Quality        | 1         | PLANNED  |
 | 4     | Corporate Actions & Adjusted Data   | 1         | PLANNED  |
@@ -142,6 +142,28 @@ provider's spelling of it maps to the same canonical ID.
 The ticker is never the primary key. Vietnamese tickers are reused after
 delisting and change on exchange transfer, so an internal canonical ID is a
 correctness requirement, not a preference.
+
+### Workstreams
+
+| # | Workstream | Status |
+| - | ---------- | ------ |
+| 1 | Instrument identity core — domain model, lifecycle, persistence | COMPLETE |
+| 2 | Reference data — exchange seeding, `Sector`, `Industry` | PLANNED |
+| 3 | Identifier aliases — provider symbols, ISIN, FIGI | PLANNED |
+| 4 | Symbol normalization and deduplication | PLANNED |
+| 5 | Provider import pipeline | PLANNED |
+| 6 | Query API — list, get, search, related | PLANNED |
+| 7 | Terminal instrument search | PLANNED |
+
+**Workstream 1 delivered:** `Exchange` and `Instrument` aggregates with
+strongly-typed identity (`InstrumentId`, `ExchangeId`) and value objects
+(`Ticker`, `ExchangeCode`, `CurrencyCode`); the listing lifecycle with every
+illegal transition rejected; `quant.exchanges` and `quant.instruments` with a
+**partial** unique index that permits ticker reuse after delisting; repository
+ports with no delete operation.
+
+Not yet delivered in Phase 1: everything in workstreams 2–7. There is no HTTP
+surface for instruments and no seeded exchange data.
 
 ## Phase 2 — Market Data Ingestion · PLANNED
 

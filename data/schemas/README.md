@@ -4,12 +4,15 @@ Tracked schema definitions for data that crosses a system boundary — provider
 payloads, file interchange formats, and contracts shared between the .NET
 backend, the Python quant layer, and the C++ engine.
 
-**Phase 0 status:** empty by design. No financial schema is defined yet.
+**Status:** empty by design. No provider payload contract exists yet, because
+no provider is integrated.
 
-The instrument-identity schema (`Instrument`, `Exchange`, `AssetType`,
-`Sector`, `Industry`, `Currency`, `Identifier`) arrives in Phase 1 — Instrument
-Master, together with the corresponding EF Core model and migration. Coverage
-is HOSE, HNX and UPCOM.
+The instrument model itself now exists, but it lives in EF Core migrations —
+see the note on ownership below.
+
+`Instrument` and `Exchange` landed with Phase 1 workstream 1 as
+`quant.instruments` and `quant.exchanges`. `Sector`, `Industry` and
+`Identifier` follow in later workstreams. Coverage is HOSE, HNX and UPCOM.
 
 Corporate action schemas follow in Phase 4 and must model rights issues and
 bonus shares as first-class action types, not as dividend variants.
