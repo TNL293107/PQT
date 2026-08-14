@@ -5,10 +5,13 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Exchanges;
+using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Caching;
 using PersonalQuant.Infrastructure.Configuration;
 using PersonalQuant.Infrastructure.HealthChecks;
 using PersonalQuant.Infrastructure.Persistence;
+using PersonalQuant.Infrastructure.Persistence.Repositories;
 using PersonalQuant.Infrastructure.Time;
 
 namespace PersonalQuant.Infrastructure;
@@ -71,6 +74,11 @@ public static class InfrastructureServiceCollectionExtensions
                 npgsql.EnableRetryOnFailure(maxRetryCount: 3, TimeSpan.FromSeconds(5), null);
             });
         });
+
+        services.AddScoped<IUnitOfWork>(provider =>
+            provider.GetRequiredService<PersonalQuantDbContext>());
+        services.AddScoped<IExchangeRepository, ExchangeRepository>();
+        services.AddScoped<IInstrumentRepository, InstrumentRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
     }

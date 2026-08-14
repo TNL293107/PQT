@@ -1,4 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using PersonalQuant.Domain.Exchanges;
+using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Infrastructure.Persistence;
 
 namespace PersonalQuant.UnitTests.Persistence;
@@ -18,19 +22,114 @@ public sealed class PersonalQuantDbContextTests
         Assert.Equal(PersonalQuantDbContext.Schema, defaultSchema);
     }
 
-    [Fact]
-    public void Model_declares_no_entities_in_phase_0()
+    [Theory]
+    [InlineData(typeof(Exchange), "exchanges")]
+    [InlineData(typeof(Instrument), "instruments")]
+    public void Entities_map_to_snake_case_tables(Type entityType, string expectedTable)
     {
-        // Guards the Phase 0 boundary: the instrument model is Phase 1 work,
-        // and this test is expected to be updated when that phase starts.
+        // The Python quant layer queries these tables directly, and PascalCase
+        // identifiers in PostgreSQL must be double-quoted at every call site.
         // Arrange
         using var context = CreateContext();
 
         // Act
-        var entityTypes = context.Model.GetEntityTypes();
+        var table = context.Model.FindEntityType(entityType)?.GetTableName();
 
         // Assert
-        Assert.Empty(entityTypes);
+        Assert.Equal(expectedTable, table);
+    }
+
+    [Theory]
+    [InlineData(typeof(Exchange))]
+    [InlineData(typeof(Instrument))]
+    public void Every_column_is_snake_case(Type entityType)
+    {
+        // Naming is applied per property rather than by a global convention,
+        // which would also rename EF's migrations history columns and break
+        // any database created before it was introduced. That makes drift
+        // possible, so it is asserted rather than assumed.
+        // Arrange
+        using var context = CreateContext();
+        var entity = context.Model.FindEntityType(entityType);
+
+        // Act
+        var columns = entity!.GetProperties()
+            .Select(property => property.GetColumnName())
+            .ToArray();
+
+        // Assert
+        Assert.NotEmpty(columns);
+        Assert.DoesNotContain(columns, column => column.Any(char.IsAsciiLetterUpper));
+    }
+
+    [Fact]
+    public void The_migrations_history_table_keeps_its_default_column_names()
+    {
+        // Guards the upgrade path. EF reads this table before it can apply a
+        // migration, so renaming its columns strands every database created
+        // earlier with no way to migrate forward. A global snake_case
+        // convention does exactly that, which is why naming is configured per
+        // property instead.
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var createScript = context.GetService<IHistoryRepository>().GetCreateScript();
+
+        // Assert
+        Assert.Contains("MigrationId", createScript, StringComparison.Ordinal);
+        Assert.Contains("ProductVersion", createScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("migration_id", createScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Derived_activity_flag_is_not_persisted()
+    {
+        // IsActive is computed from Status. A column would be able to disagree
+        // with it.
+        // Arrange
+        using var context = CreateContext();
+        var entity = context.Model.FindEntityType(typeof(Instrument));
+
+        // Act
+        var isActive = entity!.FindProperty(nameof(Instrument.IsActive));
+
+        // Assert
+        Assert.Null(isActive);
+    }
+
+    [Fact]
+    public void Active_ticker_uniqueness_is_scoped_to_non_delisted_rows()
+    {
+        // An unfiltered unique index would reject a ticker legitimately
+        // reassigned to a new issuer after the previous one delisted.
+        // Arrange
+        using var context = CreateContext();
+        var entity = context.Model.FindEntityType(typeof(Instrument));
+
+        // Act
+        var index = entity!.GetIndexes()
+            .Single(candidate => candidate.IsUnique);
+
+        // Assert
+        Assert.Equal("ux_instruments_active_ticker_per_exchange", index.GetDatabaseName());
+        Assert.Equal($"status <> {(int)InstrumentStatus.Delisted}", index.GetFilter());
+    }
+
+    [Fact]
+    public void Instruments_cannot_be_removed_by_cascading_from_an_exchange()
+    {
+        // Master data is never deleted; a cascade would only ever be a way to
+        // lose it by accident.
+        // Arrange
+        using var context = CreateContext();
+        var entity = context.Model.FindEntityType(typeof(Instrument));
+
+        // Act
+        var foreignKey = entity!.GetForeignKeys().Single();
+
+        // Assert
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
     }
 
     private static PersonalQuantDbContext CreateContext()

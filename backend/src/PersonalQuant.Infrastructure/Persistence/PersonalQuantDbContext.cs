@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Domain.Exchanges;
+using PersonalQuant.Domain.Instruments;
 
 namespace PersonalQuant.Infrastructure.Persistence;
 
@@ -7,20 +10,19 @@ namespace PersonalQuant.Infrastructure.Persistence;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Phase 0 declares no entities. The context exists so that the connection,
-/// the schema and the migration pipeline are established and verifiable before
-/// any financial model is designed.
-/// </para>
-/// <para>
 /// Entity configuration is discovered from
 /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations in this
-/// assembly, so Phase 1 adds a configuration class per entity rather than
-/// growing <see cref="OnModelCreating"/>.
+/// assembly, so each entity adds a configuration class rather than growing
+/// <see cref="OnModelCreating"/>.
+/// </para>
+/// <para>
+/// The context is also the unit of work. Repositories stage changes; nothing
+/// is written until <see cref="SaveChangesAsync(CancellationToken)"/> runs.
 /// </para>
 /// </remarks>
 /// <param name="options">Context options supplied by dependency injection.</param>
 public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbContext> options)
-    : DbContext(options)
+    : DbContext(options), IUnitOfWork
 {
     /// <summary>
     /// Schema that owns every application table.
@@ -31,6 +33,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// model that migrations own.
     /// </remarks>
     public const string Schema = "quant";
+
+    /// <summary>Gets the trading venues.</summary>
+    public DbSet<Exchange> Exchanges => Set<Exchange>();
+
+    /// <summary>Gets the instrument master.</summary>
+    public DbSet<Instrument> Instruments => Set<Instrument>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
