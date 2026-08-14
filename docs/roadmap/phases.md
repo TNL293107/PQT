@@ -1,39 +1,83 @@
 # Roadmap
 
-Implementation proceeds in vertical slices. Each phase delivers something
-demonstrable end to end rather than a horizontal layer that cannot be used
-until the next one lands.
+Twenty phases, ordered by dependency rather than by visible progress.
+Implementation proceeds in vertical slices; the UI advances only as far as the
+data behind it justifies.
+
+**Target market: Vietnam** — HOSE, HNX, UPCOM, VN30 and Vietnamese indices.
+That decision shapes instrument identity, corporate actions and the trading
+rules the backtester must simulate. See
+[ADR-008](../architecture/decisions/ADR-008-vietnam-market-first.md).
 
 Status values: **COMPLETE** · **IN PROGRESS** · **PLANNED**
 
-| Phase | Name                       | Tier | Status   |
-| ----- | -------------------------- | ---- | -------- |
-| 0     | Foundation & Architecture  | —    | COMPLETE |
-| 1     | Instrument Master          | 1    | PLANNED  |
-| 2     | Market Data                | 1    | PLANNED  |
-| 3     | Data Quality               | 1    | PLANNED  |
-| 4     | Research Terminal          | 1    | PLANNED  |
-| 5     | Fundamentals & News        | 1    | PLANNED  |
-| 6     | Screener & Research        | 1    | PLANNED  |
-| 7     | Quant Research             | 2    | PLANNED  |
-| 8     | Backtesting                | 2    | PLANNED  |
-| 9     | Portfolio                  | 2    | PLANNED  |
-| 10    | Risk                       | 2    | PLANNED  |
-| 11    | Paper Trading              | 3    | PLANNED  |
-| 12    | OMS & Execution            | 3    | PLANNED  |
-| 13    | Broker Integration         | 3    | PLANNED  |
-| 14    | Reconciliation             | 3    | PLANNED  |
-| 15    | C++ Performance            | 4    | PLANNED  |
-| 16    | AI Analyst                 | 4    | PLANNED  |
-| 17    | Production Hardening       | 4    | PLANNED  |
-| 18    | Portfolio Release          | 4    | PLANNED  |
+## The dependency chain
+
+```
+Data correct  → Research trustworthy → Backtest trustworthy
+              → Risk trustworthy     → Execution trustworthy
+
+Data wrong    → Backtest wrong → Risk wrong → Portfolio wrong → Trading wrong
+```
+
+Five phases carry that chain. None may be done superficially:
+
+```
+        Phase 2   Market Data Ingestion
+            ↓
+        Phase 3   Data Normalization & Quality
+            ↓
+        Phase 4   Corporate Actions & Adjusted Data
+            ↓
+        Phase 9   Backtesting Engine
+            ↓
+        Phase 10  Risk Engine
+```
+
+Everything else in the system rests on them.
+
+## Milestones
+
+| Milestone | Phases | Becomes                                          |
+| --------- | ------ | ------------------------------------------------ |
+| 1 — Data Foundation      | 0–4   | Already a strong project on its own   |
+| 2 — Quant Platform       | 5–10  | The strongest quant-developer showcase |
+| 3 — Trading System       | 11–15 | Quant developer → trading systems engineer |
+| 4 — Advanced Engineering | 16–19 | C++, AI, production, presentation      |
+
+## All phases
+
+| Phase | Name                                | Milestone | Status   |
+| ----- | ----------------------------------- | --------- | -------- |
+| 0     | Foundation & Architecture           | 1         | COMPLETE |
+| 1     | Instrument Master                   | 1         | PLANNED  |
+| 2     | Market Data Ingestion               | 1         | PLANNED  |
+| 3     | Data Normalization & Quality        | 1         | PLANNED  |
+| 4     | Corporate Actions & Adjusted Data   | 1         | PLANNED  |
+| 5     | Market Intelligence Terminal        | 2         | PLANNED  |
+| 6     | Fundamental & Financial Data        | 2         | PLANNED  |
+| 7     | News & Alternative Data             | 2         | PLANNED  |
+| 8     | Quant Research Framework            | 2         | PLANNED  |
+| 9     | Backtesting Engine                  | 2         | PLANNED  |
+| 10    | Risk Engine                         | 2         | PLANNED  |
+| 11    | Portfolio Management                | 3         | PLANNED  |
+| 12    | Paper Trading                       | 3         | PLANNED  |
+| 13    | Order Management System             | 3         | PLANNED  |
+| 14    | Broker Integration                  | 3         | PLANNED  |
+| 15    | Reconciliation                      | 3         | PLANNED  |
+| 16    | C++ Performance Engine              | 4         | PLANNED  |
+| 17    | AI Research Analyst                 | 4         | PLANNED  |
+| 18    | Production Hardening                | 4         | PLANNED  |
+| 19    | Portfolio / Public Demonstration    | 4         | PLANNED  |
 
 ---
 
+# Milestone 1 — Data Foundation
+
 ## Phase 0 — Foundation & Architecture · COMPLETE
 
-Build a repository that another developer can clone, configure, run and
-understand, with no business functionality in it.
+Build a repository another developer can clone, configure, run and understand,
+with no business functionality in it.
 
 **Delivered**
 
@@ -45,197 +89,523 @@ understand, with no business functionality in it.
 - React + TypeScript terminal with a live system status page.
 - Python package with pytest, ruff and strict mypy.
 - C++20 engine with CMake, GoogleTest and CTest.
-- Docker Compose environment for all four services.
+- Docker Compose environment, verified end to end.
 - GitHub Actions CI across all four stacks.
-- Architecture documentation, seven ADRs, and this roadmap.
+- Architecture documentation, ADRs, and this roadmap.
 
-**Explicitly not delivered:** any financial entity, endpoint, or dataset.
+**Not delivered:** any financial entity, endpoint, or dataset.
 
----
+## Phase 1 — Instrument Master · PLANNED
 
-## Tier 1 — Research Terminal
+The first phase with a real financial domain. The system must understand *what
+FPT is*, not merely store the string `"FPT"`.
 
-### Phase 1 — Instrument Master · PLANNED
+```
+Instrument
+├── instrument_id        internal canonical key
+├── symbol               FPT
+├── exchange             HOSE
+├── asset_type           EQUITY | ETF | INDEX | FUTURES
+├── currency             VND
+├── status               lifecycle state
+├── listing_date
+├── delisting_date
+└── metadata
+```
 
-Know what an instrument *is* before storing anything about it.
-
-Entities: `Instrument`, `Exchange`, `AssetClass`, `Sector`, `Industry`,
+Supporting entities: `Exchange`, `AssetType`, `Sector`, `Industry`,
 `Currency`, `Identifier`.
+
+Coverage: HOSE, HNX, UPCOM, VN30, indices, ETFs, futures — with room to extend
+to international assets later.
+
+**Lifecycle**
+
+```
+Pending → Listed → Suspended → Delisted
+```
+
+**Must handle:** symbol changes, exchange transfers (UPCOM → HNX → HOSE is a
+normal progression in Vietnam), listing, delisting, and instrument mapping
+across providers.
 
 ```
 Provider → import → normalize symbol → deduplicate → Instrument Master
 ```
 
-Endpoints: `GET /instruments`, `GET /instruments/{id}`,
+**API:** `GET /instruments`, `GET /instruments/{id}`,
 `GET /instruments/search?q=`, `GET /instruments/{id}/related`.
 
-Done when searching `NVDA` resolves to exactly one security, and `AAPL`,
-`AAPL.US`, `US0378331005` and `BBG000B9XRY4` all resolve to the same canonical
-ID.
+**Done when** searching `FPT` resolves to exactly one security, and every
+provider's spelling of it maps to the same canonical ID.
 
-The canonical ID is internal. Provider and market identifiers are stored as
-aliases — partly for correctness, partly because CUSIP and ISIN carry licensing
-restrictions (see [data policy](../architecture/data-policy.md)).
+The ticker is never the primary key. Vietnamese tickers are reused after
+delisting and change on exchange transfer, so an internal canonical ID is a
+correctness requirement, not a preference.
 
-### Phase 2 — Market Data · PLANNED
+## Phase 2 — Market Data Ingestion · PLANNED
 
-Historical OHLCV first, then realtime. Provider adapters normalise into a
-canonical event shape keyed by canonical instrument ID.
-
-Realtime introduces sequence numbers and gap detection: receiving
-`1001, 1002, 1004, 1003` must be recognised as a problem, not stored as fact.
-
-### Phase 3 — Data Quality · PLANNED
-
-Validation between ingestion and storage: timestamp sanity
-(`event_time <= receive_time`), positive prices, sequence continuity,
-duplicate trade IDs, and outlier detection.
-
-A price of `1812.00` in a series around `181.20` must never reach a backtest, a
-risk calculation, or a portfolio valuation.
-
-### Phase 4 — Research Terminal · PLANNED
-
-The UI becomes useful: search, watchlists, charts, and a per-instrument
-workspace. First phase where the frontend does substantial work.
-
-### Phase 5 — Fundamentals & News · PLANNED
-
-Financial statements stored as facts, not flat columns:
+**Backbone phase.**
 
 ```
-company · fiscal_period · concept · value · unit · source · filing_id · reported_at
+External sources → Collector → Raw → Normalizer → Canonical → Database
 ```
 
-`reported_at` is the load-bearing field. Without the separation of *fiscal
-period* from *publication time*, look-ahead bias is unavoidable and invisible.
+**Data types**
 
-News requires deduplication, entity extraction and mapping to canonical
-instrument IDs.
+| Level    | Content                                        |
+| -------- | ---------------------------------------------- |
+| EOD      | Open, High, Low, Close, Volume, Value          |
+| Intraday | 1D, 1H, 30M, 15M, 5M, 1M                       |
+| Tick     | timestamp, price, quantity, side — if available |
 
-### Phase 6 — Screener & Research · PLANNED
+**Provider abstraction.** No provider is hard-coded:
 
-Query the universe by fundamental and technical criteria, with ranking. The
-point at which the terminal becomes a research platform rather than a chart
-viewer.
+```
+IMarketDataProvider
+    ├── ProviderA
+    ├── ProviderB
+    └── ProviderC
+```
+
+**Pipeline:** fetch → validate → normalize → deduplicate → persist → audit.
+
+**Reliability:** retry, rate limiting, timeouts, incremental ingestion,
+checkpointing, resume after failure.
+
+Raw payloads are retained separately from canonical data. Re-normalising from
+raw must always be possible.
+
+## Phase 3 — Data Normalization & Quality · PLANNED
+
+**Backbone phase.** The point at which the project stops having *data* and
+starts having *data worth running research on*.
+
+**Structural validation**
+
+```
+High  >= max(Open, Close)
+Low   <= min(Open, Close)
+Volume >= 0
+Price  > 0
+```
+
+**Cross-session checks.** A gap between today's open and yesterday's close
+beyond roughly ±30% is not a price move — Vietnamese daily price limits are
+±7% (HOSE), ±10% (HNX) and ±15% (UPCOM). Anything larger means a corporate
+action, bad data, a trading halt, or a symbol change, and must be classified
+before it is stored.
+
+**Duplicate detection:** the same instrument, timestamp and timeframe must
+never appear twice.
+
+**Missing data detection** against the exchange trading calendar, so a public
+holiday is not mistaken for a gap.
+
+**Data quality score**, per instrument:
+
+```
+FPT
+Completeness       99.8%
+Consistency        99.9%
+Validity          100.0%
+Source reliability 98.0%
+Overall            99.2%
+```
+
+**Data lineage.** Every dataset records `source`, `ingested_at`,
+`validation_version`, `transformation_version`.
+
+## Phase 4 — Corporate Actions & Adjusted Data · PLANNED
+
+**Backbone phase.** Placed before backtesting deliberately: an unadjusted
+series makes every backtest silently wrong.
+
+**Actions:** cash dividend, stock dividend, stock split, reverse split, rights
+issue, bonus shares, share issuance, symbol change.
+
+Rights issues and bonus shares are far more common in Vietnam than in
+developed markets and cannot be treated as edge cases.
+
+```
+CorporateAction
+├── instrument_id
+├── action_type
+├── ex_date
+├── record_date
+├── payment_date
+├── ratio
+├── cash_amount
+├── source
+└── version
+```
+
+**Adjustment engine**
+
+```
+Raw price + corporate actions → adjustment factor → adjusted price
+```
+
+**Raw data is never overwritten.**
+
+```
+RAW  →  adjustment  →  ADJUSTED
+```
+
+Both are retained and versioned, so an adjustment error is correctable rather
+than destructive.
+
+**Guards against:** survivorship bias, look-ahead bias, incorrect split
+handling, incorrect dividend handling.
+
+**Outcome:** the backtesting engine runs on versioned,
+corporate-action-adjusted historical data.
 
 ---
 
-## Tier 2 — Quant Platform
+# Milestone 2 — Quant Platform
 
-### Phase 7 — Quant Research · PLANNED
+## Phase 5 — Market Intelligence Terminal · PLANNED
 
-The Python layer starts doing real work: factor definitions, feature
-engineering, cross-sectional analysis. Resolves the open question in
-[ADR-004](../architecture/decisions/ADR-004-python-quant-layer.md) — how the
+The first genuinely useful interface. Not a Bloomberg clone — the goal is
+information density, fast interaction, and cross-module navigation.
+
+```
+┌───────────────┬──────────────────┐
+│ VNINDEX       │ Market Breadth   │
+├───────────────┼──────────────────┤
+│ Watchlist     │ Volume Spikes    │
+├───────────────┼──────────────────┤
+│ Chart         │ Signals          │
+├───────────────┴──────────────────┤
+│ Portfolio / PnL                  │
+└──────────────────────────────────┘
+```
+
+**Command bar** as the primary interaction:
+
+```
+> FPT
+> FPT financials
+> FPT chart 1Y
+> FPT valuation
+> VNINDEX breadth
+```
+
+**Watchlist:** price, change, volume, value, foreign flow, proprietary flow.
+
+**Market breadth:** advancers, decliners, unchanged, volume distribution.
+
+**Volume anomaly:** current volume ÷ 20-day average.
+
+## Phase 6 — Fundamental & Financial Data · PLANNED
+
+Combine price with financial statements and valuation.
+
+**Statements:** balance sheet, income statement, cash flow.
+
+**Ratios:** P/E, P/B, EV/EBITDA, ROE, ROA, ROIC, net margin, debt/equity,
+current ratio, FCF yield.
+
+**Historical, not point-value.** Not `P/E = 12`, but P/E across 2022–2026.
+
+**Sector comparison:** instrument vs industry median vs industry percentile.
+
+Every fact carries both the fiscal period it describes and `reported_at`, the
+moment it became public. Without that separation, look-ahead bias in Phase 9 is
+unavoidable and invisible.
+
+## Phase 7 — News & Alternative Data · PLANNED
+
+```
+News source → Collector → Normalizer → Entity extraction → Instrument mapping
+```
+
+**NLP:** sentiment classification per company, industry, market and macro
+event.
+
+**Event extraction:** identify the entity, the event type, and the sentiment.
+
+**Alternative data:** search trends, news volume, social sentiment, foreign
+flow, proprietary flow, market breadth.
+
+Every record carries `timestamp`, `source` and `confidence`.
+
+## Phase 8 — Quant Research Framework · PLANNED
+
+A research platform, not just a backtester.
+
+```python
+strategy = MyStrategy(...)
+result = research.run(strategy)
+```
+
+**Components:** data access, factor engine, feature engineering, signal
+engine, portfolio construction, performance analysis.
+
+**Factors:** momentum, value, quality, size, volatility, liquidity, growth.
+
+```
+Universe → calculate factors → normalize → rank → portfolio
+```
+
+**Experiment tracking.** Each run records strategy, parameters, dataset,
+timestamp, code version and results, so a result can be reproduced.
+
+Resolves the open question in
+[ADR-004](../architecture/decisions/ADR-004-python-quant-layer.md): how the
 backend and quant layer exchange work.
 
-### Phase 8 — Backtesting · PLANNED
+## Phase 9 — Backtesting Engine · PLANNED
 
-Event-driven simulation over historical data, modelling cash, positions,
-orders, fills, fees, slippage and corporate actions.
+**Backbone phase.** Event-driven, not vectorised.
 
-The correctness requirement is point-in-time discipline: the simulator may only
-use information knowable at the simulated moment. A backtest that looks
-unusually good is assumed to be leaking until proven otherwise.
+```
+Market event → Strategy → Signal → Order → Execution simulator
+            → Fill → Portfolio → Risk
+```
 
-### Phase 9 — Portfolio · PLANNED
+**Events:** `MarketEvent`, `SignalEvent`, `OrderEvent`, `FillEvent`,
+`CorporateActionEvent`.
 
-Cash, positions, average cost, realised and unrealised P&L, exposure and
-leverage. Shared by backtests and live tracking so both are measured
-identically.
+**Execution simulation:** commission, tax, slippage, liquidity, partial fills,
+limit and market orders.
 
-### Phase 10 — Risk · PLANNED
+**Vietnam-specific rules that must be modelled:**
 
-Pre-trade limits: max position, sector exposure, leverage, daily loss,
-drawdown, order size, concentration.
+- Trading fees and sell-side tax
+- Lot size (100 shares standard on HOSE)
+- Daily price limits (±7% HOSE, ±10% HNX, ±15% UPCOM)
+- Trading sessions, including ATO and ATC auctions
+- T+ settlement
+- Margin rules
 
-The risk engine answers one question — *may this order proceed?* — and it must
-be able to answer no.
+A backtest that ignores T+ settlement or price limits will report returns the
+market could not have produced.
+
+**Multi-timeframe:**
+
+```
+Monthly  fundamental filter
+    ↓
+Weekly   factor ranking
+    ↓
+Intraday entry signal
+```
+
+**Output:** equity curve, drawdown, trades, exposure, turnover, costs.
+
+## Phase 10 — Risk Engine · PLANNED
+
+**Backbone phase.** Not "how much does the strategy make?" but "how can it
+die?"
+
+**Metrics:** Sharpe, Sortino, Calmar, maximum drawdown, VaR, CVaR, beta,
+alpha, volatility.
+
+**Portfolio risk:** position concentration, sector exposure, liquidity risk,
+market exposure, factor exposure, drawdown.
+
+**Stress testing:** VNINDEX −5% / −10%, bank sector −15%, liquidity halved.
+
+**Limits:** max position, max sector exposure, max drawdown, max leverage, max
+daily loss.
+
+The risk engine answers one question — *may this order proceed?* — and must be
+able to answer no.
 
 ---
 
-## Tier 3 — Trading System
+# Milestone 3 — Trading System
 
-### Phase 11 — Paper Trading · PLANNED
-
-A simulated venue behind the same interface a broker will implement, modelling
-latency, partial fills, slippage, fees and rejections.
-
-### Phase 12 — OMS & Execution · PLANNED
-
-Order lifecycle as an explicit state machine:
+## Phase 11 — Portfolio Management · PLANNED
 
 ```
-CREATED → SUBMITTED → ACKNOWLEDGED → PARTIALLY_FILLED → FILLED
-                   ↘ REJECTED
-                   ↘ CANCEL_REQUESTED → CANCELLED
+Account
+├── Cash
+├── Positions
+├── Orders
+└── Trades
 ```
 
-The path is fixed and ordered:
+**P&L:** realised, unrealised, total.
+
+**Attribution:** stock selection, sector allocation, market exposure, factor
+exposure.
+
+**Optimization:** minimum variance, maximum Sharpe, risk parity, efficient
+frontier.
+
+Shared by backtests and live tracking so both are measured identically.
+
+## Phase 12 — Paper Trading · PLANNED
 
 ```
-strategy → signal → portfolio construction → risk → OMS → execution → broker
+Signal → Order → Execution simulator → Portfolio
 ```
 
-A strategy has no route to a broker. Order events are written to PostgreSQL,
-not only published to Redis — this is the durability requirement anticipated in
+The bridge between backtest and live trading.
+
+**Paper account:** cash, positions, orders, trades, P&L, fees, slippage.
+
+**Order types:** market, limit, stop, stop-limit.
+
+**Trading journal:** why entered, why exited, which strategy, which signal,
+what risk.
+
+## Phase 13 — Order Management System · PLANNED
+
+```
+Created → Validated → Submitted → Accepted → Partially Filled → Filled
+                                ↘ Cancelled | Rejected | Expired
+```
+
+**Responsibilities:** order validation, state machine, position checks, risk
+checks, duplicate prevention, idempotency, order tracking.
+
+**A strategy never submits a broker order directly.**
+
+```
+Strategy → Signal → Portfolio → Risk Engine → OMS → Broker
+```
+
+Order events are written to PostgreSQL, not only published to Redis — the
+durability requirement anticipated in
 [ADR-003](../architecture/decisions/ADR-003-redis.md).
 
-Execution algorithms (TWAP, VWAP, POV, iceberg) sit between the OMS and the
-venue.
+## Phase 14 — Broker Integration · PLANNED
 
-### Phase 13 — Broker Integration · PLANNED
+Only after paper trading and the OMS exist.
 
-A broker adapter interface with at least one implementation, so the system is
-not welded to a single venue.
+```
+        IBrokerAdapter
+              │
+     ┌────────┼────────┐
+     ▼        ▼        ▼
+  Broker A  Broker B  Broker C
+```
+
+**Operations:** submit order, cancel order, query order, query positions,
+query account, and market data where the broker provides it.
+
+**A broker failure must not crash the system.** Requires timeouts, retry,
+circuit breaker, idempotency and reconciliation.
 
 **This is the first phase in which `LIVE_TRADING_ENABLED` may be set to
-`true`,** and only after Phase 11 and Phase 14 are both complete and proven.
+`true`,** behind multiple explicit safety gates, and only after Phase 12 and
+Phase 15 are complete and proven.
 
-### Phase 14 — Reconciliation · PLANNED
+## Phase 15 — Reconciliation · PLANNED
 
-Compare internal state against broker state and alert on divergence.
+Compare internal state against the broker.
 
-If the system believes it holds 100 shares and the broker reports 90, something
-is wrong — a missed fill, a duplicate event, a crash mid-write. A trading
-system that cannot detect this is not trustworthy, regardless of how good its
-backtests look.
+```
+Internal system  VS  Broker
+```
+
+Reconcile cash, positions, orders, trades and fees.
+
+```
+Internal:  FPT = 1,000 shares
+Broker:    FPT =   900 shares
+           → discrepancy
+```
+
+**Workflow:** detect → classify → investigate → resolve → audit.
+
+**Nothing is silently corrected.** Every resolution leaves an audit trail.
+
+Causes include missed fills, duplicate events, network failure, broker
+rejection, partial fills and application crashes. A trading system that cannot
+detect this is not trustworthy regardless of its backtest results.
 
 ---
 
-## Tier 4 — Advanced Engineering
+# Milestone 4 — Advanced Engineering
 
-### Phase 15 — C++ Performance · PLANNED
+## Phase 16 — C++ Performance Engine · PLANNED
 
-Move measured bottlenecks to the C++ engine. Candidates: order book, market
-data decoding, event bus.
-
-Bound by
-[ADR-005](../architecture/decisions/ADR-005-cpp-performance-layer.md): profile
-first, benchmark the rewrite against what it replaces, and keep it in .NET if
-the numbers do not justify the move.
-
-### Phase 16 — AI Analyst · PLANNED
-
-Retrieval-grounded analysis over data the system already holds, with citations.
+**Benchmark before rewriting.** C++ is not used to look impressive.
 
 ```
-question → query planner → market data + news + filings + fundamentals → LLM → cited analysis
+Python  vs  C#  vs  C++
 ```
+
+**Candidate workloads:** tick processing, order book, large-scale factor
+calculation, Monte Carlo, portfolio simulation, event processing.
+
+```
+C# / Python → native interface → C++ engine
+```
+
+The goal is to demonstrate knowing *when* optimisation is necessary, not
+knowing C++. Bound by
+[ADR-005](../architecture/decisions/ADR-005-cpp-performance-layer.md).
+
+## Phase 17 — AI Research Analyst · PLANNED
+
+AI arrives late, on top of data infrastructure that already exists. Not a
+chatbot that reports prices.
+
+```
+                AI Analyst
+                    │
+       ┌────────────┼────────────┐
+       ▼            ▼            ▼
+ Market data   Fundamentals    News
+       └────────────┼────────────┘
+                    ▼
+                Research
+                    ▼
+              Explanation
+```
+
+Asked *"why did FPT volatility increase this month?"*, the analyst queries
+price, volume, news, financials, factors and market regime, then reasons with
+sources.
+
+**Every response carries claim, source, timestamp and confidence.** The AI does
+not invent data.
 
 **Architectural boundary: the AI analyst has no path to the OMS.** It may
 analyse, explain and propose hypotheses. Order sizing, risk approval and
-execution stay deterministic and reviewable. An LLM must never be able to cause
-an order.
+execution remain deterministic and reviewable.
 
-### Phase 17 — Production Hardening · PLANNED
+## Phase 18 — Production Hardening · PLANNED
 
-Authentication, secret management, structured observability, backup and
-restore, rate limiting, and a security review.
+Turns a portfolio project into an engineering system.
 
-### Phase 18 — Portfolio Release · PLANNED
+**Reliability:** structured logging, metrics, tracing, health checks, retry,
+circuit breaker, graceful shutdown.
 
-Decide what, if anything, can be published, and extract it under its own
-licence with a full secret-history audit. Bound by
+**Security:** authentication, authorization, secret management, rate limiting,
+audit logs.
+
+**Infrastructure:** production images, CI/CD, backup, migrations, disaster
+recovery.
+
+**SLOs:** API availability, ingestion success rate, data freshness, backtest
+reproducibility, order processing latency.
+
+## Phase 19 — Portfolio / Public Demonstration · PLANNED
+
+The repository stays **private**. A separate portfolio surface presents the
+work:
+
+```
+Portfolio site
+├── Architecture
+├── Screenshots
+├── Technical decisions
+├── Performance benchmarks
+├── Backtest examples
+├── Data pipeline
+└── Demo video
+```
+
+Publishable: architecture diagrams, screenshots, sanitized datasets,
+benchmarks, technical articles, demo video.
+
+Never published: source code, API credentials, proprietary data, broker
+credentials. Bound by
 [ADR-007](../architecture/decisions/ADR-007-private-proprietary-repository.md).

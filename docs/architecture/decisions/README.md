@@ -16,6 +16,7 @@ reasoning at the time is preserved.
 | [005](ADR-005-cpp-performance-layer.md)                      | C++ for the latency-bound path  | Accepted |
 | [006](ADR-006-docker-development-environment.md)             | Docker Compose for development  | Accepted |
 | [007](ADR-007-private-proprietary-repository.md)             | Private, proprietary repository | Accepted |
+| [008](ADR-008-vietnam-market-first.md)                       | Vietnam market first            | Accepted |
 
 ## Format
 
