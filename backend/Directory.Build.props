@@ -18,8 +18,20 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <!-- Determinism / provenance. -->
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!--
+      Globalization is required, not optional.
+
+      Phase 0 set InvariantGlobalization=true for determinism, before any code
+      needed a locale. Invariant mode also removes the IANA time zone
+      database: only UTC resolves, and 'Asia/Ho_Chi_Minh' throws.
+
+      An exchange has to record the zone its trading day is measured in — a
+      session boundary cannot be reconstructed from a UTC instant alone — so
+      from Phase 1 the database is a hard requirement. Determinism is
+      preserved by using ordinal string comparison and invariant casing
+      explicitly at every call site rather than by disabling ICU wholesale.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <Deterministic>true</Deterministic>
 
     <!-- Nothing in this repository is published to a package feed. -->
