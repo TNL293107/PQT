@@ -4,13 +4,30 @@ A Bloomberg-inspired quantitative research and trading workstation for the
 **Vietnam market** (HOSE, HNX, UPCOM), built as a long-term personal
 engineering project.
 
-> **Current phase: Phase 1 — Instrument Master (in progress).**
->
-> Phase 0 is complete. Phase 1 workstream 1 has landed the instrument identity
-> model and its persistence. There is still **no market data, no research, no
-> backtesting, no portfolio, no trading, and no AI**, and no HTTP surface for
-> instruments yet. The [roadmap](docs/roadmap/phases.md) describes where those
-> arrive.
+---
+
+## Current status
+
+|              |                                                              |
+| ------------ | ------------------------------------------------------------ |
+| **Phase**    | 1 — Instrument Master, in progress (phases run 0–19)          |
+| **Complete** | Phase 0 · Phase 1 workstream 1 of 7                           |
+| **Runs**     | `docker compose up --build` — four services, health-gated     |
+| **Tests**    | 163 passing — 122 .NET, 21 Vitest, 14 pytest, 6 CTest         |
+| **Licence**  | Proprietary. Public to read, not to reuse.                    |
+
+**What exists.** Liveness and readiness endpoints that probe PostgreSQL and
+Redis for real; the instrument identity model with its listing lifecycle and
+migration; a terminal shell showing live service status. All of it covered by
+tests that run against real containers, not mocks.
+
+**What does not exist.** Market data, corporate actions, fundamentals, news,
+screening, factors, backtesting, portfolio, risk, orders, broker integration,
+AI — and no HTTP surface for instruments yet. None of these are stubbed or
+half-built; they are simply not written.
+
+The [roadmap](docs/roadmap/phases.md) sets out all twenty phases and what each
+one has to deliver.
 
 ---
 
