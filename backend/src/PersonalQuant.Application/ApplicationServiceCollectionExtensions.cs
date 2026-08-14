@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using PersonalQuant.Application.Instruments;
 
 namespace PersonalQuant.Application;
 
@@ -11,14 +12,18 @@ public static class ApplicationServiceCollectionExtensions
     /// Registers application layer services.
     /// </summary>
     /// <remarks>
-    /// Phase 0 registers nothing: there are no use cases yet. The seam exists
-    /// so that Phase 1 adds registrations here rather than in the API host.
+    /// Scoped, matching the repositories and the unit of work they read
+    /// through. Neither service holds state between requests; the lifetime is
+    /// dictated by their dependencies.
     /// </remarks>
     /// <param name="services">The service collection to add to.</param>
     /// <returns>The same service collection, to allow chaining.</returns>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<IInstrumentSearchService, InstrumentSearchService>();
+        services.AddScoped<IInstrumentResolver, InstrumentResolver>();
 
         return services;
     }
