@@ -19,7 +19,7 @@ describe("App shell", () => {
     renderAt("/");
 
     expect(screen.getByText("Personal Quant Terminal")).toBeInTheDocument();
-    expect(screen.getByText("PHASE 0")).toBeInTheDocument();
+    expect(screen.getByText("PHASE 1")).toBeInTheDocument();
   });
 
   it("states plainly that trading is not enabled", () => {
@@ -49,13 +49,19 @@ describe("App shell", () => {
     ).toBeInTheDocument();
   });
 
-  it("marks every listed capability as planned", () => {
-    // Nothing on the capability map is implemented. If a badge ever says
-    // otherwise it must be because the feature genuinely shipped.
+  it("marks unbuilt capabilities as planned", () => {
+    // A badge may only say something other than PLANNED because the feature
+    // genuinely shipped.
     renderAt("/capabilities");
 
     const badges = screen.getAllByText("PLANNED");
     expect(badges.length).toBeGreaterThan(10);
+  });
+
+  it("marks the instrument master as the one capability under way", () => {
+    renderAt("/capabilities");
+
+    expect(screen.getAllByText("IN PROGRESS")).toHaveLength(1);
   });
 
   it("shows a not-found view for an unknown route", () => {
