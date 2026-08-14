@@ -20,7 +20,7 @@ const POLL_INTERVAL_MS = 15_000;
  * state.
  *
  * Deliberately hand-written rather than pulled from a server-state library:
- * Phase 0 has exactly one query, and the dependency is not yet earned. Phase 4
+ * Phase 0 has exactly one query, and the dependency is not yet earned. Phase 5
  * onwards, when real market data arrives, is the point to reconsider.
  */
 export function useSystemHealth(): UseSystemHealthResult {
