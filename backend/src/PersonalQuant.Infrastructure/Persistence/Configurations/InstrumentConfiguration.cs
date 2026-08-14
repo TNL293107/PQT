@@ -72,6 +72,23 @@ internal sealed class InstrumentConfiguration : IEntityTypeConfiguration<Instrum
             .HasConversion<int>()
             .IsRequired();
 
+        // --- Search index columns ------------------------------------------
+        // Folded copies of the ticker and name, maintained by the aggregate.
+        // They exist so that prefix matching runs in the database against a
+        // plain column: the canonical Ticker property is value-converted and
+        // cannot be pattern-matched, and case- or accent-insensitive matching
+        // over Name would depend on the server's collation and could not use
+        // an index.
+        builder.Property(instrument => instrument.SearchTicker)
+            .HasColumnName("search_ticker")
+            .HasMaxLength(Ticker.MaxLength)
+            .IsRequired();
+
+        builder.Property(instrument => instrument.SearchName)
+            .HasColumnName("search_name")
+            .HasMaxLength(Instrument.MaxNameLength)
+            .IsRequired();
+
         builder.Property(instrument => instrument.ListedOn)
             .HasColumnName("listed_on");
 
@@ -122,5 +139,19 @@ internal sealed class InstrumentConfiguration : IEntityTypeConfiguration<Instrum
 
         builder.HasIndex(instrument => instrument.Status)
             .HasDatabaseName("ix_instruments_status");
+
+        // The pattern operator classes are the point of these two indexes.
+        // PostgreSQL only uses a btree index for LIKE 'ABC%' when the index is
+        // built with *_pattern_ops, because the default class orders by the
+        // database's collation and prefix ranges are not contiguous under it.
+        // Without them both indexes would serve equality and nothing else,
+        // leaving every prefix search — which is most of them — as a scan.
+        builder.HasIndex(instrument => instrument.SearchTicker)
+            .HasDatabaseName("ix_instruments_search_ticker")
+            .HasOperators("varchar_pattern_ops");
+
+        builder.HasIndex(instrument => instrument.SearchName)
+            .HasDatabaseName("ix_instruments_search_name")
+            .HasOperators("varchar_pattern_ops");
     }
 }
