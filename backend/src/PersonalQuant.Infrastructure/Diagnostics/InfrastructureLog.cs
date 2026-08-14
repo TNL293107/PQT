@@ -65,4 +65,19 @@ internal static partial class InfrastructureLog
         Level = LogLevel.Error,
         Message = "Could not apply migrations after {MaxAttempts} attempts. The API will start, but readiness will report PostgreSQL as unavailable until the schema is up to date.")]
     public static partial void MigrationAbandoned(ILogger logger, Exception exception, int maxAttempts);
+
+    [LoggerMessage(
+        EventId = 1110,
+        Level = LogLevel.Information,
+        Message = "Reference data seeding created {ExchangesCreated} exchange(s) and {InstrumentsCreated} instrument(s).")]
+    public static partial void ReferenceDataSeeded(
+        ILogger logger,
+        int exchangesCreated,
+        int instrumentsCreated);
+
+    [LoggerMessage(
+        EventId = 1111,
+        Level = LogLevel.Error,
+        Message = "Reference data seeding failed. The API will start, but instrument search may return nothing.")]
+    public static partial void ReferenceDataSeedFailed(ILogger logger, Exception exception);
 }

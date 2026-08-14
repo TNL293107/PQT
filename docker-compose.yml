@@ -95,6 +95,9 @@ services:
       Postgres__Password: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       # The database is disposable here, so the API brings its own schema up.
       Postgres__ApplyMigrationsOnStartup: "true"
+      # And its own reference data, so instrument search has something to find
+      # on a first run. Creates missing rows only; never modifies existing ones.
+      Postgres__SeedReferenceDataOnStartup: "true"
 
       Redis__Host: redis
       Redis__Port: "6379"

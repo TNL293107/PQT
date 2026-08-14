@@ -12,6 +12,7 @@ using PersonalQuant.Infrastructure.Configuration;
 using PersonalQuant.Infrastructure.HealthChecks;
 using PersonalQuant.Infrastructure.Persistence;
 using PersonalQuant.Infrastructure.Persistence.Repositories;
+using PersonalQuant.Infrastructure.Persistence.Seeding;
 using PersonalQuant.Infrastructure.Time;
 
 namespace PersonalQuant.Infrastructure;
@@ -81,6 +82,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
+
+        // Registered after migration: hosted services start in registration
+        // order, and seeding writes to tables the migration has to create
+        // first.
+        services.AddHostedService<ReferenceDataSeedHostedService>();
     }
 
     private static void AddRedis(IServiceCollection services) =>

@@ -60,6 +60,19 @@ public sealed class PostgresOptions
     public bool ApplyMigrationsOnStartup { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the Vietnamese venues and a
+    /// starter set of securities are created when the host starts.
+    /// </summary>
+    /// <remarks>
+    /// For local development and the Docker Compose environment, where an
+    /// empty instrument master makes the terminal's search look broken. It
+    /// defaults to <see langword="false"/> so that a deployed environment's
+    /// instrument master is only ever written by something that meant to.
+    /// Seeding creates missing rows and never modifies existing ones.
+    /// </remarks>
+    public bool SeedReferenceDataOnStartup { get; set; }
+
+    /// <summary>
     /// Builds a connection string from the validated settings.
     /// </summary>
     /// <remarks>

@@ -25,4 +25,9 @@
     <ProjectReference Include="..\PersonalQuant.Application\PersonalQuant.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PersonalQuant.UnitTests" />
+    <InternalsVisibleTo Include="PersonalQuant.IntegrationTests" />
+  </ItemGroup>
+
 </Project>
