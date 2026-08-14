@@ -95,7 +95,7 @@ with no business functionality in it.
 
 **Not delivered:** any financial entity, endpoint, or dataset.
 
-## Phase 1 — Instrument Master · PLANNED
+## Phase 1 — Instrument Master · IN PROGRESS
 
 The first phase with a real financial domain. The system must understand *what
 FPT is*, not merely store the string `"FPT"`.
@@ -148,12 +148,12 @@ correctness requirement, not a preference.
 | # | Workstream | Status |
 | - | ---------- | ------ |
 | 1 | Instrument identity core — domain model, lifecycle, persistence | COMPLETE |
-| 2 | Reference data — exchange seeding, `Sector`, `Industry` | PLANNED |
+| 2 | Reference data — exchange seeding, `Sector`, `Industry` | PARTIAL |
 | 3 | Identifier aliases — provider symbols, ISIN, FIGI | PLANNED |
-| 4 | Symbol normalization and deduplication | PLANNED |
+| 4 | Symbol normalization and deduplication | PARTIAL |
 | 5 | Provider import pipeline | PLANNED |
-| 6 | Query API — list, get, search, related | PLANNED |
-| 7 | Terminal instrument search | PLANNED |
+| 6 | Query API — list, get, search, related | PARTIAL |
+| 7 | Terminal instrument search | COMPLETE |
 
 **Workstream 1 delivered:** `Exchange` and `Instrument` aggregates with
 strongly-typed identity (`InstrumentId`, `ExchangeId`) and value objects
@@ -162,8 +162,21 @@ illegal transition rejected; `quant.exchanges` and `quant.instruments` with a
 **partial** unique index that permits ticker reuse after delisting; repository
 ports with no delete operation.
 
-Not yet delivered in Phase 1: everything in workstreams 2–7. There is no HTTP
-surface for instruments and no seeded exchange data.
+**Workstreams 2, 6 and 7 delivered:** instrument search with deterministic
+ranking evaluated in the database; symbol resolution reporting resolved, not
+found or ambiguous; `GET /instruments/search`, `/instruments/resolve` and
+`/instruments/{id}`; the terminal's Ctrl+K security search and the
+current-security context every later module reads. Exchange and starter
+instrument seeding for HOSE, HNX and UPCOM, behind a configuration flag.
+Search-text normalisation folds Vietnamese diacritics and case, which is the
+part of workstream 4 that discovery needs. See
+[ADR-010](../architecture/decisions/ADR-010-instrument-search-and-security-context.md)
+and the [technical reference](../architecture/instrument-search.md).
+
+**Still open in Phase 1:** `Sector` and `Industry` (workstream 2); identifier
+aliases, so search cannot match an ISIN or a provider symbol (workstream 3);
+cross-provider deduplication (workstream 4); the provider import pipeline
+(workstream 5); and `GET /instruments` list and `/related` (workstream 6).
 
 ## Phase 2 — Market Data Ingestion · PLANNED
 

@@ -11,20 +11,22 @@ engineering project.
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
 | **Phase**    | 1 — Instrument Master, in progress (phases run 0–19)          |
-| **Complete** | Phase 0 · Phase 1 workstream 1 of 7                           |
+| **Complete** | Phase 0 · Phase 1 workstreams 1, 6 and 7 of 7                 |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 163 passing — 122 .NET, 21 Vitest, 14 pytest, 6 CTest         |
+| **Tests**    | 294 passing — 204 .NET, 70 Vitest, 14 pytest, 6 CTest         |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
 Redis for real; the instrument identity model with its listing lifecycle and
-migration; a terminal shell showing live service status. All of it covered by
-tests that run against real containers, not mocks.
+migration; instrument search, symbol resolution and a read-only instrument API;
+a terminal with Ctrl+K security search and a current-security context. All of
+it covered by tests that run against real containers, not mocks.
 
 **What does not exist.** Market data, corporate actions, fundamentals, news,
 screening, factors, backtesting, portfolio, risk, orders, broker integration,
-AI — and no HTTP surface for instruments yet. None of these are stubbed or
-half-built; they are simply not written.
+AI — and no provider import, so the instrument master holds only what the
+development seed puts there. None of these are stubbed or half-built; they are
+simply not written.
 
 The [roadmap](docs/roadmap/phases.md) sets out all twenty phases and what each
 one has to deliver.
@@ -158,6 +160,17 @@ Everything in this list is implemented and covered by tests.
   a ticker released on delisting can be reissued without destroying the
   previous holder's history. Instruments are never deleted. See
   [ADR-009](docs/architecture/decisions/ADR-009-instrument-identity-and-ticker-lifecycle.md).
+- **Instrument search (Phase 1, workstreams 6–7)** —
+  `GET /instruments/search?q=`, `GET /instruments/resolve?symbol=` and
+  `GET /instruments/{id}`. Matching folds Vietnamese diacritics and case, so
+  `ngan hang` finds `Ngân hàng`. Ranking is deterministic and evaluated in the
+  database: exact ticker, ticker prefix, exact name, name prefix, name
+  contains. Symbol resolution reports ambiguity rather than guessing when a
+  ticker is live on two venues. See
+  [ADR-010](docs/architecture/decisions/ADR-010-instrument-search-and-security-context.md).
+- **Terminal security search** — `Ctrl+K`, type, arrow, `Enter`. Sets the
+  terminal's current security, which every later module reads by canonical
+  identifier rather than by ticker.
 - **Terminal system status page** — live per-service state with real loading
   and error handling.
 - **Four independent test suites** — .NET, Vitest, pytest, CTest.
@@ -221,15 +234,15 @@ integration.
 
 ## Roadmap
 
-Twenty phases in four milestones. Phase 0 is complete; everything else is
-planned.
+Twenty phases in four milestones. Phase 0 is complete, Phase 1 is under way,
+and everything else is planned.
 
-| Milestone | Becomes           | Phases | Status      |
-| --------- | ----------------- | ------ | ----------- |
-| 1         | Data foundation   | 0–4    | Phase 0 done |
-| 2         | Quant platform    | 5–10   | PLANNED     |
-| 3         | Trading system    | 11–15  | PLANNED     |
-| 4         | Engineered system | 16–19  | PLANNED     |
+| Milestone | Becomes           | Phases | Status                    |
+| --------- | ----------------- | ------ | ------------------------- |
+| 1         | Data foundation   | 0–4    | Phase 0 done · Phase 1 in progress |
+| 2         | Quant platform    | 5–10   | PLANNED                   |
+| 3         | Trading system    | 11–15  | PLANNED                   |
+| 4         | Engineered system | 16–19  | PLANNED                   |
 
 Five phases carry the dependency chain everything else inherits, and none may
 be done superficially: **2** (market data ingestion) → **3** (data quality) →
@@ -240,9 +253,10 @@ be done superficially: **2** (market data ingestion) → **3** (data quality) �
 >
 > Data wrong → all of it wrong, quietly.
 
-Next up is **Phase 1 — Instrument Master**: know what an instrument *is* before
-storing anything about it. Done when searching `FPT` resolves to exactly one
-security and every provider's spelling of it maps to the same canonical ID.
+**Phase 1 — Instrument Master** is under way: know what an instrument *is*
+before storing anything about it. Searching `FPT` already resolves to exactly
+one security. The phase is done when every provider's spelling of it maps to
+the same canonical ID, which needs the alias and import workstreams.
 
 Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
 
@@ -272,7 +286,8 @@ Recorded now because they are expensive to retrofit:
 | [Architecture overview](docs/architecture/overview.md)                         | Current and target architecture |
 | [System context](docs/architecture/system-context.md)                          | Actors and external systems     |
 | [Data policy](docs/architecture/data-policy.md)                                | Market data licensing           |
-| [ADRs](docs/architecture/decisions/)                                           | Eight recorded decisions        |
+| [Instrument search](docs/architecture/instrument-search.md)                    | Search, resolution, current security |
+| [ADRs](docs/architecture/decisions/)                                           | Ten recorded decisions          |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
 | [Git workflow](docs/development/git-workflow.md)                               | Branching and commit standards  |
 | [Roadmap](docs/roadmap/phases.md)                                              | All twenty phases               |
