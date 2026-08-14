@@ -3,7 +3,10 @@
 /* --- Shell --------------------------------------------------------------- */
 .shell {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  /* Header, current security, page, footer. The security strip is part of the
+     frame rather than of a page: every panel below it describes that
+     security. */
+  grid-template-rows: auto auto 1fr auto;
   min-height: 100%;
 }
 
@@ -377,16 +380,281 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+/* Reserved for capabilities with shipped, tested behaviour behind them. */
+.capability-list__badge--active {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* --- Current security bar ------------------------------------------------
+ * The subject line for everything below it. Dense, single row, and loud
+ * enough that the ticker is readable at a glance from across a desk.
+ */
+.security-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-6);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.security-bar__label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+
+.security-bar__ticker {
+  color: var(--accent);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+}
+
+.security-bar__name {
+  color: var(--text-primary);
+}
+
+.security-bar__facts {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Only rendered when the instrument is not trading normally, so it is always
+   worth the emphasis. */
+.security-bar__status {
+  padding: 1px var(--space-2);
+  background: var(--state-degraded-wash);
+  color: var(--state-degraded);
+  border-radius: var(--radius-sm);
+}
+
+.security-bar--empty .security-bar__label {
+  color: var(--text-muted);
+}
+
+.security-bar--empty {
+  justify-content: space-between;
+}
+
+.security-bar__action {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding: 2px var(--space-2);
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.security-bar__action:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.security-bar__action kbd {
+  padding: 0 3px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
+  font-size: var(--text-xs);
+}
+
+/* --- Security search overlay --------------------------------------------- */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: 12vh var(--space-4) var(--space-4);
+  background: oklch(10% 0.01 250 / 0.72);
+}
+
+.search-panel {
+  width: min(46rem, 100%);
+  background: var(--surface-base);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  /* Lifted off the page rather than merely outlined: this is the one surface
+     that takes over the whole terminal while it is open. */
+  box-shadow: 0 24px 64px oklch(8% 0.01 250 / 0.6);
+  overflow: hidden;
+}
+
+.search-panel__field {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.search-panel__prompt {
+  color: var(--accent);
+  font-size: var(--text-lg);
+}
+
+.search-panel__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-primary);
+  border: none;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+
+.search-panel__input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-panel__hint {
+  padding: 1px var(--space-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.search-panel__notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+}
+
+.search-panel__status {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.search-panel__status--error {
+  background: var(--state-offline-wash);
+  color: var(--state-offline);
+}
+
+.search-results {
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* Ticker, name, venue, currency, asset class — the five facts that let a
+   trader tell two listings apart without opening either. */
+.search-result {
+  display: grid;
+  grid-template-columns: 6rem 1fr auto auto;
+  grid-template-areas:
+    "ticker name venue currency"
+    "ticker class class class";
+  gap: 0 var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.search-result:last-child {
+  border-bottom: none;
+}
+
+/* The highlight is driven by keyboard position, and hover only moves that
+   position — so there is one notion of "current row", never two. */
+.search-result--active {
+  background: var(--surface-overlay);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.search-result__ticker {
+  grid-area: ticker;
+  color: var(--accent);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.search-result__name {
+  grid-area: name;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result__venue {
+  grid-area: venue;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.search-result__currency {
+  grid-area: currency;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.search-result__class {
+  grid-area: class;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
 }
 
 @media (max-width: 40rem) {
   .shell__header,
   .shell__main,
-  .shell__footer {
+  .shell__footer,
+  .security-bar {
     padding-inline: var(--space-4);
   }
 
   .status-table__detail {
+    display: none;
+  }
+
+  .security-bar__facts {
+    margin-inline-start: 0;
+  }
+
+  .search-result {
+    grid-template-columns: 5rem 1fr;
+    grid-template-areas:
+      "ticker name"
+      "ticker venue"
+      "ticker class";
+  }
+
+  .search-result__currency {
     display: none;
   }
 }
