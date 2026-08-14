@@ -1,6 +1,13 @@
+/** How far a capability has actually been built. */
+type CapabilityStatus = "PLANNED" | "IN PROGRESS";
+
 interface Capability {
   readonly name: string;
   readonly phase: string;
+
+  /** Defaults to planned. Only a capability with shipped, tested behaviour
+   *  behind it may claim anything else. */
+  readonly status?: CapabilityStatus;
 }
 
 interface Milestone {
@@ -11,11 +18,12 @@ interface Milestone {
 }
 
 /**
- * The planned capability map.
+ * The capability map.
  *
- * Every entry below is PLANNED. Nothing here is implemented, and this page
- * exists so that is unambiguous — a terminal that shows empty chart panels
- * implies features that do not exist.
+ * Everything here is PLANNED unless it says otherwise, and a badge may only
+ * say otherwise when the behaviour genuinely ships. The page exists so that is
+ * unambiguous — a terminal showing empty chart panels implies features that do
+ * not exist.
  */
 const MILESTONES: readonly Milestone[] = [
   {
@@ -23,7 +31,7 @@ const MILESTONES: readonly Milestone[] = [
     name: "Data Foundation",
     summary: "Know what an instrument is, then get its history right.",
     capabilities: [
-      { name: "Instrument master", phase: "Phase 1" },
+      { name: "Instrument master", phase: "Phase 1", status: "IN PROGRESS" },
       { name: "Market data ingestion", phase: "Phase 2" },
       { name: "Data normalization & quality", phase: "Phase 3" },
       { name: "Corporate actions & adjusted data", phase: "Phase 4" },
@@ -74,9 +82,9 @@ export function CapabilitiesPage() {
       <div className="page__intro">
         <h1 className="page__title">Capability Map</h1>
         <p className="page__lede">
-          The intended shape of the system, targeting the Vietnam market.
-          Everything on this page is planned — the repository is at Phase 0,
-          which builds the foundation only.
+          The intended shape of the system, targeting the Vietnam market. The
+          foundation and part of the instrument master are built; everything
+          else on this page is planned.
         </p>
       </div>
 
@@ -108,7 +116,15 @@ export function CapabilitiesPage() {
                   <span className="capability-list__phase numeric">
                     {capability.phase}
                   </span>
-                  <span className="capability-list__badge">PLANNED</span>
+                  <span
+                    className={
+                      capability.status === "IN PROGRESS"
+                        ? "capability-list__badge capability-list__badge--active"
+                        : "capability-list__badge"
+                    }
+                  >
+                    {capability.status ?? "PLANNED"}
+                  </span>
                 </li>
               ))}
             </ul>
