@@ -52,8 +52,13 @@ ADR that adopts it.
       rewrites history makes reproducible backtests impossible.
 - [ ] Does fundamental data carry a publication timestamp as well as a fiscal
       period? Without it, look-ahead bias cannot be avoided.
-- [ ] Symbol identifiers: does the provider expose FIGI, ISIN, or CUSIP, or
-      only its own symbology?
+- [ ] Symbol identifiers: does the provider expose ISIN or FIGI, or only its
+      own symbology?
+- [ ] Does the provider preserve history across exchange transfers and symbol
+      changes, or does it silently start a new series?
+- [ ] Are rights issues and bonus shares reported as distinct action types, or
+      collapsed into a generic dividend?
+- [ ] Does it cover HOSE, HNX and UPCOM, or only the main board?
 
 ### Operational
 
@@ -61,21 +66,27 @@ ADR that adopts it.
 - [ ] Availability and status reporting.
 - [ ] Terms-of-service change history — how often, with how much notice?
 
-## Identifier licensing
+## Identifiers
 
-Instrument identifiers are themselves licensed, and this catches people out:
-
-| Identifier | Position                                                          |
-| ---------- | ----------------------------------------------------------------- |
-| FIGI       | Openly licensed. Preferred as the canonical external identifier.   |
-| ISIN       | National numbering agencies assert rights over bulk redistribution. |
-| CUSIP      | Commercially licensed. Redistribution requires an agreement.       |
-| Ticker     | Not unique and not stable — never usable as a primary key.         |
+| Identifier      | Position for Vietnamese equities                                  |
+| --------------- | ------------------------------------------------------------------ |
+| Ticker          | Not stable and not unique over time. Never a primary key.          |
+| Exchange code   | Meaningful only together with the exchange and a date range.       |
+| ISIN            | Assigned to Vietnamese securities but rarely exposed by providers. |
+| FIGI            | Coverage exists but is inconsistent; not dependable as the key.    |
+| CUSIP           | Not applicable.                                                    |
 
 Phase 1 — Instrument Master therefore issues an **internal canonical ID** as
-the primary key, with provider and market identifiers stored as aliases. That
-is the correct data model regardless of licensing, and it also means no
-licensed identifier ever becomes structurally load-bearing.
+the primary key, with provider and market identifiers stored as aliases.
+
+In a US-centric system that choice is good practice. Here it is the only
+workable option: tickers change on exchange transfer (UPCOM → HNX → HOSE is a
+normal progression), and a delisted ticker can be reassigned to an unrelated
+company. A ticker used as a key would eventually merge two different
+securities into one row.
+
+Where a licensed identifier such as ISIN is available it is stored as an alias
+only, so no licensed identifier ever becomes structurally load-bearing.
 
 ## Retention
 

@@ -6,7 +6,8 @@ implemented.
 
 ## Purpose
 
-A personal quantitative research and trading workstation. The long-term goal is
+A personal quantitative research and trading workstation for the **Vietnam
+market** — HOSE, HNX, UPCOM, VN30 and Vietnamese indices. The long-term goal is
 a closed loop:
 
 ```
@@ -17,8 +18,13 @@ market data → research → signal → backtest → risk → execution → moni
 
 The system is data-first, not UI-first. The terminal is a view onto the data
 and the domain logic; it is not where behaviour lives. A chart that looks
-right on top of an instrument model that cannot tell `AAPL` from `AAPL.US` is
-worth nothing.
+right on top of an instrument model that cannot tell one provider's spelling of
+`FPT` from another's is worth nothing.
+
+The market choice is deliberate and recorded in
+[ADR-008](decisions/ADR-008-vietnam-market-first.md). It shapes instrument
+identity, corporate action handling and the microstructure the backtester has
+to simulate.
 
 ## What exists today
 
@@ -190,12 +196,16 @@ The ten domains the system is intended to grow into. All PLANNED.
 Implementation proceeds in vertical slices, not tier by tier. The tiers
 describe what the system *becomes*, in order:
 
-| Tier | Becomes            | Phases | Content                                                        |
-| ---- | ------------------ | ------ | -------------------------------------------------------------- |
-| 1    | Research terminal  | 1–6    | Instrument master, market data, quality, charts, news, screener |
-| 2    | Quant platform     | 7–10   | Factors, backtesting, portfolio, risk                           |
-| 3    | Trading system     | 11–14  | Paper trading, OMS, broker, reconciliation                      |
-| 4    | Engineered system  | 15–18  | C++ hot path, AI analyst, hardening                             |
+| Milestone | Becomes             | Phases | Content                                                    |
+| --------- | ------------------- | ------ | ----------------------------------------------------------- |
+| 1         | Data foundation     | 0–4    | Instrument master, ingestion, quality, corporate actions     |
+| 2         | Quant platform      | 5–10   | Terminal, fundamentals, news, factors, backtesting, risk     |
+| 3         | Trading system      | 11–15  | Portfolio, paper trading, OMS, broker, reconciliation        |
+| 4         | Engineered system   | 16–19  | C++ hot path, AI analyst, hardening, presentation            |
+
+Five phases carry the dependency chain the rest of the system inherits, and
+none may be done superficially: **2** (ingestion) → **3** (quality) → **4**
+(corporate actions) → **9** (backtesting) → **10** (risk).
 
 See [`../roadmap/phases.md`](../roadmap/phases.md).
 
@@ -205,10 +215,15 @@ These are decided now because they are expensive to retrofit.
 
 ### Canonical instrument identity
 
-`AAPL`, `AAPL.US`, `AAPL NASDAQ`, `US0378331005` and `BBG000B9XRY4` may all
-denote one security. Every other domain joins on instrument identity, so the
-instrument master is Phase 1 — before any price is stored. Provider symbols
-become aliases of a canonical internal ID, never the key itself.
+Every other domain joins on instrument identity, so the instrument master is
+Phase 1 — before any price is stored. Provider symbols become aliases of a
+canonical internal ID, never the key itself.
+
+In Vietnam this is a correctness requirement rather than a preference. FIGI,
+ISIN and CUSIP are not meaningfully available, tickers change on exchange
+transfer, and a delisted ticker can be reissued to a different company. A
+ticker used as a primary key would eventually join two unrelated securities
+together. See [ADR-008](decisions/ADR-008-vietnam-market-first.md).
 
 ### Point-in-time correctness
 
@@ -217,9 +232,9 @@ knowable. Q4 revenue for a fiscal period ending in December is not knowable to
 a strategy running in January if it was reported in February.
 
 Storing only the fiscal period makes look-ahead bias unavoidable and, worse,
-invisible — backtests simply look better than reality. Fundamental and
-corporate-action data therefore carries both timestamps from Phase 5, and the
-backtester filters on knowability, not on period.
+invisible — backtests simply look better than reality. Fundamental data
+therefore carries both timestamps from Phase 6, and the backtester filters on
+knowability, not on period.
 
 ### Data quality is a stage, not a hope
 
@@ -227,6 +242,23 @@ Provider data is wrong sometimes: out-of-order sequence numbers, duplicate
 trade IDs, a price off by a factor of ten. Validation sits between ingestion
 and storage so bad ticks never reach a backtest or a risk calculation
 (Phase 3).
+
+Thresholds are exchange-specific. Vietnamese daily price limits are ±7% on
+HOSE, ±10% on HNX and ±15% on UPCOM, so a move beyond the relevant bound is
+not a price move — it is a corporate action, a halt, a symbol change, or bad
+data, and must be classified before it is stored.
+
+### Raw data is never overwritten
+
+Corporate actions produce adjusted prices, and adjustments get corrected.
+
+```
+RAW  →  adjustment  →  ADJUSTED
+```
+
+Both are retained and versioned (Phase 4), so an adjustment error is
+correctable rather than destructive. Rights issues and bonus shares are routine
+in Vietnam, which makes this a main path rather than an edge case.
 
 ### Deterministic execution path
 
@@ -242,13 +274,12 @@ convention.
 
 ### AI advises; it never trades
 
-The AI analyst (Phase 16) reads market data, filings, news and fundamentals and
+The AI analyst (Phase 17) reads market data, filings, news and fundamentals and
 produces cited analysis and hypotheses. It has no path to the OMS. Order
-sizing, risk approval and execution stay deterministic and reviewable. See
-[ADR-007](decisions/ADR-007-private-proprietary-repository.md) for the
-repository posture and the roadmap for where this boundary is enforced.
+sizing, risk approval and execution stay deterministic and reviewable. Every
+response carries claim, source, timestamp and confidence.
 
-`LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 13.
+`LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 14.
 
 ## What Phase 0 deliberately does not do
 
