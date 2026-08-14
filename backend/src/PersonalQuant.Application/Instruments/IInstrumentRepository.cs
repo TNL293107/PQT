@@ -14,8 +14,8 @@ namespace PersonalQuant.Application.Instruments;
 /// instrument that stops trading is delisted, which is a state change.
 /// </para>
 /// <para>
-/// Search, provider symbol resolution and related-instrument lookups are
-/// separate workstreams and are not part of this interface yet.
+/// Provider symbol aliases and related-instrument lookups are separate
+/// workstreams and are not part of this interface yet.
 /// </para>
 /// </remarks>
 public interface IInstrumentRepository
@@ -70,6 +70,53 @@ public interface IInstrumentRepository
     Task<bool> IsTickerTakenAsync(
         ExchangeId exchangeId,
         Ticker ticker,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns instruments matching a query, strongest match first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ranking, filtering and the result bound are all applied by the
+    /// database. Reading the instrument master into memory to filter it there
+    /// would work today and stop working the moment the table is the size it
+    /// is meant to be.
+    /// </para>
+    /// <para>
+    /// The order is total — match kind, then ticker, then identifier — so the
+    /// result never depends on the order rows happen to come back in.
+    /// </para>
+    /// </remarks>
+    /// <param name="criteria">The validated query.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Ranked results, bounded by the criteria's limit.</returns>
+    Task<IReadOnlyList<InstrumentSearchResult>> SearchAsync(
+        InstrumentSearchCriteria criteria,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists every active instrument holding a ticker, across all venues.
+    /// </summary>
+    /// <remarks>
+    /// Returns more than one row when the same ticker is live on two
+    /// exchanges, which is what makes symbol resolution able to report
+    /// ambiguity instead of guessing.
+    /// </remarks>
+    /// <param name="ticker">The ticker to look up.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Every active holder of the ticker, ordered by exchange code.</returns>
+    Task<IReadOnlyList<InstrumentSearchResult>> ListActiveByTickerAsync(
+        Ticker ticker,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads one instrument as a search result, including its exchange code.
+    /// </summary>
+    /// <param name="id">The identifier to look up.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The instrument, or <see langword="null"/> when unknown.</returns>
+    Task<InstrumentSearchResult?> FindResultByIdAsync(
+        InstrumentId id,
         CancellationToken cancellationToken = default);
 
     /// <summary>
