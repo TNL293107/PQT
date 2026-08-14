@@ -31,6 +31,8 @@ public sealed class Instrument : AuditableEntity
         Ticker = null!;
         Name = null!;
         Currency = null!;
+        SearchTicker = null!;
+        SearchName = null!;
     }
 
     private Instrument(
@@ -48,6 +50,8 @@ public sealed class Instrument : AuditableEntity
         AssetType = assetType;
         Currency = currency;
         Status = InstrumentStatus.Pending;
+        SearchTicker = ToSearchTicker(ticker);
+        SearchName = InstrumentSearchText.Normalise(name);
     }
 
     /// <summary>Gets the canonical internal identifier.</summary>
@@ -76,6 +80,36 @@ public sealed class Instrument : AuditableEntity
 
     /// <summary>Gets the date the instrument stopped trading, once delisted.</summary>
     public DateOnly? DelistedOn { get; private set; }
+
+    /// <summary>
+    /// Gets the folded form of <see cref="Ticker"/> used by search.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It duplicates the ticker's text, and does so deliberately.
+    /// <see cref="Ticker"/> is persisted through a value converter, so the
+    /// query layer can compare it for equality but cannot pattern-match it —
+    /// and prefix search over tickers is the single most used query in the
+    /// terminal. A plain column carrying the same characters is the cheapest
+    /// way to keep the canonical property strongly typed without pushing
+    /// prefix filtering into application memory.
+    /// </para>
+    /// <para>
+    /// The aggregate maintains it on every path that changes the ticker, so it
+    /// cannot drift.
+    /// </para>
+    /// </remarks>
+    public string SearchTicker { get; private set; }
+
+    /// <summary>
+    /// Gets the folded form of <see cref="Name"/> used by search.
+    /// </summary>
+    /// <remarks>
+    /// Diacritics removed and case flattened by
+    /// <see cref="InstrumentSearchText"/>, so that a query typed without
+    /// Vietnamese accents still finds the security.
+    /// </remarks>
+    public string SearchName { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether the instrument still occupies its
@@ -132,18 +166,24 @@ public sealed class Instrument : AuditableEntity
     /// <param name="listedOn">The first trading date.</param>
     /// <param name="occurredAtUtc">The instant the change is recorded.</param>
     /// <exception cref="DomainStateException">The instrument is not pending.</exception>
-    public void List(DateOnly listedOn, DateTimeOffset occurredAtUtc)
-    {
-        if (Status != InstrumentStatus.Pending)
-        {
-            throw new DomainStateException(
-                $"Only a pending instrument can be listed, but {Ticker} is {Status}.");
-        }
+    public void List(DateOnly listedOn, DateTimeOffset occurredAtUtc) =>
+        ListCore(listedOn, occurredAtUtc);
 
-        Status = InstrumentStatus.Listed;
-        ListedOn = listedOn;
-        MarkUpdated(occurredAtUtc);
-    }
+    /// <summary>
+    /// Moves a pending instrument into trading without recording a first
+    /// trading date.
+    /// </summary>
+    /// <remarks>
+    /// For securities known to be trading whose listing date has not been
+    /// sourced. Provider symbol lists routinely omit it, and refusing to
+    /// record that a security trades because its first trading day is unknown
+    /// would be a worse answer than recording it with
+    /// <see cref="ListedOn"/> left empty. The date can be filled in later
+    /// without disturbing identity.
+    /// </remarks>
+    /// <param name="occurredAtUtc">The instant the change is recorded.</param>
+    /// <exception cref="DomainStateException">The instrument is not pending.</exception>
+    public void List(DateTimeOffset occurredAtUtc) => ListCore(null, occurredAtUtc);
 
     /// <summary>
     /// Halts trading without removing the listing.
@@ -226,6 +266,7 @@ public sealed class Instrument : AuditableEntity
     public void Rename(string name, DateTimeOffset occurredAtUtc)
     {
         Name = RequireName(name);
+        SearchName = InstrumentSearchText.Normalise(Name);
         MarkUpdated(occurredAtUtc);
     }
 
@@ -251,6 +292,7 @@ public sealed class Instrument : AuditableEntity
         }
 
         Ticker = ticker;
+        SearchTicker = ToSearchTicker(ticker);
         MarkUpdated(occurredAtUtc);
     }
 
@@ -301,6 +343,26 @@ public sealed class Instrument : AuditableEntity
         AssetType = assetType;
         MarkUpdated(occurredAtUtc);
     }
+
+    private void ListCore(DateOnly? listedOn, DateTimeOffset occurredAtUtc)
+    {
+        if (Status != InstrumentStatus.Pending)
+        {
+            throw new DomainStateException(
+                $"Only a pending instrument can be listed, but {Ticker} is {Status}.");
+        }
+
+        Status = InstrumentStatus.Listed;
+        ListedOn = listedOn;
+        MarkUpdated(occurredAtUtc);
+    }
+
+    // A ticker is already upper-case ASCII alphanumerics by construction, so
+    // folding it is a formality. It is routed through the same normaliser as
+    // the name anyway, so that both search columns are guaranteed to have been
+    // produced by one rule.
+    private static string ToSearchTicker(Ticker ticker) =>
+        InstrumentSearchText.Normalise(ticker.Value);
 
     private static string RequireName(string name)
     {
