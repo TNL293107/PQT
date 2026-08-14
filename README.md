@@ -4,6 +4,8 @@ A Bloomberg-inspired quantitative research and trading workstation for the
 **Vietnam market** (HOSE, HNX, UPCOM), built as a long-term personal
 engineering project.
 
+[![CI](https://github.com/TNL293107/PQT/actions/workflows/ci.yml/badge.svg)](https://github.com/TNL293107/PQT/actions/workflows/ci.yml)
+
 ---
 
 ## Current status
@@ -11,9 +13,9 @@ engineering project.
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
 | **Phase**    | 1 — Instrument Master, in progress (phases run 0–19)          |
-| **Complete** | Phase 0 · Phase 1 workstreams 1, 6 and 7 of 7                 |
+| **Complete** | Phase 0 · Phase 1 workstreams 1 and 7 of 7 (2, 4, 6 partial)  |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 294 passing — 204 .NET, 70 Vitest, 14 pytest, 6 CTest         |
+| **Tests**    | 294 green in CI — 204 .NET, 70 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
@@ -197,7 +199,9 @@ cd cpp-engine && cmake --preset ci && cmake --build --preset ci && ctest --prese
 
 The backend integration tests start real PostgreSQL and Redis containers via
 Testcontainers. Without Docker they **skip with an explicit reason** rather
-than passing quietly.
+than passing quietly. CI runners have a daemon, so all 53 of them execute
+there — a green build means the search ranking, the partial unique index and
+the migration were exercised against a real PostgreSQL 17, not a substitute.
 
 ## Security
 
