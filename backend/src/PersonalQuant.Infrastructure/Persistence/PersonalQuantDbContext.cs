@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 
@@ -39,6 +40,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the instrument master.</summary>
     public DbSet<Instrument> Instruments => Set<Instrument>();
+
+    /// <summary>Gets the upper level of the classification taxonomy.</summary>
+    public DbSet<Sector> Sectors => Set<Sector>();
+
+    /// <summary>Gets the lower level of the classification taxonomy.</summary>
+    public DbSet<Industry> Industries => Set<Industry>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

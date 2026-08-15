@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.Currencies;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
@@ -89,6 +91,20 @@ internal sealed class InstrumentConfiguration : IEntityTypeConfiguration<Instrum
             .HasMaxLength(Instrument.MaxNameLength)
             .IsRequired();
 
+        // Nullable: an index has no industry, and an imported security may
+        // not have been mapped yet. A catch-all "unknown" node would make
+        // those two indistinguishable and would sum into every sector
+        // aggregate as if it were a real classification.
+        builder.Property(instrument => instrument.IndustryId)
+            .HasColumnName("industry_id")
+            // Declared over the non-nullable identifier: EF applies the
+            // converter to the value and handles the null case itself, which
+            // a lambda pair over IndustryId? cannot express.
+            .HasConversion(
+                new ValueConverter<IndustryId, Guid>(
+                    id => id.Value,
+                    value => new IndustryId(value)));
+
         builder.Property(instrument => instrument.ListedOn)
             .HasColumnName("listed_on");
 
@@ -113,6 +129,12 @@ internal sealed class InstrumentConfiguration : IEntityTypeConfiguration<Instrum
             .HasConstraintName("fk_instruments_exchange")
             // Master data is never removed, so cascading a delete would only
             // ever be a way to lose it by accident.
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Industry>()
+            .WithMany()
+            .HasForeignKey(instrument => instrument.IndustryId)
+            .HasConstraintName("fk_instruments_industry")
             .OnDelete(DeleteBehavior.Restrict);
 
         // Two indexes over the same columns, so each needs a distinct model
@@ -153,5 +175,13 @@ internal sealed class InstrumentConfiguration : IEntityTypeConfiguration<Instrum
         builder.HasIndex(instrument => instrument.SearchName)
             .HasDatabaseName("ix_instruments_search_name")
             .HasOperators("varchar_pattern_ops");
+
+        // Serves "every instrument in this industry", which is what a peer
+        // group and a sector screen are both built from. Partial: most rows
+        // are classified, and the ones that are not are never the answer to
+        // a classification query.
+        builder.HasIndex(instrument => instrument.IndustryId)
+            .HasDatabaseName("ix_instruments_industry")
+            .HasFilter("industry_id IS NOT NULL");
     }
 }
