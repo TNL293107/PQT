@@ -24,6 +24,7 @@ public static class ApplicationServiceCollectionExtensions
 
         services.AddScoped<IInstrumentSearchService, InstrumentSearchService>();
         services.AddScoped<IInstrumentResolver, InstrumentResolver>();
+        services.AddScoped<IInstrumentCatalog, InstrumentCatalog>();
 
         return services;
     }

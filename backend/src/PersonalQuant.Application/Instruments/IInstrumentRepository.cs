@@ -120,6 +120,23 @@ public interface IInstrumentRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads one instrument in full, joined to its venue and classification.
+    /// </summary>
+    /// <remarks>
+    /// A separate query from <see cref="FindResultByIdAsync"/> rather than a
+    /// widening of it. The two answer different callers — a terminal
+    /// re-establishing what an identifier points at, and a reference page
+    /// showing everything known about a security — and the joins that serve
+    /// the second are not worth paying for in the first.
+    /// </remarks>
+    /// <param name="id">The identifier to look up.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The instrument, or <see langword="null"/> when unknown.</returns>
+    Task<InstrumentDetail?> FindDetailByIdAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages a new instrument. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist it.
     /// </summary>
