@@ -1,3 +1,4 @@
+using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.Common;
 using PersonalQuant.Domain.Currencies;
 using PersonalQuant.Domain.Exchanges;
@@ -74,6 +75,26 @@ public sealed class Instrument : AuditableEntity
 
     /// <summary>Gets the current lifecycle state.</summary>
     public InstrumentStatus Status { get; private set; }
+
+    /// <summary>
+    /// Gets the industry the instrument is classified under, or
+    /// <see langword="null"/> while it is unclassified.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nullable because classification arrives from a source that does not
+    /// cover everything an instrument master holds. An index is not in an
+    /// industry, a newly imported security has not been mapped yet, and a fund
+    /// spans several. Recording "unknown" as a catch-all sector would make
+    /// those three indistinguishable and would quietly pollute every sector
+    /// aggregate that summed over it.
+    /// </para>
+    /// <para>
+    /// The sector is deliberately not stored alongside it. It is reached
+    /// through the industry, so the two levels cannot disagree.
+    /// </para>
+    /// </remarks>
+    public IndustryId? IndustryId { get; private set; }
 
     /// <summary>Gets the date the instrument began trading, once listed.</summary>
     public DateOnly? ListedOn { get; private set; }
@@ -341,6 +362,45 @@ public sealed class Instrument : AuditableEntity
         }
 
         AssetType = assetType;
+        MarkUpdated(occurredAtUtc);
+    }
+
+    /// <summary>
+    /// Classifies the instrument under an industry.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent and repeatable. A provider reclassifying a company is
+    /// ordinary, and the aggregate records the current answer rather than
+    /// refusing the change; classification is descriptive metadata and carries
+    /// none of the identity guarantees the ticker and the lifecycle do.
+    /// </remarks>
+    /// <param name="industryId">The industry to classify it under.</param>
+    /// <param name="occurredAtUtc">The instant the change is recorded.</param>
+    /// <exception cref="DomainValidationException">The industry is unassigned.</exception>
+    public void AssignIndustry(IndustryId industryId, DateTimeOffset occurredAtUtc)
+    {
+        if (industryId.IsEmpty)
+        {
+            throw new DomainValidationException(
+                $"{Ticker} cannot be classified under an unassigned industry.");
+        }
+
+        IndustryId = industryId;
+        MarkUpdated(occurredAtUtc);
+    }
+
+    /// <summary>
+    /// Removes the instrument's classification.
+    /// </summary>
+    /// <remarks>
+    /// For a mapping discovered to be wrong. Leaving a known-bad industry in
+    /// place would keep the security inside a peer group it does not belong
+    /// to, which is worse than reporting it as unclassified.
+    /// </remarks>
+    /// <param name="occurredAtUtc">The instant the change is recorded.</param>
+    public void ClearIndustry(DateTimeOffset occurredAtUtc)
+    {
+        IndustryId = null;
         MarkUpdated(occurredAtUtc);
     }
 
