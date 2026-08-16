@@ -69,10 +69,12 @@ internal static partial class InfrastructureLog
     [LoggerMessage(
         EventId = 1110,
         Level = LogLevel.Information,
-        Message = "Reference data seeding created {ExchangesCreated} exchange(s) and {InstrumentsCreated} instrument(s).")]
+        Message = "Reference data seeding created {ExchangesCreated} exchange(s), {SectorsCreated} sector(s), {IndustriesCreated} industry/industries and {InstrumentsCreated} instrument(s).")]
     public static partial void ReferenceDataSeeded(
         ILogger logger,
         int exchangesCreated,
+        int sectorsCreated,
+        int industriesCreated,
         int instrumentsCreated);
 
     [LoggerMessage(

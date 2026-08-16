@@ -5,6 +5,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Classification;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Caching;
@@ -80,6 +81,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<PersonalQuantDbContext>());
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
+        services.AddScoped<IClassificationRepository, ClassificationRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
 

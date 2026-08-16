@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using PersonalQuant.Application.Classification;
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 
@@ -178,6 +180,65 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
             .ConfigureAwait(false);
 
         return row is null ? null : ToResult(row.Instrument, row.Exchange, matchKind: null);
+    }
+
+    /// <inheritdoc />
+    public async Task<InstrumentDetail?> FindDetailByIdAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default)
+    {
+        // Left joins, not inner ones: an unclassified instrument is normal,
+        // and an inner join would answer "no such instrument" for every index
+        // and every security a mapping has not reached yet.
+        var row = await (
+            from instrument in dbContext.Instruments.AsNoTracking()
+            join exchange in dbContext.Exchanges.AsNoTracking()
+                on instrument.ExchangeId equals exchange.Id
+            join industry in dbContext.Industries.AsNoTracking()
+                on instrument.IndustryId equals (IndustryId?)industry.Id into industryMatches
+            from industry in industryMatches.DefaultIfEmpty()
+            join sector in dbContext.Sectors.AsNoTracking()
+                on industry.SectorId equals sector.Id into sectorMatches
+            from sector in sectorMatches.DefaultIfEmpty()
+            where instrument.Id == id
+            select new
+            {
+                Instrument = instrument,
+                Exchange = exchange,
+                Industry = (Industry?)industry,
+                Sector = (Sector?)sector,
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        // Both levels or neither. An industry row cannot exist without its
+        // sector — the foreign key sees to that — so a half-populated
+        // classification would mean the query was wrong, not the data.
+        var classification = row.Industry is null || row.Sector is null
+            ? null
+            : new InstrumentClassification(
+                row.Sector.Code,
+                row.Sector.Name,
+                row.Industry.Code,
+                row.Industry.Name);
+
+        return new InstrumentDetail(
+            row.Instrument.Id,
+            row.Instrument.Ticker,
+            row.Instrument.Name,
+            row.Instrument.AssetType,
+            row.Exchange.Code,
+            row.Exchange.Name,
+            row.Instrument.Currency,
+            row.Instrument.Status,
+            row.Instrument.ListedOn,
+            row.Instrument.DelistedOn,
+            classification);
     }
 
     /// <inheritdoc />
