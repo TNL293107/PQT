@@ -120,16 +120,21 @@ public sealed class PersonalQuantDbContextTests
     public void Instruments_cannot_be_removed_by_cascading_from_an_exchange()
     {
         // Master data is never deleted; a cascade would only ever be a way to
-        // lose it by accident.
+        // lose it by accident. Asserted over every relationship the instrument
+        // has rather than a named one, so a foreign key added later cannot
+        // introduce a cascade without this failing.
         // Arrange
         using var context = CreateContext();
         var entity = context.Model.FindEntityType(typeof(Instrument));
 
         // Act
-        var foreignKey = entity!.GetForeignKeys().Single();
+        var foreignKeys = entity!.GetForeignKeys().ToList();
 
         // Assert
-        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.NotEmpty(foreignKeys);
+        Assert.All(
+            foreignKeys,
+            foreignKey => Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior));
     }
 
     private static PersonalQuantDbContext CreateContext()

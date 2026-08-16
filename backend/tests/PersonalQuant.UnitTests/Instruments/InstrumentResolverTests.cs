@@ -240,6 +240,11 @@ public sealed class InstrumentResolverTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Not exercised by resolution.");
 
+        public Task<InstrumentDetail?> FindDetailByIdAsync(
+            InstrumentId id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Not exercised by resolution.");
+
         public void Add(Instrument instrument) =>
             throw new NotSupportedException("Not exercised by resolution.");
     }

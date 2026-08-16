@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Classification;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Domain.Exchanges;
@@ -34,6 +35,8 @@ public sealed class ReferenceDataSeedingTests(DependencyContainerFixture contain
 
         // Assert
         Assert.Equal(VietnamReferenceData.Exchanges.Count, outcome.ExchangesCreated);
+        Assert.Equal(VietnamReferenceData.Sectors.Count, outcome.SectorsCreated);
+        Assert.Equal(VietnamReferenceData.Industries.Count, outcome.IndustriesCreated);
         Assert.Equal(VietnamReferenceData.Instruments.Count, outcome.InstrumentsCreated);
     }
 
@@ -51,6 +54,8 @@ public sealed class ReferenceDataSeedingTests(DependencyContainerFixture contain
 
         // Assert
         Assert.Equal(0, outcome.ExchangesCreated);
+        Assert.Equal(0, outcome.SectorsCreated);
+        Assert.Equal(0, outcome.IndustriesCreated);
         Assert.Equal(0, outcome.InstrumentsCreated);
     }
 
@@ -187,14 +192,19 @@ public sealed class ReferenceDataSeedingTests(DependencyContainerFixture contain
             Exchanges = _scope.ServiceProvider.GetRequiredService<IExchangeRepository>();
             Search = _scope.ServiceProvider.GetRequiredService<IInstrumentSearchService>();
 
+            Classification = _scope.ServiceProvider.GetRequiredService<IClassificationRepository>();
+
             Seeder = new ReferenceDataSeeder(
                 Exchanges,
+                Classification,
                 Instruments,
                 UnitOfWork,
                 _scope.ServiceProvider.GetRequiredService<IClock>());
         }
 
         public IUnitOfWork UnitOfWork { get; }
+
+        public IClassificationRepository Classification { get; }
 
         public IInstrumentRepository Instruments { get; }
 
