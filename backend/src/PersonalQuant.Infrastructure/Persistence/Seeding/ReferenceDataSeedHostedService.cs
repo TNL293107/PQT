@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Classification;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Configuration;
@@ -50,6 +51,7 @@ public sealed class ReferenceDataSeedHostedService(
 
             var seeder = new ReferenceDataSeeder(
                 scope.ServiceProvider.GetRequiredService<IExchangeRepository>(),
+                scope.ServiceProvider.GetRequiredService<IClassificationRepository>(),
                 scope.ServiceProvider.GetRequiredService<IInstrumentRepository>(),
                 scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
                 scope.ServiceProvider.GetRequiredService<IClock>());
@@ -57,7 +59,11 @@ public sealed class ReferenceDataSeedHostedService(
             var outcome = await seeder.SeedAsync(cancellationToken).ConfigureAwait(false);
 
             InfrastructureLog.ReferenceDataSeeded(
-                logger, outcome.ExchangesCreated, outcome.InstrumentsCreated);
+                logger,
+                outcome.ExchangesCreated,
+                outcome.SectorsCreated,
+                outcome.IndustriesCreated,
+                outcome.InstrumentsCreated);
         }
         catch (Exception exception) when (
             exception is DbException or TimeoutException or InvalidOperationException)

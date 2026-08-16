@@ -60,6 +60,82 @@ public sealed record InstrumentResponse(
 }
 
 /// <summary>
+/// The sector and industry an instrument is classified under.
+/// </summary>
+/// <param name="SectorCode">The sector's taxonomy code.</param>
+/// <param name="SectorName">The sector's display name.</param>
+/// <param name="IndustryCode">The industry's taxonomy code.</param>
+/// <param name="IndustryName">The industry's display name.</param>
+public sealed record InstrumentClassificationResponse(
+    string SectorCode,
+    string SectorName,
+    string IndustryCode,
+    string IndustryName);
+
+/// <summary>
+/// Everything the instrument master knows about one security.
+/// </summary>
+/// <remarks>
+/// A superset of <see cref="InstrumentResponse"/> minus the match kind, which
+/// only means something inside a ranked result. The extra fields are the ones
+/// a reference page needs and a search result should not be paying for on
+/// every keystroke.
+/// </remarks>
+/// <param name="InstrumentId">The canonical identifier every module joins on.</param>
+/// <param name="Ticker">The exchange ticker, for display.</param>
+/// <param name="Name">The security name.</param>
+/// <param name="AssetType">The broad asset class.</param>
+/// <param name="Exchange">The venue's operating code.</param>
+/// <param name="ExchangeName">The venue's full name.</param>
+/// <param name="Currency">The ISO 4217 quote currency.</param>
+/// <param name="Status">The lifecycle state.</param>
+/// <param name="ListedOn">The first trading date, when it has been sourced.</param>
+/// <param name="DelistedOn">The last trading date, once delisted.</param>
+/// <param name="Classification">
+/// The sector and industry, absent while the security is unclassified.
+/// </param>
+public sealed record InstrumentDetailResponse(
+    Guid InstrumentId,
+    string Ticker,
+    string Name,
+    string AssetType,
+    string Exchange,
+    string ExchangeName,
+    string Currency,
+    string Status,
+    DateOnly? ListedOn,
+    DateOnly? DelistedOn,
+    InstrumentClassificationResponse? Classification)
+{
+    /// <summary>Projects an application projection onto the wire contract.</summary>
+    /// <param name="detail">The projection to convert.</param>
+    /// <returns>The response representation.</returns>
+    public static InstrumentDetailResponse From(InstrumentDetail detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        return new InstrumentDetailResponse(
+            detail.InstrumentId.Value,
+            detail.Ticker.Value,
+            detail.Name,
+            detail.AssetType.ToString(),
+            detail.ExchangeCode.Value,
+            detail.ExchangeName,
+            detail.Currency.Value,
+            detail.Status.ToString(),
+            detail.ListedOn,
+            detail.DelistedOn,
+            detail.Classification is null
+                ? null
+                : new InstrumentClassificationResponse(
+                    detail.Classification.SectorCode.Value,
+                    detail.Classification.SectorName,
+                    detail.Classification.IndustryCode.Value,
+                    detail.Classification.IndustryName));
+    }
+}
+
+/// <summary>
 /// The result of an instrument search.
 /// </summary>
 /// <remarks>

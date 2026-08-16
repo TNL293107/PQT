@@ -50,7 +50,7 @@ internal static class InstrumentEndpoints
 
         group.MapGet("/{instrumentId:guid}", GetByIdAsync)
             .WithName("GetInstrument")
-            .WithSummary("Reads one instrument by its canonical identifier.");
+            .WithSummary("Reads one instrument in full by its canonical identifier.");
 
         return endpoints;
     }
@@ -139,15 +139,16 @@ internal static class InstrumentEndpoints
     /// <remarks>
     /// The trusted read behind a client-side selection. A terminal that has
     /// stored an identifier calls this to re-establish what it points at,
-    /// rather than trusting the ticker and name it happens to be holding.
+    /// rather than trusting the ticker and name it happens to be holding, and
+    /// a reference page renders from the same response.
     /// </remarks>
-    private static async Task<Results<Ok<InstrumentResponse>, ProblemHttpResult>> GetByIdAsync(
+    private static async Task<Results<Ok<InstrumentDetailResponse>, ProblemHttpResult>> GetByIdAsync(
         Guid instrumentId,
-        IInstrumentResolver resolver,
+        IInstrumentCatalog catalog,
         CancellationToken cancellationToken)
     {
-        var instrument = await resolver
-            .FindByIdAsync(new InstrumentId(instrumentId), cancellationToken)
+        var instrument = await catalog
+            .FindDetailAsync(new InstrumentId(instrumentId), cancellationToken)
             .ConfigureAwait(false);
 
         return instrument is null
@@ -155,6 +156,6 @@ internal static class InstrumentEndpoints
                 detail: "No instrument exists with that identifier.",
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Instrument not found.")
-            : TypedResults.Ok(InstrumentResponse.From(instrument));
+            : TypedResults.Ok(InstrumentDetailResponse.From(instrument));
     }
 }
