@@ -6,9 +6,11 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Classification;
+using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Caching;
+using PersonalQuant.Infrastructure.MarketData;
 using PersonalQuant.Infrastructure.Configuration;
 using PersonalQuant.Infrastructure.HealthChecks;
 using PersonalQuant.Infrastructure.Persistence;
@@ -41,11 +43,14 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddOptionsWithValidation<PostgresOptions>(configuration, PostgresOptions.SectionName);
         services.AddOptionsWithValidation<RedisOptions>(configuration, RedisOptions.SectionName);
+        services.AddOptionsWithValidation<MarketDataOptions>(configuration, MarketDataOptions.SectionName);
 
         services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<IDelayScheduler, SystemDelayScheduler>();
 
         AddPostgres(services);
         AddRedis(services);
+        AddMarketDataSources(services, configuration);
         AddHealthChecks(services);
 
         return services;
@@ -82,6 +87,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
         services.AddScoped<IClassificationRepository, ClassificationRepository>();
+        services.AddScoped<IBarRepository, BarRepository>();
+        services.AddScoped<IIngestionJournal, IngestionJournalRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
 
@@ -119,5 +126,45 @@ public static class InfrastructureServiceCollectionExtensions
             .Bind(configuration.GetSection(sectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+    }
+
+    /// <summary>
+    /// Registers the ingestion policy and whichever market data sources the
+    /// configuration names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The policy is bound and validated here, then handed to the application
+    /// layer as a plain object. That is what lets the pipeline hold no
+    /// dependency on configuration binding at all, and it means an unusable
+    /// setting fails the deployment rather than the first scheduled run.
+    /// </para>
+    /// <para>
+    /// No source is registered by default. A deployment that has not been
+    /// pointed at one ingests nothing and records skipped runs saying so,
+    /// which is a better answer than silently reading whatever happens to sit
+    /// in a conventional directory.
+    /// </para>
+    /// </remarks>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="configuration">Application configuration.</param>
+    private static void AddMarketDataSources(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var options = configuration
+            .GetSection(MarketDataOptions.SectionName)
+            .Get<MarketDataOptions>() ?? new MarketDataOptions();
+
+        services.AddSingleton(options.BuildPolicy());
+
+        if (string.IsNullOrWhiteSpace(options.FileProviderDirectory))
+        {
+            return;
+        }
+
+        var directory = options.FileProviderDirectory;
+
+        services.AddSingleton<IMarketDataProvider>(_ => new FileMarketDataProvider(directory));
     }
 }
