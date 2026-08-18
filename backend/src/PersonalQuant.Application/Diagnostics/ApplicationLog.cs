@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Application.MarketData;
+using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Application.Diagnostics;
 
@@ -50,4 +52,52 @@ internal static partial class ApplicationLog
         ILogger logger,
         string symbol,
         int candidateCount);
+
+    [LoggerMessage(
+        EventId = 3100,
+        Level = LogLevel.Information,
+        Message = "marketdata.ingest {Source}/{Ticker} {Interval} stored {Stored} bar(s), revised {Revised}, rejected {Rejected}.")]
+    public static partial void MarketDataIngested(
+        ILogger logger,
+        string source,
+        string ticker,
+        BarInterval interval,
+        int stored,
+        int revised,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 3101,
+        Level = LogLevel.Error,
+        Message = "marketdata.ingest {Source}/{Ticker} {Interval} failed: {Reason}")]
+    public static partial void MarketDataIngestionFailed(
+        ILogger logger,
+        string source,
+        string ticker,
+        BarInterval interval,
+        string reason);
+
+    [LoggerMessage(
+        EventId = 3102,
+        Level = LogLevel.Warning,
+        Message = "marketdata.ingest {Source}/{Ticker} rejected {Count} bar(s) as {Reason}. First: {Detail}")]
+    public static partial void MarketDataBarsRejected(
+        ILogger logger,
+        string source,
+        string ticker,
+        BarRejectionReason reason,
+        int count,
+        string detail);
+
+    [LoggerMessage(
+        EventId = 3103,
+        Level = LogLevel.Warning,
+        Message = "marketdata.fetch {Source}/{Ticker} attempt {Attempt} waits {DelayMs}ms after: {Reason}")]
+    public static partial void MarketDataRetryScheduled(
+        ILogger logger,
+        string source,
+        string ticker,
+        int attempt,
+        long delayMs,
+        string reason);
 }
