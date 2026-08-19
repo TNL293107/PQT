@@ -3,6 +3,7 @@ using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
+using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Infrastructure.Persistence;
 
@@ -46,6 +47,18 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the lower level of the classification taxonomy.</summary>
     public DbSet<Industry> Industries => Set<Industry>();
+
+    /// <summary>Gets the canonical OHLCV series.</summary>
+    public DbSet<OhlcvBar> Bars => Set<OhlcvBar>();
+
+    /// <summary>Gets the retained provider responses.</summary>
+    public DbSet<RawMarketDataBatch> RawMarketDataBatches => Set<RawMarketDataBatch>();
+
+    /// <summary>Gets the ingestion resume positions.</summary>
+    public DbSet<IngestionCheckpoint> IngestionCheckpoints => Set<IngestionCheckpoint>();
+
+    /// <summary>Gets the ingestion audit trail.</summary>
+    public DbSet<IngestionRun> IngestionRuns => Set<IngestionRun>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
