@@ -56,6 +56,7 @@ app.UseCors(CorsOptions.PolicyName);
 
 app.MapDiagnosticsEndpoints();
 app.MapInstrumentEndpoints();
+app.MapMarketDataEndpoints();
 
 await app.RunAsync();
 
