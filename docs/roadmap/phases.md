@@ -51,7 +51,7 @@ Everything else in the system rests on them.
 | ----- | ----------------------------------- | --------- | -------- |
 | 0     | Foundation & Architecture           | 1         | COMPLETE |
 | 1     | Instrument Master                   | 1         | IN PROGRESS |
-| 2     | Market Data Ingestion               | 1         | PLANNED  |
+| 2     | Market Data Ingestion               | 1         | COMPLETE |
 | 3     | Data Normalization & Quality        | 1         | PLANNED  |
 | 4     | Corporate Actions & Adjusted Data   | 1         | PLANNED  |
 | 5     | Market Intelligence Terminal        | 2         | PLANNED  |
@@ -148,7 +148,7 @@ correctness requirement, not a preference.
 | # | Workstream | Status |
 | - | ---------- | ------ |
 | 1 | Instrument identity core — domain model, lifecycle, persistence | COMPLETE |
-| 2 | Reference data — exchange seeding, `Sector`, `Industry` | PARTIAL |
+| 2 | Reference data — exchange seeding, `Sector`, `Industry` | COMPLETE |
 | 3 | Identifier aliases — provider symbols, ISIN, FIGI | PLANNED |
 | 4 | Symbol normalization and deduplication | PARTIAL |
 | 5 | Provider import pipeline | PLANNED |
@@ -162,7 +162,17 @@ illegal transition rejected; `quant.exchanges` and `quant.instruments` with a
 **partial** unique index that permits ticker reuse after delisting; repository
 ports with no delete operation.
 
-**Workstreams 2, 6 and 7 delivered:** instrument search with deterministic
+**Workstream 2 delivered:** a two-level taxonomy — `Sector` then `Industry` —
+as `quant.sectors` and `quant.industries`, with an instrument pointing at an
+industry and reaching its sector through it, so the two levels cannot disagree.
+The link is nullable and stays that way: an index is in no industry, an
+imported security may not have been mapped, and a catch-all "unknown" node
+would make those indistinguishable while summing into every sector aggregate.
+`GET /instruments/{id}` now returns the full record, classification included.
+The seed classifies only what is not in dispute and leaves the indices, the ETF
+and IDICO unclassified rather than guessing.
+
+**Workstreams 6 and 7 delivered:** instrument search with deterministic
 ranking evaluated in the database; symbol resolution reporting resolved, not
 found or ambiguous; `GET /instruments/search`, `/instruments/resolve` and
 `/instruments/{id}`; the terminal's Ctrl+K security search and the
@@ -173,43 +183,74 @@ part of workstream 4 that discovery needs. See
 [ADR-010](../architecture/decisions/ADR-010-instrument-search-and-security-context.md)
 and the [technical reference](../architecture/instrument-search.md).
 
-**Still open in Phase 1:** `Sector` and `Industry` (workstream 2); identifier
-aliases, so search cannot match an ISIN or a provider symbol (workstream 3);
-cross-provider deduplication (workstream 4); the provider import pipeline
+**Still open in Phase 1:** identifier aliases, so search cannot match an ISIN
+or a provider symbol (workstream 3); cross-provider deduplication (workstream
+4); the provider import pipeline that creates instruments from a source
 (workstream 5); and `GET /instruments` list and `/related` (workstream 6).
+None of the four block Phase 2 — market data is keyed on the canonical
+identifier, which already exists — but workstreams 3 and 5 are what a second
+provider will need.
 
-## Phase 2 — Market Data Ingestion · PLANNED
+## Phase 2 — Market Data Ingestion · COMPLETE
 
-**Backbone phase.**
+**Backbone phase.** Everything after it computes on what this phase stores, and
+none of it can detect a fault it inherited.
 
 ```
-External sources → Collector → Raw → Normalizer → Canonical → Database
+External sources → Provider → Raw → Normalizer → Canonical → Database
+                                 ↘ Rejections    ↘ Run audit + checkpoint
 ```
+
+**Delivered**
+
+- `OhlcvBar` keyed on `(instrument, interval, opening instant)` — no surrogate,
+  so deduplication is the primary key rather than a rule in the writer.
+- `Price` as a bounded positive decimal, stored `numeric(18,6)`. Zero is a
+  provider's "no data", not a trade.
+- Structural invariants on the aggregate: `high >= max(open, close)`,
+  `low <= min(open, close)`, `high >= low`, `volume >= 0`, no turnover without
+  volume. Failures are rejected with a reason, never repaired.
+- `IMarketDataProvider` with a registry, plus a CSV file source as the
+  reference implementation — a real provider under the same contract, runnable
+  on a fresh clone with no licence.
+- One normaliser for every source, reporting each refused row with a typed
+  reason: unusable price, inconsistent prices, unusable quantity, misaligned
+  timestamp, outside the requested range, duplicate within the batch.
+- Raw payloads retained beside the canonical bars, checksummed, so
+  re-normalising from raw is always possible.
+- `IngestionRun` audit for every attempt — succeeded, failed *and* skipped —
+  with fetched, accepted, rejected, stored and revised counted separately.
+- `IngestionCheckpoint` per instrument, interval and source. It advances to
+  the newest bar actually stored, never to the end of the requested range and
+  never backwards.
+- Retry with capped exponential backoff, per-call timeout, and per-source call
+  spacing. Every wait goes through an injected scheduler, so the policy is
+  asserted in tests rather than slept through.
+- One transaction per run: payload, bars, checkpoint and audit row commit
+  together. A checkpoint surviving without its bars is the one failure that
+  leaves a permanent, silent hole.
+- `GET /instruments/{id}/bars` and `GET /instruments/{id}/ingestion`.
 
 **Data types**
 
-| Level    | Content                                        |
-| -------- | ---------------------------------------------- |
-| EOD      | Open, High, Low, Close, Volume, Value          |
-| Intraday | 1D, 1H, 30M, 15M, 5M, 1M                       |
-| Tick     | timestamp, price, quantity, side — if available |
+| Level    | Content                                        | Status |
+| -------- | ---------------------------------------------- | ------ |
+| EOD      | Open, High, Low, Close, Volume, Value          | Delivered |
+| Intraday | 1H, 30M, 15M, 5M, 1M                            | Delivered |
+| Tick     | timestamp, price, quantity, side               | Out of scope |
 
-**Provider abstraction.** No provider is hard-coded:
+Tick data is deliberately absent. A tick has no open, high, low or close, and
+modelling it as a zero-length interval would put a row shaped like a bar into a
+table that means something else.
 
-```
-IMarketDataProvider
-    ├── ProviderA
-    ├── ProviderB
-    └── ProviderC
-```
+**Not delivered:** a scheduler. Nothing triggers ingestion on a timer, and no
+HTTP endpoint starts a run — a request that causes outbound calls to a
+rate-limited third party is not something to expose before there is
+authentication in front of it. The trigger lands with Phase 18.
 
-**Pipeline:** fetch → validate → normalize → deduplicate → persist → audit.
-
-**Reliability:** retry, rate limiting, timeouts, incremental ingestion,
-checkpointing, resume after failure.
-
-Raw payloads are retained separately from canonical data. Re-normalising from
-raw must always be possible.
+Bound by [ADR-011](../architecture/decisions/ADR-011-market-data-ingestion.md).
+The export format the file source reads is documented in
+[`data/schemas/market-data-csv.md`](../../data/schemas/market-data-csv.md).
 
 ## Phase 3 — Data Normalization & Quality · PLANNED
 

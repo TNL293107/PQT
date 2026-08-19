@@ -19,6 +19,7 @@ reasoning at the time is preserved.
 | [008](ADR-008-vietnam-market-first.md)                       | Vietnam market first            | Accepted |
 | [009](ADR-009-instrument-identity-and-ticker-lifecycle.md)   | Instrument identity and ticker lifecycle | Accepted |
 | [010](ADR-010-instrument-search-and-security-context.md)     | Instrument search, resolution and current security | Accepted |
+| [011](ADR-011-market-data-ingestion.md)                      | Market data ingestion, provenance and resume state | Accepted |
 
 ## Format
 

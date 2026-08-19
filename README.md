@@ -12,23 +12,26 @@ engineering project.
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Phase**    | 1 — Instrument Master, in progress (phases run 0–19)          |
-| **Complete** | Phase 0 · Phase 1 workstreams 1 and 7 of 7 (2, 4, 6 partial)  |
+| **Phase**    | 2 — Market Data Ingestion, complete (phases run 0–19)         |
+| **Complete** | Phase 0 · Phase 2 · Phase 1 workstreams 1, 2 and 7 of 7 (4, 6 partial) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 294 green in CI — 204 .NET, 70 Vitest, 14 pytest, 6 CTest     |
+| **Tests**    | 470 green in CI — 380 .NET, 70 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
-Redis for real; the instrument identity model with its listing lifecycle and
-migration; instrument search, symbol resolution and a read-only instrument API;
-a terminal with Ctrl+K security search and a current-security context. All of
-it covered by tests that run against real containers, not mocks.
+Redis for real; the instrument identity model with its listing lifecycle and a
+two-level sector taxonomy; instrument search, symbol resolution and a read-only
+instrument API; a market data ingestion pipeline — provider abstraction,
+validation, deduplication, retained raw payloads, resume checkpoints and an
+audit record for every attempt including the ones that did nothing; a terminal
+with Ctrl+K security search and a current-security context. All of it covered
+by tests that run against real containers, not mocks.
 
-**What does not exist.** Market data, corporate actions, fundamentals, news,
-screening, factors, backtesting, portfolio, risk, orders, broker integration,
-AI — and no provider import, so the instrument master holds only what the
-development seed puts there. None of these are stubbed or half-built; they are
-simply not written.
+**What does not exist.** Corporate actions, fundamentals, news, screening,
+factors, backtesting, portfolio, risk, orders, broker integration, AI. No
+scheduler triggers ingestion yet, and no provider import creates instruments,
+so the instrument master holds only what the development seed puts there. None
+of these are stubbed or half-built; they are simply not written.
 
 The [roadmap](docs/roadmap/phases.md) sets out all twenty phases and what each
 one has to deliver.
@@ -162,6 +165,11 @@ Everything in this list is implemented and covered by tests.
   a ticker released on delisting can be reissued without destroying the
   previous holder's history. Instruments are never deleted. See
   [ADR-009](docs/architecture/decisions/ADR-009-instrument-identity-and-ticker-lifecycle.md).
+- **Sector and industry (Phase 1, workstream 2)** — a two-level taxonomy an
+  instrument points into. It points at an industry and reaches its sector
+  through it, so the two levels cannot disagree, and the link is nullable
+  because an index is in no industry and an unmapped security is not the same
+  thing as an unclassified one.
 - **Instrument search (Phase 1, workstreams 6–7)** —
   `GET /instruments/search?q=`, `GET /instruments/resolve?symbol=` and
   `GET /instruments/{id}`. Matching folds Vietnamese diacritics and case, so
@@ -170,6 +178,17 @@ Everything in this list is implemented and covered by tests.
   contains. Symbol resolution reports ambiguity rather than guessing when a
   ticker is live on two venues. See
   [ADR-010](docs/architecture/decisions/ADR-010-instrument-search-and-security-context.md).
+- **Market data ingestion (Phase 2)** — fetch, validate, normalise,
+  deduplicate, persist, audit. A bar's identity is its instrument, resolution
+  and opening instant, so deduplication is the primary key rather than a rule
+  in the writer; prices are `numeric(18,6)` because a close that comes back a
+  fraction different compounds into returns the market never produced. No
+  provider is hard-coded — a CSV file source is the reference implementation,
+  so the pipeline runs on a fresh clone without a licence. Raw payloads are
+  retained so re-normalising is always possible, every attempt is audited
+  including the skipped ones, and a checkpoint advances to the newest bar
+  actually stored rather than to the end of the range that was asked for. See
+  [ADR-011](docs/architecture/decisions/ADR-011-market-data-ingestion.md).
 - **Terminal security search** — `Ctrl+K`, type, arrow, `Enter`. Sets the
   terminal's current security, which every later module reads by canonical
   identifier rather than by ticker.
@@ -238,12 +257,12 @@ integration.
 
 ## Roadmap
 
-Twenty phases in four milestones. Phase 0 is complete, Phase 1 is under way,
-and everything else is planned.
+Twenty phases in four milestones. Phases 0 and 2 are complete, Phase 1 is
+mostly delivered, and everything else is planned.
 
 | Milestone | Becomes           | Phases | Status                    |
 | --------- | ----------------- | ------ | ------------------------- |
-| 1         | Data foundation   | 0–4    | Phase 0 done · Phase 1 in progress |
+| 1         | Data foundation   | 0–4    | Phases 0 and 2 done · Phase 1 mostly done |
 | 2         | Quant platform    | 5–10   | PLANNED                   |
 | 3         | Trading system    | 11–15  | PLANNED                   |
 | 4         | Engineered system | 16–19  | PLANNED                   |
@@ -257,10 +276,18 @@ be done superficially: **2** (market data ingestion) → **3** (data quality) �
 >
 > Data wrong → all of it wrong, quietly.
 
-**Phase 1 — Instrument Master** is under way: know what an instrument *is*
-before storing anything about it. Searching `FPT` already resolves to exactly
-one security. The phase is done when every provider's spelling of it maps to
-the same canonical ID, which needs the alias and import workstreams.
+**Phase 1 — Instrument Master** knows what an instrument *is* before anything
+is stored about it. Searching `FPT` resolves to exactly one security, which is
+classified into a sector. What remains is the alias and import workstreams: the
+phase is finished when every provider's spelling of `FPT` maps to the same
+canonical ID.
+
+**Phase 2 — Market Data Ingestion** is complete. Bars are stored against the
+canonical identifier, deduplicated by the schema rather than by convention, and
+every ingestion attempt leaves a record explaining what it did — which is what
+makes a gap in a series answerable instead of merely visible. What it does not
+have is a scheduler; runs are driven by the host until there is authentication
+to put in front of a trigger.
 
 Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
 
