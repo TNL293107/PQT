@@ -16,9 +16,11 @@ namespace PersonalQuant.Domain.Instruments;
 /// itself.
 /// </para>
 /// <para>
-/// Matching on external identifiers — ISIN, FIGI, provider symbols — will slot
-/// in after <see cref="NameContains"/> when the alias workstream lands. It is
-/// absent rather than stubbed because no alias data exists to match against.
+/// Matching on an external identifier ranks last, and deliberately so. It is
+/// an exact match on an ISIN, a FIGI or a provider symbol, which sounds strong
+/// — but nobody types twelve characters of ISIN into a command bar by
+/// accident, so nothing else will be competing with it. Where it does compete,
+/// the query looked like a ticker or a name, and that is what the user meant.
 /// </para>
 /// </remarks>
 public enum InstrumentMatchKind
@@ -37,4 +39,9 @@ public enum InstrumentMatchKind
 
     /// <summary>The instrument's name contains the query.</summary>
     NameContains = 5,
+
+    /// <summary>
+    /// The query is exactly one of the instrument's external identifiers.
+    /// </summary>
+    IdentifierExact = 6,
 }
