@@ -10,6 +10,7 @@ using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Caching;
+using PersonalQuant.Infrastructure.Instruments;
 using PersonalQuant.Infrastructure.MarketData;
 using PersonalQuant.Infrastructure.Configuration;
 using PersonalQuant.Infrastructure.HealthChecks;
@@ -158,13 +159,18 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton(options.BuildPolicy());
 
-        if (string.IsNullOrWhiteSpace(options.FileProviderDirectory))
+        if (!string.IsNullOrWhiteSpace(options.FileProviderDirectory))
         {
-            return;
+            var directory = options.FileProviderDirectory;
+
+            services.AddSingleton<IMarketDataProvider>(_ => new FileMarketDataProvider(directory));
         }
 
-        var directory = options.FileProviderDirectory;
+        if (!string.IsNullOrWhiteSpace(options.InstrumentListPath))
+        {
+            var path = options.InstrumentListPath;
 
-        services.AddSingleton<IMarketDataProvider>(_ => new FileMarketDataProvider(directory));
+            services.AddSingleton<IInstrumentProvider>(_ => new FileInstrumentProvider(path));
+        }
     }
 }

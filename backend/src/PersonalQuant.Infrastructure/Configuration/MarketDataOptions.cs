@@ -65,6 +65,18 @@ public sealed class MarketDataOptions
     public string FileProviderDirectory { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the CSV symbol list the file instrument source reads, or
+    /// an empty string to leave it unregistered.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="FileProviderDirectory"/> because the two are
+    /// separate sources. A deployment may have a symbol list and no prices, or
+    /// prices and no symbol list, and one setting for both would force it to
+    /// pretend otherwise.
+    /// </remarks>
+    public string InstrumentListPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Converts the validated settings into the policy the pipeline uses.
     /// </summary>
     /// <returns>The ingestion policy.</returns>

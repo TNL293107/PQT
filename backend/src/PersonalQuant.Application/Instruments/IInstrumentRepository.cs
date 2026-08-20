@@ -1,5 +1,6 @@
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
+using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Application.Instruments;
 
@@ -14,8 +15,10 @@ namespace PersonalQuant.Application.Instruments;
 /// instrument that stops trading is delisted, which is a state change.
 /// </para>
 /// <para>
-/// Provider symbol aliases and related-instrument lookups are separate
-/// workstreams and are not part of this interface yet.
+/// Aliases live here rather than behind their own port. They are read on the
+/// same paths the instrument itself is — deduplication during import, the
+/// detail read, the search that matches on them — and a second port would only
+/// be a second thing to keep in the same transaction.
 /// </para>
 /// </remarks>
 public interface IInstrumentRepository
@@ -137,9 +140,76 @@ public interface IInstrumentRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Pages through the instrument master, filtered and deterministically
+    /// ordered.
+    /// </summary>
+    /// <remarks>
+    /// The order is total — exchange code, then ticker, then identifier — so a
+    /// caller walking the pages sees every row exactly once. An order that
+    /// left ties unbroken would silently repeat rows and skip others as the
+    /// offset advanced.
+    /// </remarks>
+    /// <param name="criteria">The validated request.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The page, and how many rows match in total.</returns>
+    Task<InstrumentPage> ListAsync(
+        InstrumentListCriteria criteria,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Finds the instrument an outside system's identifier names.
+    /// </summary>
+    /// <remarks>
+    /// The lookup deduplication is built on. A provider symbol is matched
+    /// within its source; a global identifier is matched across the whole
+    /// master.
+    /// </remarks>
+    /// <param name="value">The scheme and value to look up.</param>
+    /// <param name="source">The provider, for a provider-scoped scheme.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The alias, or <see langword="null"/> when unknown.</returns>
+    Task<InstrumentIdentifier?> FindIdentifierAsync(
+        IdentifierValue value,
+        SourceCode? source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists every alias an instrument is known by, ordered by scheme then
+    /// value.
+    /// </summary>
+    /// <param name="id">The instrument.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The aliases.</returns>
+    Task<IReadOnlyList<InstrumentIdentifier>> ListIdentifiersAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the instruments connected to one by identity.
+    /// </summary>
+    /// <remarks>
+    /// One relation, and a factual one: another instrument that has held this
+    /// ticker on this venue at another time. Peer groups are a different
+    /// question and wait for the data that makes them meaningful.
+    /// </remarks>
+    /// <param name="id">The instrument to relate from.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The related instruments, never including the subject itself.</returns>
+    Task<IReadOnlyList<RelatedInstrument>> ListRelatedAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages a new instrument. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist it.
     /// </summary>
     /// <param name="instrument">The instrument to add.</param>
     void Add(Instrument instrument);
+
+    /// <summary>
+    /// Stages a new alias. Call
+    /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist it.
+    /// </summary>
+    /// <param name="identifier">The alias to add.</param>
+    void AddIdentifier(InstrumentIdentifier identifier);
 }

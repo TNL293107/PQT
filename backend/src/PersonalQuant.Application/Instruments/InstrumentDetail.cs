@@ -35,6 +35,10 @@ namespace PersonalQuant.Application.Instruments;
 /// The sector and industry, or <see langword="null"/> when the security is
 /// unclassified — an index, a fund, or a record no mapping covers yet.
 /// </param>
+/// <param name="Aliases">
+/// Every identifier an outside system knows this instrument by. Empty until a
+/// provider import has run, which is the ordinary state of a seeded record.
+/// </param>
 public sealed record InstrumentDetail(
     InstrumentId InstrumentId,
     Ticker Ticker,
@@ -46,4 +50,5 @@ public sealed record InstrumentDetail(
     InstrumentStatus Status,
     DateOnly? ListedOn,
     DateOnly? DelistedOn,
-    InstrumentClassification? Classification);
+    InstrumentClassification? Classification,
+    IReadOnlyList<InstrumentAlias> Aliases);

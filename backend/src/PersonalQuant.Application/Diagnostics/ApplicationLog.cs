@@ -100,4 +100,28 @@ internal static partial class ApplicationLog
         int attempt,
         long delayMs,
         string reason);
+
+    [LoggerMessage(
+        EventId = 3010,
+        Level = LogLevel.Information,
+        Message = "instrument.import {Source} read {RowsRead} row(s): created {Created}, matched {Matched}, enriched {Enriched}, rejected {Rejected}.")]
+    public static partial void InstrumentsImported(
+        ILogger logger,
+        string source,
+        int rowsRead,
+        int created,
+        int matched,
+        int enriched,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 3011,
+        Level = LogLevel.Warning,
+        Message = "instrument.import {Source} rejected {Count} row(s) as {Reason}. First: {Detail}")]
+    public static partial void InstrumentImportRowsRejected(
+        ILogger logger,
+        string source,
+        InstrumentImportRejectionReason reason,
+        int count,
+        string detail);
 }

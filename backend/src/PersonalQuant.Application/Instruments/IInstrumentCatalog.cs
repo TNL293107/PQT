@@ -23,4 +23,28 @@ public interface IInstrumentCatalog
     Task<InstrumentDetail?> FindDetailAsync(
         InstrumentId id,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pages through the instrument master.
+    /// </summary>
+    /// <param name="criteria">The validated request.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The page, and how many rows match in total.</returns>
+    Task<InstrumentPage> ListAsync(
+        InstrumentListCriteria criteria,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the instruments connected to one by identity.
+    /// </summary>
+    /// <param name="id">The instrument to relate from.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>
+    /// The related instruments, empty when there are none and when the
+    /// identifier is unknown — the two are distinguished by first reading the
+    /// instrument itself.
+    /// </returns>
+    Task<IReadOnlyList<RelatedInstrument>> ListRelatedAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default);
 }

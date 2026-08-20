@@ -21,4 +21,22 @@ internal sealed class InstrumentCatalog(IInstrumentRepository instruments) : IIn
         id.IsEmpty
             ? Task.FromResult<InstrumentDetail?>(null)
             : instruments.FindDetailByIdAsync(id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<InstrumentPage> ListAsync(
+        InstrumentListCriteria criteria,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(criteria);
+
+        return instruments.ListAsync(criteria, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<RelatedInstrument>> ListRelatedAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default) =>
+        id.IsEmpty
+            ? Task.FromResult<IReadOnlyList<RelatedInstrument>>([])
+            : instruments.ListRelatedAsync(id, cancellationToken);
 }
