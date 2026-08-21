@@ -48,6 +48,9 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets the lower level of the classification taxonomy.</summary>
     public DbSet<Industry> Industries => Set<Industry>();
 
+    /// <summary>Gets the aliases instruments are known by outside this system.</summary>
+    public DbSet<InstrumentIdentifier> InstrumentIdentifiers => Set<InstrumentIdentifier>();
+
     /// <summary>Gets the canonical OHLCV series.</summary>
     public DbSet<OhlcvBar> Bars => Set<OhlcvBar>();
 

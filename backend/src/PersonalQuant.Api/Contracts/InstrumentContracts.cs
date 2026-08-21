@@ -105,7 +105,8 @@ public sealed record InstrumentDetailResponse(
     string Status,
     DateOnly? ListedOn,
     DateOnly? DelistedOn,
-    InstrumentClassificationResponse? Classification)
+    InstrumentClassificationResponse? Classification,
+    IReadOnlyList<InstrumentAliasResponse> Aliases)
 {
     /// <summary>Projects an application projection onto the wire contract.</summary>
     /// <param name="detail">The projection to convert.</param>
@@ -131,9 +132,113 @@ public sealed record InstrumentDetailResponse(
                     detail.Classification.SectorCode.Value,
                     detail.Classification.SectorName,
                     detail.Classification.IndustryCode.Value,
-                    detail.Classification.IndustryName));
+                    detail.Classification.IndustryName),
+            [.. detail.Aliases.Select(InstrumentAliasResponse.From)]);
     }
 }
+
+/// <summary>
+/// One alias an instrument is known by outside this system.
+/// </summary>
+/// <remarks>
+/// The scheme travels as its name so a client cannot misread a reordered enum,
+/// and the source is absent for a scheme that names a security everywhere —
+/// which is how a client tells an ISIN from a provider's own spelling without
+/// knowing the scheme list.
+/// </remarks>
+/// <param name="Scheme">Isin, Figi or ProviderSymbol.</param>
+/// <param name="Value">The value, in the form the scheme requires.</param>
+/// <param name="Source">The provider that issued it, for a provider symbol.</param>
+public sealed record InstrumentAliasResponse(string Scheme, string Value, string? Source)
+{
+    /// <summary>Projects an application projection onto the wire contract.</summary>
+    /// <param name="alias">The alias to project.</param>
+    /// <returns>The response representation.</returns>
+    public static InstrumentAliasResponse From(InstrumentAlias alias)
+    {
+        ArgumentNullException.ThrowIfNull(alias);
+
+        return new InstrumentAliasResponse(alias.Scheme.ToString(), alias.Value, alias.Source);
+    }
+}
+
+/// <summary>
+/// One page of the instrument master.
+/// </summary>
+/// <remarks>
+/// The total is echoed alongside the page so a client can tell a short page
+/// from the last one. Without it, forty rows returned for a page size of fifty
+/// is indistinguishable from a filter that matched forty thousand.
+/// </remarks>
+/// <param name="Count">How many instruments are in this response.</param>
+/// <param name="Total">How many match the filters in total.</param>
+/// <param name="Limit">The page size that was applied.</param>
+/// <param name="Offset">How many were skipped.</param>
+/// <param name="Results">The instruments in this page.</param>
+public sealed record InstrumentListResponse(
+    int Count,
+    int Total,
+    int Limit,
+    int Offset,
+    IReadOnlyList<InstrumentResponse> Results)
+{
+    /// <summary>Projects a page onto the wire contract.</summary>
+    /// <param name="page">The page to project.</param>
+    /// <returns>The response representation.</returns>
+    public static InstrumentListResponse From(InstrumentPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        return new InstrumentListResponse(
+            page.Items.Count,
+            page.Total,
+            page.Limit,
+            page.Offset,
+            [.. page.Items.Select(InstrumentResponse.From)]);
+    }
+}
+
+/// <summary>
+/// One instrument related to another, and why.
+/// </summary>
+/// <param name="Relation">SharedIdentifier or TickerHistory.</param>
+/// <param name="Detail">The value the connection rests on.</param>
+/// <param name="Instrument">The related instrument.</param>
+public sealed record RelatedInstrumentResponse(
+    string Relation,
+    string Detail,
+    InstrumentResponse Instrument)
+{
+    /// <summary>Projects a relation onto the wire contract.</summary>
+    /// <param name="related">The relation to project.</param>
+    /// <returns>The response representation.</returns>
+    public static RelatedInstrumentResponse From(RelatedInstrument related)
+    {
+        ArgumentNullException.ThrowIfNull(related);
+
+        return new RelatedInstrumentResponse(
+            related.Relation.ToString(),
+            related.Detail,
+            InstrumentResponse.From(related.Instrument));
+    }
+}
+
+/// <summary>
+/// The instruments connected to one by identity.
+/// </summary>
+/// <remarks>
+/// Both relations are factual rather than analytical. A peer group — the other
+/// securities in the same industry — is a different question that needs the
+/// size, liquidity and valuation data of a later phase to answer usefully, and
+/// returning an alphabetical list here would present it as if it were one.
+/// </remarks>
+/// <param name="InstrumentId">The instrument that was asked about.</param>
+/// <param name="Count">How many relations are in this response.</param>
+/// <param name="Results">The related instruments.</param>
+public sealed record InstrumentRelationsResponse(
+    Guid InstrumentId,
+    int Count,
+    IReadOnlyList<RelatedInstrumentResponse> Results);
 
 /// <summary>
 /// The result of an instrument search.

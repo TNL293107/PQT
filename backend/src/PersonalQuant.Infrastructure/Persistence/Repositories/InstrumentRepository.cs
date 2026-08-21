@@ -4,6 +4,7 @@ using PersonalQuant.Application.Instruments;
 using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
+using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Infrastructure.Persistence.Repositories;
 
@@ -100,6 +101,12 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
                 || instrument.SearchName == text
                 || EF.Functions.Like(instrument.SearchName, prefix, LikePattern.EscapeCharacter)
                 || EF.Functions.Like(instrument.SearchName, contains, LikePattern.EscapeCharacter)
+                // Exact only. An alias is an identifier, not searchable text:
+                // a prefix of an ISIN identifies nothing, and matching a
+                // fragment of one would return securities that merely share a
+                // country prefix.
+                || dbContext.InstrumentIdentifiers.Any(identifier =>
+                    identifier.InstrumentId == instrument.Id && identifier.Value == text)
             select new { Instrument = instrument, Exchange = exchange };
 
         if (!criteria.IncludeInactive)
@@ -131,7 +138,12 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
                         ? (int)InstrumentMatchKind.ExactName
                     : EF.Functions.Like(row.Instrument.SearchName, prefix, LikePattern.EscapeCharacter)
                         ? (int)InstrumentMatchKind.NamePrefix
-                    : (int)InstrumentMatchKind.NameContains,
+                    : EF.Functions.Like(row.Instrument.SearchName, contains, LikePattern.EscapeCharacter)
+                        ? (int)InstrumentMatchKind.NameContains
+                    // Nothing else matched, so the row is here because an
+                    // alias matched exactly — the only remaining branch of
+                    // the WHERE clause above.
+                    : (int)InstrumentMatchKind.IdentifierExact,
             })
             .OrderBy(row => row.Rank)
             .ThenBy(row => row.Instrument.SearchTicker)
@@ -227,6 +239,11 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
                 row.Industry.Code,
                 row.Industry.Name);
 
+        // A second round trip rather than a join. Aliases are a one-to-many,
+        // and joining them into the row above would multiply the instrument
+        // across its identifiers and leave the caller to collapse it again.
+        var aliases = await ListIdentifiersAsync(id, cancellationToken).ConfigureAwait(false);
+
         return new InstrumentDetail(
             row.Instrument.Id,
             row.Instrument.Ticker,
@@ -238,7 +255,137 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
             row.Instrument.Status,
             row.Instrument.ListedOn,
             row.Instrument.DelistedOn,
-            classification);
+            classification,
+            [.. aliases.Select(alias =>
+                new InstrumentAlias(alias.Scheme, alias.Value, alias.Source?.Value))]);
+    }
+
+    /// <inheritdoc />
+    public async Task<InstrumentPage> ListAsync(
+        InstrumentListCriteria criteria,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(criteria);
+
+        // Left joins on the taxonomy, because filtering by sector must not
+        // silently exclude unclassified rows from the unfiltered case.
+        var matches =
+            from instrument in dbContext.Instruments.AsNoTracking()
+            join exchange in dbContext.Exchanges.AsNoTracking()
+                on instrument.ExchangeId equals exchange.Id
+            join industry in dbContext.Industries.AsNoTracking()
+                on instrument.IndustryId equals (IndustryId?)industry.Id into industryMatches
+            from industry in industryMatches.DefaultIfEmpty()
+            join sector in dbContext.Sectors.AsNoTracking()
+                on industry.SectorId equals sector.Id into sectorMatches
+            from sector in sectorMatches.DefaultIfEmpty()
+            select new { Instrument = instrument, Exchange = exchange, Sector = sector };
+
+        if (criteria.Exchange is { } exchangeCode)
+        {
+            matches = matches.Where(row => row.Exchange.Code == exchangeCode);
+        }
+
+        if (criteria.AssetType is { } assetType)
+        {
+            matches = matches.Where(row => row.Instrument.AssetType == assetType);
+        }
+
+        if (criteria.Status is { } status)
+        {
+            matches = matches.Where(row => row.Instrument.Status == status);
+        }
+
+        if (criteria.Sector is { } sectorCode)
+        {
+            matches = matches.Where(row => row.Sector.Code == sectorCode);
+        }
+
+        // Counted before paging, and counted in the database. A caller cannot
+        // page without knowing the total, and materialising the universe to
+        // count it in memory would defeat the point of paging at all.
+        var total = await matches.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        var rows = await matches
+            .OrderBy(row => row.Exchange.Code)
+            .ThenBy(row => row.Instrument.SearchTicker)
+            .ThenBy(row => row.Instrument.Id)
+            .Skip(criteria.Offset)
+            .Take(criteria.Limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new InstrumentPage(
+            [.. rows.Select(row => ToResult(row.Instrument, row.Exchange, matchKind: null))],
+            total,
+            criteria.Limit,
+            criteria.Offset);
+    }
+
+    /// <inheritdoc />
+    public Task<InstrumentIdentifier?> FindIdentifierAsync(
+        IdentifierValue value,
+        SourceCode? source,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var scheme = value.Scheme;
+        var text = value.Value;
+
+        return dbContext.InstrumentIdentifiers.FirstOrDefaultAsync(
+            identifier =>
+                identifier.Scheme == scheme
+                && identifier.Value == text
+                && identifier.Source == source,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<InstrumentIdentifier>> ListIdentifiersAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.InstrumentIdentifiers
+            .AsNoTracking()
+            .Where(identifier => identifier.InstrumentId == id)
+            .OrderBy(identifier => identifier.Scheme)
+            .ThenBy(identifier => identifier.Value)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<RelatedInstrument>> ListRelatedAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default)
+    {
+        var subject = await dbContext.Instruments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(instrument => instrument.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (subject is null)
+        {
+            return [];
+        }
+
+        var rows = await (
+            from instrument in dbContext.Instruments.AsNoTracking()
+            join exchange in dbContext.Exchanges.AsNoTracking()
+                on instrument.ExchangeId equals exchange.Id
+            where instrument.ExchangeId == subject.ExchangeId
+                && instrument.Ticker == subject.Ticker
+                && instrument.Id != subject.Id
+            // Total, so two rows created in the same transaction cannot come
+            // back in either order.
+            orderby instrument.CreatedAtUtc descending, instrument.Id
+            select new { Instrument = instrument, Exchange = exchange })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(row => new RelatedInstrument(
+            ToResult(row.Instrument, row.Exchange, matchKind: null),
+            InstrumentRelationKind.TickerHistory,
+            subject.Ticker.Value))];
     }
 
     /// <inheritdoc />
@@ -247,6 +394,14 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
         ArgumentNullException.ThrowIfNull(instrument);
 
         dbContext.Instruments.Add(instrument);
+    }
+
+    /// <inheritdoc />
+    public void AddIdentifier(InstrumentIdentifier identifier)
+    {
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        dbContext.InstrumentIdentifiers.Add(identifier);
     }
 
     private static InstrumentSearchResult ToResult(
