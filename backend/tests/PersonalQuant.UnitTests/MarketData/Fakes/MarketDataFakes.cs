@@ -112,6 +112,30 @@ internal sealed class SingleInstrumentRepository : IInstrumentRepository
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Not exercised by ingestion.");
 
+    public Task<InstrumentPage> ListAsync(
+        InstrumentListCriteria criteria,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Not exercised by ingestion.");
+
+    public Task<InstrumentIdentifier?> FindIdentifierAsync(
+        IdentifierValue value,
+        SourceCode? source,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Not exercised by ingestion.");
+
+    public Task<IReadOnlyList<InstrumentIdentifier>> ListIdentifiersAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Not exercised by ingestion.");
+
+    public Task<IReadOnlyList<RelatedInstrument>> ListRelatedAsync(
+        InstrumentId id,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Not exercised by ingestion.");
+
+    public void AddIdentifier(InstrumentIdentifier identifier) =>
+        throw new NotSupportedException("Not exercised by ingestion.");
+
     public void Add(Instrument instrument) =>
         throw new NotSupportedException("Not exercised by ingestion.");
 }

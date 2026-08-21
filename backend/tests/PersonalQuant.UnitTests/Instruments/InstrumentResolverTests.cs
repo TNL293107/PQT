@@ -3,6 +3,7 @@ using PersonalQuant.Application.Instruments;
 using PersonalQuant.Domain.Currencies;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
+using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.UnitTests.Instruments;
 
@@ -243,6 +244,30 @@ public sealed class InstrumentResolverTests
         public Task<InstrumentDetail?> FindDetailByIdAsync(
             InstrumentId id,
             CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Not exercised by resolution.");
+
+        public Task<InstrumentPage> ListAsync(
+            InstrumentListCriteria criteria,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Not exercised by resolution.");
+
+        public Task<InstrumentIdentifier?> FindIdentifierAsync(
+            IdentifierValue value,
+            SourceCode? source,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Not exercised by resolution.");
+
+        public Task<IReadOnlyList<InstrumentIdentifier>> ListIdentifiersAsync(
+            InstrumentId id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Not exercised by resolution.");
+
+        public Task<IReadOnlyList<RelatedInstrument>> ListRelatedAsync(
+            InstrumentId id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Not exercised by resolution.");
+
+        public void AddIdentifier(InstrumentIdentifier identifier) =>
             throw new NotSupportedException("Not exercised by resolution.");
 
         public void Add(Instrument instrument) =>
