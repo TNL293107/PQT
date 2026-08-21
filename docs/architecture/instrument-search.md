@@ -66,14 +66,20 @@ Deterministic, evaluated in the database, and applied before the limit.
 | 3    | `ExactName`    | a security named exactly `FPT`                 |
 | 4    | `NamePrefix`   | FOX — **FPT** Telecom Joint Stock Company      |
 | 5    | `NameContains` | a company mentioning FPT mid-name              |
+| 6    | `IdentifierExact` | a query that is exactly an ISIN, FIGI or provider symbol |
 
 Ties break by ticker, then by identifier, so the order is total: two identical
 queries against unchanged data return the same rows in the same order. A search
 box whose results reshuffle between keystroke and Enter is worse than one that
 is merely wrong.
 
-Identifier matching — ISIN, FIGI, provider symbols — belongs at rank 6 and is
-absent because no alias data exists yet to match against.
+**Identifier matching is exact only, and ranks last.** An alias is an
+identifier rather than searchable text: a prefix of an ISIN identifies nothing,
+and matching a fragment of one would return every security sharing a country
+prefix. Ranking it last sounds wrong for an exact match and is not — nobody
+types twelve characters of ISIN into a command bar by accident, so nothing else
+is competing with it, and where something is, the query looked like a ticker or
+a name and that is what the user meant.
 
 **Wildcards are escaped, not stripped.** `%` and `_` in a query are matched
 literally, so a user cannot turn a prefix search into a full scan, and a search

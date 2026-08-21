@@ -4,19 +4,24 @@ Tracked schema definitions for data that crosses a system boundary — provider
 payloads, file interchange formats, and contracts shared between the .NET
 backend, the Python quant layer, and the C++ engine.
 
-**Status:** one contract. [`market-data-csv.md`](market-data-csv.md) describes
-the CSV export the file-backed market data source reads — a real provider from
-the pipeline's point of view, and the one the ingestion path is proved
-against without a licence. Vendor payload contracts land here as they are
-integrated.
+**Status:** two contracts, both read by file-backed sources that are real
+providers from the pipelines' point of view — the ones the ingestion and import
+paths are proved against without a licence.
+
+| Contract | Read by |
+| -------- | ------- |
+| [`instrument-csv.md`](instrument-csv.md) | the instrument import pipeline |
+| [`market-data-csv.md`](market-data-csv.md) | the market data ingestion pipeline |
+
+Vendor payload contracts land here as they are integrated.
 
 The instrument model itself now exists, but it lives in EF Core migrations —
 see the note on ownership below.
 
 `Instrument` and `Exchange` landed with Phase 1 workstream 1 as
 `quant.instruments` and `quant.exchanges`; `Sector` and `Industry` followed as
-`quant.sectors` and `quant.industries`. `Identifier` remains open. Coverage is
-HOSE, HNX and UPCOM.
+`quant.sectors` and `quant.industries`; `Identifier` completed the set as
+`quant.instrument_identifiers`. Coverage is HOSE, HNX and UPCOM.
 
 Phase 2 added `quant.bars` for the canonical series, plus
 `quant.market_data_raw_batches`, `quant.ingestion_runs` and

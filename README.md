@@ -12,26 +12,29 @@ engineering project.
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Phase**    | 2 — Market Data Ingestion, complete (phases run 0–19)         |
-| **Complete** | Phase 0 · Phase 2 · Phase 1 workstreams 1, 2 and 7 of 7 (4, 6 partial) |
+| **Phase**    | 3 — Data Normalization & Quality, next (phases run 0–19)      |
+| **Complete** | Phases 0, 1 and 2 — the instrument master and the ingestion pipeline |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 470 green in CI — 380 .NET, 70 Vitest, 14 pytest, 6 CTest     |
+| **Tests**    | 561 green in CI — 471 .NET, 70 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
-Redis for real; the instrument identity model with its listing lifecycle and a
-two-level sector taxonomy; instrument search, symbol resolution and a read-only
-instrument API; a market data ingestion pipeline — provider abstraction,
-validation, deduplication, retained raw payloads, resume checkpoints and an
-audit record for every attempt including the ones that did nothing; a terminal
-with Ctrl+K security search and a current-security context. All of it covered
-by tests that run against real containers, not mocks.
+Redis for real; a complete instrument master — identity and listing lifecycle,
+a two-level sector taxonomy, identifier aliases, and a provider import pipeline
+that makes every vendor's spelling of a security reach one canonical ID;
+search, symbol resolution, paging and a read-only instrument API; a market data
+ingestion pipeline with validation, deduplication, retained raw payloads,
+resume checkpoints and an audit record for every attempt including the ones
+that did nothing; a terminal with Ctrl+K security search and a current-security
+context. All of it covered by tests that run against real containers, not
+mocks.
 
-**What does not exist.** Corporate actions, fundamentals, news, screening,
-factors, backtesting, portfolio, risk, orders, broker integration, AI. No
-scheduler triggers ingestion yet, and no provider import creates instruments,
-so the instrument master holds only what the development seed puts there. None
-of these are stubbed or half-built; they are simply not written.
+**What does not exist.** Data quality scoring, corporate actions, fundamentals,
+news, screening, factors, backtesting, portfolio, risk, orders, broker
+integration, AI. Nothing triggers an import or an ingestion run on a timer
+either — both reach outside the system, and the trigger waits for
+authentication. None of these are stubbed or half-built; they are simply not
+written.
 
 The [roadmap](docs/roadmap/phases.md) sets out all twenty phases and what each
 one has to deliver.
@@ -170,9 +173,19 @@ Everything in this list is implemented and covered by tests.
   through it, so the two levels cannot disagree, and the link is nullable
   because an index is in no industry and an unmapped security is not the same
   thing as an unclassified one.
+- **Identifier aliases and provider import (Phase 1, workstreams 3–5)** — the
+  part that makes the master's promise true. An ISIN and a FIGI are validated
+  by check digit and unique across the whole master; a provider symbol is
+  unique only within the provider that issued it, and both are enforced by
+  partial unique indexes rather than by convention. Import normalises a
+  vendor's spelling — `FPT`, `FPT.HM`, `FPT:VN`, `HOSE:FPT` all resolve to one
+  security — then deduplicates strongest-signal-first, records the spelling as
+  an alias, and rejects rather than resolves a row whose identifiers and symbol
+  disagree.
 - **Instrument search (Phase 1, workstreams 6–7)** —
-  `GET /instruments/search?q=`, `GET /instruments/resolve?symbol=` and
-  `GET /instruments/{id}`. Matching folds Vietnamese diacritics and case, so
+  `GET /instruments`, `GET /instruments/search?q=`,
+  `GET /instruments/resolve?symbol=`, `GET /instruments/{id}` and
+  `GET /instruments/{id}/related`. Matching folds Vietnamese diacritics and case, so
   `ngan hang` finds `Ngân hàng`. Ranking is deterministic and evaluated in the
   database: exact ticker, ticker prefix, exact name, name prefix, name
   contains. Symbol resolution reports ambiguity rather than guessing when a
@@ -257,12 +270,12 @@ integration.
 
 ## Roadmap
 
-Twenty phases in four milestones. Phases 0 and 2 are complete, Phase 1 is
-mostly delivered, and everything else is planned.
+Twenty phases in four milestones. Phases 0, 1 and 2 are complete, and
+everything else is planned.
 
 | Milestone | Becomes           | Phases | Status                    |
 | --------- | ----------------- | ------ | ------------------------- |
-| 1         | Data foundation   | 0–4    | Phases 0 and 2 done · Phase 1 mostly done |
+| 1         | Data foundation   | 0–4    | Phases 0, 1 and 2 done · Phase 3 next |
 | 2         | Quant platform    | 5–10   | PLANNED                   |
 | 3         | Trading system    | 11–15  | PLANNED                   |
 | 4         | Engineered system | 16–19  | PLANNED                   |
@@ -276,11 +289,11 @@ be done superficially: **2** (market data ingestion) → **3** (data quality) �
 >
 > Data wrong → all of it wrong, quietly.
 
-**Phase 1 — Instrument Master** knows what an instrument *is* before anything
-is stored about it. Searching `FPT` resolves to exactly one security, which is
-classified into a sector. What remains is the alias and import workstreams: the
-phase is finished when every provider's spelling of `FPT` maps to the same
-canonical ID.
+**Phase 1 — Instrument Master** is complete. Searching `FPT` resolves to
+exactly one security, that security is classified into a sector, and every
+provider's spelling of it — `FPT.HM` from one vendor, `FPT:VN` from another —
+maps to the same canonical ID. Importing the same symbol list twice creates
+nothing the second time.
 
 **Phase 2 — Market Data Ingestion** is complete. Bars are stored against the
 canonical identifier, deduplicated by the schema rather than by convention, and

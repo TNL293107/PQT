@@ -50,7 +50,7 @@ Everything else in the system rests on them.
 | Phase | Name                                | Milestone | Status   |
 | ----- | ----------------------------------- | --------- | -------- |
 | 0     | Foundation & Architecture           | 1         | COMPLETE |
-| 1     | Instrument Master                   | 1         | IN PROGRESS |
+| 1     | Instrument Master                   | 1         | COMPLETE |
 | 2     | Market Data Ingestion               | 1         | COMPLETE |
 | 3     | Data Normalization & Quality        | 1         | PLANNED  |
 | 4     | Corporate Actions & Adjusted Data   | 1         | PLANNED  |
@@ -95,7 +95,7 @@ with no business functionality in it.
 
 **Not delivered:** any financial entity, endpoint, or dataset.
 
-## Phase 1 — Instrument Master · IN PROGRESS
+## Phase 1 — Instrument Master · COMPLETE
 
 The first phase with a real financial domain. The system must understand *what
 FPT is*, not merely store the string `"FPT"`.
@@ -137,7 +137,9 @@ Provider → import → normalize symbol → deduplicate → Instrument Master
 `GET /instruments/search?q=`, `GET /instruments/{id}/related`.
 
 **Done when** searching `FPT` resolves to exactly one security, and every
-provider's spelling of it maps to the same canonical ID.
+provider's spelling of it maps to the same canonical ID. Both now hold: one
+vendor's `FPT.HM` and another's `FPT:VN` reach the same instrument, and the
+second import of a symbol list creates nothing.
 
 The ticker is never the primary key. Vietnamese tickers are reused after
 delisting and change on exchange transfer, so an internal canonical ID is a
@@ -149,10 +151,10 @@ correctness requirement, not a preference.
 | - | ---------- | ------ |
 | 1 | Instrument identity core — domain model, lifecycle, persistence | COMPLETE |
 | 2 | Reference data — exchange seeding, `Sector`, `Industry` | COMPLETE |
-| 3 | Identifier aliases — provider symbols, ISIN, FIGI | PLANNED |
-| 4 | Symbol normalization and deduplication | PARTIAL |
-| 5 | Provider import pipeline | PLANNED |
-| 6 | Query API — list, get, search, related | PARTIAL |
+| 3 | Identifier aliases — provider symbols, ISIN, FIGI | COMPLETE |
+| 4 | Symbol normalization and deduplication | COMPLETE |
+| 5 | Provider import pipeline | COMPLETE |
+| 6 | Query API — list, get, search, related | COMPLETE |
 | 7 | Terminal instrument search | COMPLETE |
 
 **Workstream 1 delivered:** `Exchange` and `Instrument` aggregates with
@@ -183,13 +185,49 @@ part of workstream 4 that discovery needs. See
 [ADR-010](../architecture/decisions/ADR-010-instrument-search-and-security-context.md)
 and the [technical reference](../architecture/instrument-search.md).
 
-**Still open in Phase 1:** identifier aliases, so search cannot match an ISIN
-or a provider symbol (workstream 3); cross-provider deduplication (workstream
-4); the provider import pipeline that creates instruments from a source
-(workstream 5); and `GET /instruments` list and `/related` (workstream 6).
-None of the four block Phase 2 — market data is keyed on the canonical
-identifier, which already exists — but workstreams 3 and 5 are what a second
-provider will need.
+**Workstreams 3, 4 and 5 delivered:** `quant.instrument_identifiers`, holding
+the aliases an instrument is known by outside this system. ISIN and FIGI are
+validated by check digit and are unique across the whole master; a provider
+symbol is unique only within the provider that issued it, and both rules are
+partial unique indexes rather than conventions the pipeline is trusted to
+follow. Search matches an alias exactly, ranked last — nobody types twelve
+characters of ISIN by accident, so nothing competes with it.
+
+Symbol normalisation splits a provider's spelling into a ticker and a venue
+hint, so `FPT`, `FPT.HM`, `FPT:VN`, `HOSE:FPT` and `FPT-HNX` all resolve to the
+same security. A symbol that could be two tickers is refused rather than
+guessed at.
+
+The import pipeline reconciles a source against the master:
+`provider → normalise → deduplicate → match or create → record the alias`.
+Deduplication is tried strongest first — this provider's own symbol, then a
+global identifier, then the ticker on its venue — because a ticker is reused
+after delisting and changes on an exchange transfer, so it identifies a listing
+rather than a security. A row whose identifiers and symbol point at different
+instruments is rejected rather than resolved: picking a side would merge two
+securities or split one. Nothing is deleted, nothing is delisted, and nothing
+the master already holds is overwritten.
+
+**Workstream 6 completed:** `GET /instruments` pages the master with filters
+for venue, asset class, status and sector, ordered totally so a caller sees
+every row exactly once. Delisted instruments are included unless a status is
+given — the opposite of search's default, because this is the read historical
+work uses and omitting them is how survivorship bias enters a universe.
+`GET /instruments/{id}/related` reports the instruments that have held the same
+ticker on the same venue at another time.
+
+**Deliberately absent:** a "shares an ISIN" relation. A global identifier
+resolves to exactly one instrument because a Vietnamese security lists on one
+venue at a time, so two instruments carrying one cannot arise, and the branch
+would be one the database forbids from ever being taken. It becomes reachable
+the day a cross-listed universe relaxes that constraint.
+
+**Also absent:** an endpoint that triggers an import. It reads an external
+source and writes to the system of record, and neither belongs behind an
+unauthenticated route. The trigger arrives with the authentication in Phase 18.
+
+The export format the file instrument source reads is documented in
+[`data/schemas/instrument-csv.md`](../../data/schemas/instrument-csv.md).
 
 ## Phase 2 — Market Data Ingestion · COMPLETE
 
