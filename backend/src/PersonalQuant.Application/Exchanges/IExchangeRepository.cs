@@ -29,9 +29,65 @@ public interface IExchangeRepository
     Task<IReadOnlyList<Exchange>> ListAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists a venue's scheduled closures over a date range, inclusive at both
+    /// ends.
+    /// </summary>
+    /// <remarks>
+    /// A window rather than the whole calendar. Quality checks run over a range
+    /// and answer many questions about it, so the holidays for that range are
+    /// loaded once and consulted in memory; loading every holiday a venue has
+    /// ever had would grow without bound for no benefit.
+    /// </remarks>
+    /// <param name="exchangeId">The venue.</param>
+    /// <param name="fromDate">The first date to include.</param>
+    /// <param name="toDate">The last date to include.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The closures in the range, ordered by date.</returns>
+    Task<IReadOnlyList<TradingHoliday>> ListHolidaysAsync(
+        ExchangeId exchangeId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Finds the furthest date a venue has a closure recorded for.
+    /// </summary>
+    /// <remarks>
+    /// How far the calendar has been populated, which is a different question
+    /// from what is in it. A window with no closures in range and no calendar
+    /// recorded that far are indistinguishable otherwise, and the second makes
+    /// every completeness figure over that window wrong.
+    /// </remarks>
+    /// <param name="exchangeId">The venue.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The furthest recorded closure, or <see langword="null"/> when there is none.</returns>
+    Task<DateOnly?> FindCalendarHorizonAsync(
+        ExchangeId exchangeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports whether a venue already has a closure recorded for a date.
+    /// </summary>
+    /// <param name="exchangeId">The venue.</param>
+    /// <param name="onDate">The date to check.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns><see langword="true"/> when a closure is already recorded.</returns>
+    Task<bool> HasHolidayAsync(
+        ExchangeId exchangeId,
+        DateOnly onDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages a new exchange. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist it.
     /// </summary>
     /// <param name="exchange">The exchange to add.</param>
     void Add(Exchange exchange);
+
+    /// <summary>
+    /// Stages a new scheduled closure. Call
+    /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist it.
+    /// </summary>
+    /// <param name="holiday">The closure to add.</param>
+    void AddHoliday(TradingHoliday holiday);
 }
