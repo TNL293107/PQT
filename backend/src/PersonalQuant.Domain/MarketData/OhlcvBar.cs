@@ -61,6 +61,8 @@ public sealed class OhlcvBar
         Source = source;
         IngestedAtUtc = ingestedAtUtc;
         Revision = 0;
+        TransformationVersion = DataRules.TransformationVersion;
+        ValidationVersion = DataRules.Unvalidated;
     }
 
     /// <summary>Gets the instrument the bar belongs to.</summary>
@@ -146,6 +148,27 @@ public sealed class OhlcvBar
     /// moved.
     /// </remarks>
     public int Revision { get; private set; }
+
+    /// <summary>
+    /// Gets the version of the normalisation rules that produced the bar.
+    /// </summary>
+    /// <remarks>
+    /// Stamped when the bar is recorded and again when it is restated, because
+    /// a restatement runs through the same normaliser.
+    /// </remarks>
+    public int TransformationVersion { get; private set; }
+
+    /// <summary>
+    /// Gets the version of the quality rules the bar has passed, or
+    /// <see cref="DataRules.Unvalidated"/> when it has passed none.
+    /// </summary>
+    /// <remarks>
+    /// This is what makes a rule change tractable: after bumping the rules, the
+    /// bars still carrying the old version are exactly the ones that need
+    /// re-checking, and they can be found with a query rather than by
+    /// re-validating the whole series.
+    /// </remarks>
+    public int ValidationVersion { get; private set; }
 
     /// <summary>Gets the instant the period closed, in UTC.</summary>
     public DateTimeOffset ClosedAtUtc => OpenedAtUtc + Interval.ToDuration();
@@ -284,9 +307,26 @@ public sealed class OhlcvBar
         Source = source;
         RevisedAtUtc = revisedAtUtc;
         Revision++;
+        TransformationVersion = DataRules.TransformationVersion;
+
+        // The values moved, so whatever the quality rules concluded about the
+        // old ones no longer applies. Leaving the stamp in place would let a
+        // restated bar inherit a clean bill of health it never earned.
+        ValidationVersion = DataRules.Unvalidated;
 
         return true;
     }
+
+    /// <summary>
+    /// Records that the bar has been checked by a version of the quality rules.
+    /// </summary>
+    /// <remarks>
+    /// Says the rules ran, not that they found nothing. A bar with an open
+    /// quality issue against it is still validated — the checking happened, and
+    /// what it concluded is recorded separately.
+    /// </remarks>
+    /// <param name="version">The rule version that ran.</param>
+    public void MarkValidated(int version) => ValidationVersion = version;
 
     private static void RequireConsistentPrices(Price open, Price high, Price low, Price close)
     {
