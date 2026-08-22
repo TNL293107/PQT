@@ -77,6 +77,19 @@ public sealed class MarketDataOptions
     public string InstrumentListPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the CSV trading calendar to read, or an empty string to
+    /// leave it unregistered.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is seeded in its place. Vietnam's calendar cannot be derived —
+    /// Tet follows the lunar calendar and substitute days are set by annual
+    /// decree — and a partial calendar is worse than none, because the system
+    /// would believe it covers the year and report a week of real closures as
+    /// missing sessions.
+    /// </remarks>
+    public string TradingCalendarPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Converts the validated settings into the policy the pipeline uses.
     /// </summary>
     /// <returns>The ingestion policy.</returns>
