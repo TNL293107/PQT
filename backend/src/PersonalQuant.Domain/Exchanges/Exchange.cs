@@ -7,10 +7,10 @@ namespace PersonalQuant.Domain.Exchanges;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Deliberately thin. Trading calendars, session times and daily price limits
-/// are exchange attributes, but they belong to the phases that consume them —
-/// data quality validation and backtesting — not to instrument identity.
-/// Adding them now would be guessing at their shape.
+/// Still thin, and grown only where something consumes it. The daily price
+/// limit arrived with data-quality validation, which is the first thing that
+/// needed to know what move a venue permits; session times have not, because
+/// nothing reads them until the backtester simulates an auction.
 /// </para>
 /// <para>
 /// Identity is a surrogate <see cref="ExchangeId"/> rather than the code, so
@@ -40,13 +40,15 @@ public sealed class Exchange : AuditableEntity
         ExchangeCode code,
         string name,
         string timeZoneId,
-        string? mic)
+        string? mic,
+        PriceLimit? dailyPriceLimit)
     {
         Id = id;
         Code = code;
         Name = name;
         TimeZoneId = timeZoneId;
         Mic = mic;
+        DailyPriceLimit = dailyPriceLimit;
     }
 
     /// <summary>Gets the canonical internal identifier.</summary>
@@ -79,6 +81,26 @@ public sealed class Exchange : AuditableEntity
     public string? Mic { get; private set; }
 
     /// <summary>
+    /// Gets the furthest a security may move from its previous close in one
+    /// session, when the venue publishes a limit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nullable, and left null rather than defaulted. A venue whose limit has
+    /// not been recorded is not a venue with no limit, and guessing one would
+    /// either raise false anomalies or hide real ones. The cross-session check
+    /// is skipped where it is absent, and the absence is visible.
+    /// </para>
+    /// <para>
+    /// An exchange-level value. It is a property of the venue's rules rather
+    /// than of any security, and where an instrument is exempt — an index is
+    /// calculated, not traded — the exemption belongs to the instrument's
+    /// asset class.
+    /// </para>
+    /// </remarks>
+    public PriceLimit? DailyPriceLimit { get; private set; }
+
+    /// <summary>
     /// Registers a trading venue.
     /// </summary>
     /// <param name="code">The operating code.</param>
@@ -86,6 +108,7 @@ public sealed class Exchange : AuditableEntity
     /// <param name="timeZoneId">The IANA time zone identifier.</param>
     /// <param name="occurredAtUtc">The instant the record is created.</param>
     /// <param name="mic">The ISO 10383 MIC, when known.</param>
+    /// <param name="dailyPriceLimit">The published daily price limit, when known.</param>
     /// <returns>The new exchange.</returns>
     /// <exception cref="DomainValidationException">A supplied value is invalid.</exception>
     public static Exchange Register(
@@ -93,7 +116,8 @@ public sealed class Exchange : AuditableEntity
         string name,
         string timeZoneId,
         DateTimeOffset occurredAtUtc,
-        string? mic = null)
+        string? mic = null,
+        PriceLimit? dailyPriceLimit = null)
     {
         ArgumentNullException.ThrowIfNull(code);
 
@@ -102,10 +126,29 @@ public sealed class Exchange : AuditableEntity
             code,
             RequireName(name),
             RequireTimeZone(timeZoneId),
-            NormaliseMic(mic));
+            NormaliseMic(mic),
+            dailyPriceLimit);
 
         exchange.MarkCreated(occurredAtUtc);
         return exchange;
+    }
+
+    /// <summary>
+    /// Records the venue's published daily price limit.
+    /// </summary>
+    /// <remarks>
+    /// Separate from registration because the limit is published market
+    /// structure that a venue can revise, while the venue's identity is not.
+    /// A revision applies from the moment it is recorded; bars already
+    /// validated under the old limit carry the validation version that says
+    /// so.
+    /// </remarks>
+    /// <param name="dailyPriceLimit">The limit, or null to record that none is known.</param>
+    /// <param name="occurredAtUtc">The instant the change is recorded.</param>
+    public void SetDailyPriceLimit(PriceLimit? dailyPriceLimit, DateTimeOffset occurredAtUtc)
+    {
+        DailyPriceLimit = dailyPriceLimit;
+        MarkUpdated(occurredAtUtc);
     }
 
     /// <summary>
