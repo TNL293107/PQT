@@ -35,6 +35,7 @@ namespace PersonalQuant.Application.MarketData;
 /// <param name="registry">The registered sources.</param>
 /// <param name="fetcher">Calls the source under the retry and spacing policy.</param>
 /// <param name="normalizer">Validates and converts what the source returned.</param>
+/// <param name="inspector">Applies the quality rules that span sessions.</param>
 /// <param name="bars">The canonical series.</param>
 /// <param name="journal">Raw payloads, run history and checkpoints.</param>
 /// <param name="unitOfWork">Commits the run.</param>
@@ -46,6 +47,7 @@ internal sealed class MarketDataIngestionService(
     IMarketDataProviderRegistry registry,
     IMarketDataFetcher fetcher,
     IMarketDataNormalizer normalizer,
+    IBarQualityInspector inspector,
     IBarRepository bars,
     IIngestionJournal journal,
     IUnitOfWork unitOfWork,
@@ -209,6 +211,19 @@ internal sealed class MarketDataIngestionService(
         var merge = await MergeAsync(request, normalized, provider.Code, ingestedAtUtc, cancellationToken)
             .ConfigureAwait(false);
 
+        // Inspected before the commit, and handed the bars this run has staged
+        // but not yet written. A bar committed without the finding about it
+        // would look clean, and nothing would know to re-check it.
+        await inspector
+            .InspectAsync(
+                request.InstrumentId,
+                request.Interval,
+                request.FromUtc,
+                request.ToUtc,
+                merge.Added,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         AdvanceCheckpoint(request, provider.Code, checkpoint, normalized, ingestedAtUtc);
 
         run.Succeed(
@@ -216,7 +231,7 @@ internal sealed class MarketDataIngestionService(
                 fetched.Bars.Count,
                 normalized.Accepted.Count,
                 normalized.Rejected.Count,
-                merge.Stored,
+                merge.Added.Count,
                 merge.Revised),
             attempt.Attempts,
             batch.Id,
@@ -230,7 +245,7 @@ internal sealed class MarketDataIngestionService(
             provider.Code.Value,
             instrument.Ticker.Value,
             request.Interval,
-            merge.Stored,
+            merge.Added.Count,
             merge.Revised,
             normalized.Rejected.Count);
 
@@ -314,7 +329,7 @@ internal sealed class MarketDataIngestionService(
     /// differ; re-fetching an unchanged range is the normal case and counts as
     /// neither stored nor revised.
     /// </remarks>
-    private async Task<(int Stored, int Revised)> MergeAsync(
+    private async Task<MergeOutcome> MergeAsync(
         MarketDataRequest request,
         NormalizationResult normalized,
         SourceCode source,
@@ -323,7 +338,7 @@ internal sealed class MarketDataIngestionService(
     {
         if (normalized.Accepted.Count == 0)
         {
-            return (0, 0);
+            return MergeOutcome.Nothing;
         }
 
         var existing = await bars
@@ -366,7 +381,7 @@ internal sealed class MarketDataIngestionService(
             bars.AddRange(toAdd);
         }
 
-        return (toAdd.Count, revised);
+        return new MergeOutcome(toAdd, revised);
     }
 
     /// <summary>
@@ -442,6 +457,21 @@ internal sealed class MarketDataIngestionService(
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return run;
+    }
+
+    /// <summary>
+    /// What the deduplication step did, and the bars it staged.
+    /// </summary>
+    /// <remarks>
+    /// The added bars travel with the counts because the quality check needs
+    /// them: they are staged in this unit of work and a database query cannot
+    /// see them yet.
+    /// </remarks>
+    /// <param name="Added">Periods not previously held, staged for insert.</param>
+    /// <param name="Revised">Periods already held that the source restated.</param>
+    private sealed record MergeOutcome(IReadOnlyList<OhlcvBar> Added, int Revised)
+    {
+        public static MergeOutcome Nothing { get; } = new([], 0);
     }
 
     private void LogRejections(string ticker, string source, NormalizationResult normalized)

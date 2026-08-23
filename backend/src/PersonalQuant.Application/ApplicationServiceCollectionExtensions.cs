@@ -69,5 +69,13 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IMarketDataFetcher, MarketDataFetcher>();
         services.AddScoped<IMarketDataIngestionService, MarketDataIngestionService>();
         services.AddScoped<IMarketDataQueryService, MarketDataQueryService>();
+
+        // Data quality. The inspector writes and the service reads, and they
+        // are registered separately so that a dashboard read cannot reach the
+        // path that raises findings.
+        services.AddScoped<Exchanges.ITradingCalendar, Exchanges.TradingCalendar>();
+        services.AddScoped<Exchanges.ITradingCalendarImportService, Exchanges.TradingCalendarImportService>();
+        services.AddScoped<IBarQualityInspector, BarQualityInspector>();
+        services.AddScoped<IDataQualityService, DataQualityService>();
     }
 }

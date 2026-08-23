@@ -124,4 +124,27 @@ internal static partial class ApplicationLog
         InstrumentImportRejectionReason reason,
         int count,
         string detail);
+
+    [LoggerMessage(
+        EventId = 3110,
+        Level = LogLevel.Warning,
+        Message = "dataquality {Ticker} raised {Count} {Kind} finding(s). First: {Detail}")]
+    public static partial void DataQualityIssuesRaised(
+        ILogger logger,
+        string ticker,
+        DataQualityIssueKind kind,
+        int count,
+        string detail);
+
+    [LoggerMessage(
+        EventId = 3120,
+        Level = LogLevel.Information,
+        Message = "calendar.import {Source} read {RowsRead} closure(s): created {Created}, already held {AlreadyHeld}, rejected {Rejected}.")]
+    public static partial void TradingCalendarImported(
+        ILogger logger,
+        string source,
+        int rowsRead,
+        int created,
+        int alreadyHeld,
+        int rejected);
 }

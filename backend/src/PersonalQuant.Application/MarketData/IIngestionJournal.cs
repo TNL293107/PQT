@@ -51,6 +51,28 @@ public interface IIngestionJournal
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Summarises the runs over a range, for quality scoring.
+    /// </summary>
+    /// <remarks>
+    /// Aggregated in the database. Scoring a series means counting outcomes
+    /// over a window, and materialising every audit row to count them in memory
+    /// would make a dashboard read proportional to how long the series has been
+    /// ingested for.
+    /// </remarks>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="interval">The resolution.</param>
+    /// <param name="fromUtc">The inclusive start of the range.</param>
+    /// <param name="toUtc">The exclusive end of the range.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>What the runs in the range did.</returns>
+    Task<IngestionSummary> SummariseRunsAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads the resume position for an instrument, resolution and source.
     /// </summary>
     /// <remarks>
@@ -73,4 +95,33 @@ public interface IIngestionJournal
     /// </summary>
     /// <param name="checkpoint">The checkpoint to add.</param>
     void AddCheckpoint(IngestionCheckpoint checkpoint);
+}
+
+/// <summary>
+/// What the ingestion runs over one window did, in aggregate.
+/// </summary>
+/// <remarks>
+/// Skipped runs are counted but are neither successes nor failures. A run that
+/// found nothing to ask for did not demonstrate that the source works, and
+/// counting it as a success would let a schedule that has quietly stopped
+/// requesting anything report perfect reliability.
+/// </remarks>
+/// <param name="Runs">Runs recorded.</param>
+/// <param name="Succeeded">Runs that completed.</param>
+/// <param name="Failed">Runs that could not read the source.</param>
+/// <param name="Skipped">Runs that had nothing to ask for.</param>
+/// <param name="BarsFetched">Rows the sources returned.</param>
+/// <param name="BarsAccepted">Rows that passed validation.</param>
+/// <param name="BarsRejected">Rows validation refused.</param>
+public sealed record IngestionSummary(
+    int Runs,
+    int Succeeded,
+    int Failed,
+    int Skipped,
+    int BarsFetched,
+    int BarsAccepted,
+    int BarsRejected)
+{
+    /// <summary>A window in which nothing ran.</summary>
+    public static IngestionSummary None { get; } = new(0, 0, 0, 0, 0, 0, 0);
 }
