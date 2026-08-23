@@ -51,6 +51,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets the aliases instruments are known by outside this system.</summary>
     public DbSet<InstrumentIdentifier> InstrumentIdentifiers => Set<InstrumentIdentifier>();
 
+    /// <summary>Gets the venues' scheduled closures.</summary>
+    public DbSet<TradingHoliday> TradingHolidays => Set<TradingHoliday>();
+
+    /// <summary>Gets what the quality rules found.</summary>
+    public DbSet<DataQualityIssue> DataQualityIssues => Set<DataQualityIssue>();
+
     /// <summary>Gets the canonical OHLCV series.</summary>
     public DbSet<OhlcvBar> Bars => Set<OhlcvBar>();
 

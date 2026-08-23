@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PersonalQuant.Domain.Exchanges;
 
 namespace PersonalQuant.Infrastructure.Persistence.Configurations;
@@ -51,6 +52,17 @@ internal sealed class ExchangeConfiguration : IEntityTypeConfiguration<Exchange>
         builder.Property(exchange => exchange.Mic)
             .HasColumnName("mic")
             .HasMaxLength(Exchange.MicLength);
+
+        // Stored as the fraction the model holds, not as a percentage. One
+        // representation, so nothing has to remember which side of the
+        // hundred it is on.
+        builder.Property(exchange => exchange.DailyPriceLimit)
+            .HasColumnName("daily_price_limit")
+            .HasConversion(
+                new ValueConverter<PriceLimit, decimal>(
+                    limit => limit.Fraction,
+                    value => PriceLimit.FromPercent(value * 100m)))
+            .HasPrecision(6, PriceLimit.MaxScale);
 
         builder.Property(exchange => exchange.CreatedAtUtc)
             .HasColumnName("created_at_utc")

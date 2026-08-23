@@ -84,6 +84,17 @@ internal sealed class OhlcvBarConfiguration : IEntityTypeConfiguration<OhlcvBar>
             .HasColumnName("revision")
             .IsRequired();
 
+        // Lineage. Which rules produced the row, and which rules have checked
+        // it — so that changing a rule is a query for the rows written under
+        // the old one rather than a re-validation of the whole series.
+        builder.Property(bar => bar.TransformationVersion)
+            .HasColumnName("transformation_version")
+            .IsRequired();
+
+        builder.Property(bar => bar.ValidationVersion)
+            .HasColumnName("validation_version")
+            .IsRequired();
+
         // Derived from the interval and the opening instant, and must not
         // become a column that can disagree with them.
         builder.Ignore(bar => bar.ClosedAtUtc);
@@ -103,6 +114,14 @@ internal sealed class OhlcvBarConfiguration : IEntityTypeConfiguration<OhlcvBar>
         // which the key's column order cannot answer.
         builder.HasIndex(bar => new { bar.Interval, bar.OpenedAtUtc })
             .HasDatabaseName("ix_bars_interval_period");
+
+        // Serves "which bars have not been checked by the current rules",
+        // which is the query a rule change turns into work. Partial, because
+        // in a healthy system almost every row is validated and the index only
+        // needs to find the ones that are not.
+        builder.HasIndex(bar => bar.ValidationVersion)
+            .HasDatabaseName("ix_bars_unvalidated")
+            .HasFilter($"validation_version < {Domain.MarketData.DataRules.ValidationVersion}");
     }
 
     private static void ConfigurePrice(
