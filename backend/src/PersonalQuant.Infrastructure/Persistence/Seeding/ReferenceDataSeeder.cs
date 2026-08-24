@@ -176,7 +176,8 @@ internal sealed class ReferenceDataSeeder(
                 seed.Name,
                 VietnamReferenceData.TimeZoneId,
                 occurredAtUtc,
-                seed.Mic);
+                seed.Mic,
+                PriceLimit.FromPercent(seed.DailyPriceLimitPercent));
 
             exchanges.Add(exchange);
             byCode[seed.Code] = exchange.Id;

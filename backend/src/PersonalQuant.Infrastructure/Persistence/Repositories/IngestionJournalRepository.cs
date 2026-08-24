@@ -58,6 +58,50 @@ internal sealed class IngestionJournalRepository(PersonalQuantDbContext dbContex
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<IngestionSummary> SummariseRunsAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default)
+    {
+        // One aggregate query. A dashboard reads this per instrument, and
+        // pulling a year of audit rows back to count them would make the read
+        // grow with how long the series has been ingested for.
+        var summary = await dbContext.IngestionRuns
+            .AsNoTracking()
+            .Where(run =>
+                run.InstrumentId == instrumentId
+                && run.Interval == interval
+                && run.StartedAtUtc >= fromUtc
+                && run.StartedAtUtc < toUtc)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Runs = group.Count(),
+                Succeeded = group.Count(run => run.Outcome == IngestionOutcome.Succeeded),
+                Failed = group.Count(run => run.Outcome == IngestionOutcome.Failed),
+                Skipped = group.Count(run => run.Outcome == IngestionOutcome.Skipped),
+                BarsFetched = group.Sum(run => run.BarsFetched),
+                BarsAccepted = group.Sum(run => run.BarsAccepted),
+                BarsRejected = group.Sum(run => run.BarsRejected),
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return summary is null
+            ? IngestionSummary.None
+            : new IngestionSummary(
+                summary.Runs,
+                summary.Succeeded,
+                summary.Failed,
+                summary.Skipped,
+                summary.BarsFetched,
+                summary.BarsAccepted,
+                summary.BarsRejected);
+    }
+
+    /// <inheritdoc />
     public Task<IngestionCheckpoint?> FindCheckpointAsync(
         InstrumentId instrumentId,
         BarInterval interval,

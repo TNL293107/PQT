@@ -39,6 +39,58 @@ internal sealed class ExchangeRepository(PersonalQuantDbContext dbContext) : IEx
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<TradingHoliday>> ListHolidaysAsync(
+        ExchangeId exchangeId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.TradingHolidays
+            .AsNoTracking()
+            .Where(holiday =>
+                holiday.ExchangeId == exchangeId
+                && holiday.Date >= fromDate
+                && holiday.Date <= toDate)
+            .OrderBy(holiday => holiday.Date)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<DateOnly?> FindCalendarHorizonAsync(
+        ExchangeId exchangeId,
+        CancellationToken cancellationToken = default)
+    {
+        // An ordered read of one row rather than an aggregate: it uses the
+        // same index the window scan does, and returns null for a venue with
+        // no calendar at all without a special case.
+        var furthest = await dbContext.TradingHolidays
+            .AsNoTracking()
+            .Where(holiday => holiday.ExchangeId == exchangeId)
+            .OrderByDescending(holiday => holiday.Date)
+            .Select(holiday => (DateOnly?)holiday.Date)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return furthest;
+    }
+
+    /// <inheritdoc />
+    public Task<bool> HasHolidayAsync(
+        ExchangeId exchangeId,
+        DateOnly onDate,
+        CancellationToken cancellationToken = default) =>
+        dbContext.TradingHolidays.AnyAsync(
+            holiday => holiday.ExchangeId == exchangeId && holiday.Date == onDate,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public void AddHoliday(TradingHoliday holiday)
+    {
+        ArgumentNullException.ThrowIfNull(holiday);
+
+        dbContext.TradingHolidays.Add(holiday);
+    }
+
+    /// <inheritdoc />
     public void Add(Exchange exchange)
     {
         ArgumentNullException.ThrowIfNull(exchange);

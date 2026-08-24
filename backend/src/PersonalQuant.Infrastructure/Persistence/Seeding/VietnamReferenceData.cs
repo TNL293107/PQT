@@ -27,15 +27,30 @@ internal static class VietnamReferenceData
 
     /// <summary>The three venues that make up the Vietnamese market.</summary>
     /// <remarks>
+    /// <para>
     /// A MIC is given only where it is unambiguous. UPCOM is operated by HNX
     /// and its own code is not consistently reported, so it is left unset
     /// rather than guessed — the field is optional and never identity.
+    /// </para>
+    /// <para>
+    /// The daily price limits are statutory market structure rather than
+    /// figures anyone estimated: HOSE bands at 7%, HNX at 10% and UPCOM at
+    /// 15%, and the exchange rejects orders outside them. They are the
+    /// reference the cross-session quality check measures against.
+    /// </para>
+    /// <para>
+    /// The trading calendar is deliberately not seeded beside them. Tet and
+    /// the Hung Kings commemoration follow the lunar calendar and substitute
+    /// days are set by annual decree, so it cannot be derived — and a partial
+    /// calendar would make the system believe it covers the year and report a
+    /// week of real closures as missing sessions. It is imported.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<ExchangeSeed> Exchanges { get; } =
     [
-        new("HOSE", "Ho Chi Minh City Stock Exchange", "XSTC"),
-        new("HNX", "Hanoi Stock Exchange", "XHNX"),
-        new("UPCOM", "Unlisted Public Company Market", null),
+        new("HOSE", "Ho Chi Minh City Stock Exchange", "XSTC", 7m),
+        new("HNX", "Hanoi Stock Exchange", "XHNX", 10m),
+        new("UPCOM", "Unlisted Public Company Market", null, 15m),
     ];
 
     /// <summary>
@@ -140,7 +155,12 @@ internal static class VietnamReferenceData
     /// <param name="Code">The operating code.</param>
     /// <param name="Name">The full venue name.</param>
     /// <param name="Mic">The ISO 10383 MIC, where it is unambiguous.</param>
-    internal sealed record ExchangeSeed(string Code, string Name, string? Mic);
+    /// <param name="DailyPriceLimitPercent">The statutory daily price band.</param>
+    internal sealed record ExchangeSeed(
+        string Code,
+        string Name,
+        string? Mic,
+        decimal DailyPriceLimitPercent);
 
     /// <summary>A sector to create if its code is unknown.</summary>
     /// <param name="Code">The taxonomy code.</param>

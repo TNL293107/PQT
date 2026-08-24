@@ -10,6 +10,7 @@ using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Caching;
+using PersonalQuant.Infrastructure.Exchanges;
 using PersonalQuant.Infrastructure.Instruments;
 using PersonalQuant.Infrastructure.MarketData;
 using PersonalQuant.Infrastructure.Configuration;
@@ -90,6 +91,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IClassificationRepository, ClassificationRepository>();
         services.AddScoped<IBarRepository, BarRepository>();
         services.AddScoped<IIngestionJournal, IngestionJournalRepository>();
+        services.AddScoped<IDataQualityRepository, DataQualityRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
 
@@ -171,6 +173,14 @@ public static class InfrastructureServiceCollectionExtensions
             var path = options.InstrumentListPath;
 
             services.AddSingleton<IInstrumentProvider>(_ => new FileInstrumentProvider(path));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.TradingCalendarPath))
+        {
+            var path = options.TradingCalendarPath;
+
+            services.AddSingleton<ITradingCalendarProvider>(
+                _ => new FileTradingCalendarProvider(path));
         }
     }
 }
