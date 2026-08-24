@@ -21,6 +21,7 @@ reasoning at the time is preserved.
 | [010](ADR-010-instrument-search-and-security-context.md)     | Instrument search, resolution and current security | Accepted |
 | [011](ADR-011-market-data-ingestion.md)                      | Market data ingestion, provenance and resume state | Accepted |
 | [012](ADR-012-identifier-aliases-and-provider-import.md)     | Identifier aliases and the provider import pipeline | Accepted |
+| [013](ADR-013-data-quality-and-lineage.md)                   | Data quality rules, the trading calendar and lineage | Accepted |
 
 ## Format
 

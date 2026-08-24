@@ -12,10 +12,10 @@ engineering project.
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Phase**    | 3 — Data Normalization & Quality, next (phases run 0–19)      |
-| **Complete** | Phases 0, 1 and 2 — the instrument master and the ingestion pipeline |
+| **Phase**    | 4 — Corporate Actions & Adjusted Data, next (phases run 0–19) |
+| **Complete** | Phases 0–3 — instrument master, ingestion, and data quality   |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 561 green in CI — 471 .NET, 70 Vitest, 14 pytest, 6 CTest     |
+| **Tests**    | 622 green in CI — 532 .NET, 70 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
@@ -25,11 +25,13 @@ that makes every vendor's spelling of a security reach one canonical ID;
 search, symbol resolution, paging and a read-only instrument API; a market data
 ingestion pipeline with validation, deduplication, retained raw payloads,
 resume checkpoints and an audit record for every attempt including the ones
-that did nothing; a terminal with Ctrl+K security search and a current-security
+that did nothing; data-quality rules that measure a series against the venue's
+price band and its trading calendar, and record what they find rather than
+correcting it; a terminal with Ctrl+K security search and a current-security
 context. All of it covered by tests that run against real containers, not
 mocks.
 
-**What does not exist.** Data quality scoring, corporate actions, fundamentals,
+**What does not exist.** Corporate actions and adjusted prices, fundamentals,
 news, screening, factors, backtesting, portfolio, risk, orders, broker
 integration, AI. Nothing triggers an import or an ingestion run on a timer
 either — both reach outside the system, and the trigger waits for
@@ -202,6 +204,16 @@ Everything in this list is implemented and covered by tests.
   including the skipped ones, and a checkpoint advances to the newest bar
   actually stored rather than to the end of the range that was asked for. See
   [ADR-011](docs/architecture/decisions/ADR-011-market-data-ingestion.md).
+- **Data quality (Phase 3)** — the checks a single bar cannot answer. A
+  session-to-session move is measured against the venue's own daily band —
+  HOSE ±7%, HNX ±10%, UPCOM ±15% — because the exchange rejects orders outside
+  it, so a larger move did not happen as printed. Missing and unexpected
+  sessions are measured against the trading calendar. Findings are recorded and
+  stay open until something accounts for them; nothing is corrected, and the
+  bar is always kept. Every bar carries which rules produced it and which have
+  checked it, so changing a rule is a query rather than a re-validation of
+  everything. See
+  [ADR-013](docs/architecture/decisions/ADR-013-data-quality-and-lineage.md).
 - **Terminal security search** — `Ctrl+K`, type, arrow, `Enter`. Sets the
   terminal's current security, which every later module reads by canonical
   identifier rather than by ticker.
@@ -270,12 +282,12 @@ integration.
 
 ## Roadmap
 
-Twenty phases in four milestones. Phases 0, 1 and 2 are complete, and
+Twenty phases in four milestones. Phases 0 through 3 are complete, and
 everything else is planned.
 
 | Milestone | Becomes           | Phases | Status                    |
 | --------- | ----------------- | ------ | ------------------------- |
-| 1         | Data foundation   | 0–4    | Phases 0, 1 and 2 done · Phase 3 next |
+| 1         | Data foundation   | 0–4    | Phases 0–3 done · Phase 4 next |
 | 2         | Quant platform    | 5–10   | PLANNED                   |
 | 3         | Trading system    | 11–15  | PLANNED                   |
 | 4         | Engineered system | 16–19  | PLANNED                   |
@@ -301,6 +313,14 @@ every ingestion attempt leaves a record explaining what it did — which is what
 makes a gap in a series answerable instead of merely visible. What it does not
 have is a scheduler; runs are driven by the host until there is authentication
 to put in front of a trigger.
+
+**Phase 3 — Data Normalization & Quality** is complete. A discontinuity larger
+than the venue permits, a session the calendar expected and did not get, and a
+bar on a day the market was shut are each recorded as a finding that stays open
+until something explains it. Nothing is corrected automatically: Phase 4 is what
+turns an open price-limit finding into a corporate action. The honest caveat is
+the calendar — it has to be imported, because Vietnam's cannot be derived, and
+until one is, completeness is reported as unmeasured rather than guessed.
 
 Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
 

@@ -52,7 +52,7 @@ Everything else in the system rests on them.
 | 0     | Foundation & Architecture           | 1         | COMPLETE |
 | 1     | Instrument Master                   | 1         | COMPLETE |
 | 2     | Market Data Ingestion               | 1         | COMPLETE |
-| 3     | Data Normalization & Quality        | 1         | PLANNED  |
+| 3     | Data Normalization & Quality        | 1         | COMPLETE |
 | 4     | Corporate Actions & Adjusted Data   | 1         | PLANNED  |
 | 5     | Market Intelligence Terminal        | 2         | PLANNED  |
 | 6     | Fundamental & Financial Data        | 2         | PLANNED  |
@@ -290,12 +290,13 @@ Bound by [ADR-011](../architecture/decisions/ADR-011-market-data-ingestion.md).
 The export format the file source reads is documented in
 [`data/schemas/market-data-csv.md`](../../data/schemas/market-data-csv.md).
 
-## Phase 3 — Data Normalization & Quality · PLANNED
+## Phase 3 — Data Normalization & Quality · COMPLETE
 
 **Backbone phase.** The point at which the project stops having *data* and
 starts having *data worth running research on*.
 
-**Structural validation**
+**Structural validation** — already enforced in Phase 2, as domain invariants
+on the bar itself rather than as checks something has to remember to run:
 
 ```
 High  >= max(Open, Close)
@@ -304,31 +305,53 @@ Volume >= 0
 Price  > 0
 ```
 
-**Cross-session checks.** A gap between today's open and yesterday's close
-beyond roughly ±30% is not a price move — Vietnamese daily price limits are
-±7% (HOSE), ±10% (HNX) and ±15% (UPCOM). Anything larger means a corporate
-action, bad data, a trading halt, or a symbol change, and must be classified
-before it is stored.
+A row failing any of them cannot be constructed, so it never reaches storage
+and never becomes a finding. **Duplicate detection** is the same: the storage
+key is the instrument, resolution and opening instant, so the same period
+cannot appear twice.
 
-**Duplicate detection:** the same instrument, timestamp and timeframe must
-never appear twice.
+**Delivered**
 
-**Missing data detection** against the exchange trading calendar, so a public
-holiday is not mistaken for a gap.
+- **Daily price limits on the venue.** HOSE ±7%, HNX ±10%, UPCOM ±15% —
+  statutory market structure, seeded. The cross-session check measures against
+  the venue's own band rather than a generic threshold, because the exchange
+  rejects orders outside it: a larger move did not happen as printed.
+- **Trading calendars** as `quant.trading_holidays`, with weekends structural
+  rather than stored, and an import that reads a CSV published elsewhere.
+- **Three quality rules**, all needing context a single row cannot supply:
+  `PriceLimitBreach`, `MissingSession` and `UnexpectedSession`.
+- **Findings recorded, never corrections applied.** The bar is kept; the
+  discontinuity is written down with the numbers that triggered it, and stays
+  open until something accounts for it. One finding per instrument, resolution,
+  session and kind — a unique index, so a nightly run cannot re-raise it and a
+  dismissal cannot be silently undone.
+- **Findings commit with the bars they concern**, in ingestion's own
+  transaction. A bar committed without its finding would look clean and nothing
+  would know to re-check it.
+- **A four-part quality score** — completeness, consistency, validity, source
+  reliability — with the counts beside it, weighted into a summary for a
+  dashboard.
+- **Lineage on every bar:** `source`, `ingested_at`, `transformation_version`
+  and `validation_version`. A restatement clears the validation stamp, because
+  the values moved and what the rules concluded no longer applies.
+- `GET /instruments/{id}/quality` and `/quality/issues`.
 
-**Data quality score**, per instrument:
+**The calendar is imported, not seeded, and that is the phase's main caveat.**
+Tet and the Hung Kings commemoration follow the lunar calendar and substitute
+days are set by annual decree, so Vietnam's calendar cannot be derived. Seeding
+only the fixed-date holidays would be worse than seeding none: the system would
+believe its calendar covers the year and report a week of real closures as
+missing sessions. With no calendar, completeness is reported as **unmeasured**
+and the calendar-dependent rules are skipped — the score carries a
+`calendarIsComplete` flag that says which.
 
-```
-FPT
-Completeness       99.8%
-Consistency        99.9%
-Validity          100.0%
-Source reliability 98.0%
-Overall            99.2%
-```
+**Not delivered:** quality checks for intraday resolutions. The rules are
+session-scoped — a price limit governs a session, not a five-minute bar — so an
+intraday series is unmeasured rather than measured as good.
 
-**Data lineage.** Every dataset records `source`, `ingested_at`,
-`validation_version`, `transformation_version`.
+Bound by [ADR-013](../architecture/decisions/ADR-013-data-quality-and-lineage.md).
+The calendar format is documented in
+[`data/schemas/trading-calendar-csv.md`](../../data/schemas/trading-calendar-csv.md).
 
 ## Phase 4 — Corporate Actions & Adjusted Data · PLANNED
 
@@ -374,6 +397,10 @@ handling, incorrect dividend handling.
 
 **Outcome:** the backtesting engine runs on versioned,
 corporate-action-adjusted historical data.
+
+Phase 3 leaves this phase a queue to work from: every open `PriceLimitBreach`
+finding is a candidate corporate action, and explaining one is a recorded
+resolution rather than an edit.
 
 ---
 
