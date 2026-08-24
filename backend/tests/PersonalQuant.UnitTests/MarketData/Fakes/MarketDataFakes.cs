@@ -219,6 +219,31 @@ internal sealed class FakeIngestionJournal : IIngestionJournal
                 .OrderByDescending(run => run.StartedAtUtc)
                 .Take(limit)]);
 
+    public Task<IngestionSummary> SummariseRunsAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var matching = Runs
+            .Where(run =>
+                run.InstrumentId == instrumentId
+                && run.Interval == interval
+                && run.StartedAtUtc >= fromUtc
+                && run.StartedAtUtc < toUtc)
+            .ToList();
+
+        return Task.FromResult(new IngestionSummary(
+            matching.Count,
+            matching.Count(run => run.Outcome == IngestionOutcome.Succeeded),
+            matching.Count(run => run.Outcome == IngestionOutcome.Failed),
+            matching.Count(run => run.Outcome == IngestionOutcome.Skipped),
+            matching.Sum(run => run.BarsFetched),
+            matching.Sum(run => run.BarsAccepted),
+            matching.Sum(run => run.BarsRejected)));
+    }
+
     public Task<IngestionCheckpoint?> FindCheckpointAsync(
         InstrumentId instrumentId,
         BarInterval interval,
@@ -259,5 +284,35 @@ internal sealed class ScriptedProvider(
         CallCount++;
 
         return behaviour(request);
+    }
+}
+
+/// <summary>
+/// A quality inspector that records what it was asked and finds nothing.
+/// </summary>
+/// <remarks>
+/// The ingestion tests are about fetch, deduplicate, checkpoint and audit. What
+/// the quality rules conclude is a separate question with its own tests, and
+/// running the real inspector here would make every ingestion test depend on a
+/// trading calendar it does not care about.
+/// </remarks>
+internal sealed class NoOpQualityInspector : IBarQualityInspector
+{
+    public int InspectionCount { get; private set; }
+
+    public IReadOnlyList<OhlcvBar> LastPending { get; private set; } = [];
+
+    public Task<QualityInspection> InspectAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        IReadOnlyList<OhlcvBar> pending,
+        CancellationToken cancellationToken = default)
+    {
+        InspectionCount++;
+        LastPending = pending;
+
+        return Task.FromResult(new QualityInspection(pending.Count, 0, [], null));
     }
 }

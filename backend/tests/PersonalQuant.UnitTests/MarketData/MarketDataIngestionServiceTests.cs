@@ -45,6 +45,23 @@ public sealed class MarketDataIngestionServiceTests
     }
 
     [Fact]
+    public async Task The_quality_rules_see_the_bars_before_they_are_committed()
+    {
+        // A bar committed without the finding about it would look clean, and
+        // nothing would know to re-check it.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday.AddDays(-1)), Bar(Yesterday));
+
+        // Act
+        await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(1, harness.Inspector.InspectionCount);
+        Assert.Equal(2, harness.Inspector.LastPending.Count);
+        Assert.Equal(1, harness.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
     public async Task The_checkpoint_lands_on_the_newest_bar_actually_stored()
     {
         // Never on the end of the requested range. A request for a week that
@@ -341,6 +358,7 @@ public sealed class MarketDataIngestionServiceTests
             Bars = new FakeBarRepository();
             Journal = new FakeIngestionJournal();
             UnitOfWork = new FakeUnitOfWork();
+            Inspector = new NoOpQualityInspector();
 
             Provider = new ScriptedProvider(Source, request => _behaviour(request))
             {
@@ -371,6 +389,7 @@ public sealed class MarketDataIngestionServiceTests
                 new MarketDataFetcher(
                     policy, limiter, delays, NullLogger<MarketDataFetcher>.Instance),
                 new MarketDataNormalizer(),
+                Inspector,
                 Bars,
                 Journal,
                 UnitOfWork,
@@ -388,6 +407,8 @@ public sealed class MarketDataIngestionServiceTests
         public FakeIngestionJournal Journal { get; }
 
         public FakeUnitOfWork UnitOfWork { get; }
+
+        public NoOpQualityInspector Inspector { get; }
 
         public ScriptedProvider Provider { get; }
 

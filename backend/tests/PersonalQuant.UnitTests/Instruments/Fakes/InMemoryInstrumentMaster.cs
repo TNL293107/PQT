@@ -141,15 +141,24 @@ internal sealed class InMemoryInstrumentMaster : IInstrumentRepository
 internal sealed class InMemoryExchanges : IExchangeRepository
 {
     private readonly List<Exchange> _exchanges = [];
+    private readonly List<TradingHoliday> _holidays = [];
 
     /// <summary>Registers a venue and returns its identifier.</summary>
     /// <param name="code">The operating code.</param>
     /// <param name="occurredAtUtc">The audit instant.</param>
     /// <returns>The new venue's identifier.</returns>
-    public ExchangeId Add(string code, DateTimeOffset occurredAtUtc)
+    public ExchangeId Add(
+        string code,
+        DateTimeOffset occurredAtUtc,
+        decimal? dailyPriceLimitPercent = null)
     {
         var exchange = Exchange.Register(
-            ExchangeCode.Create(code), $"{code} Venue", "Asia/Ho_Chi_Minh", occurredAtUtc);
+            ExchangeCode.Create(code),
+            $"{code} Venue",
+            "Asia/Ho_Chi_Minh",
+            occurredAtUtc,
+            mic: null,
+            dailyPriceLimitPercent is { } percent ? PriceLimit.FromPercent(percent) : null);
 
         _exchanges.Add(exchange);
         return exchange.Id;
@@ -167,6 +176,40 @@ internal sealed class InMemoryExchanges : IExchangeRepository
 
     public Task<IReadOnlyList<Exchange>> ListAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<Exchange>>([.. _exchanges]);
+
+    public Task<IReadOnlyList<TradingHoliday>> ListHolidaysAsync(
+        ExchangeId exchangeId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<TradingHoliday>>(
+            [.. _holidays
+                .Where(holiday =>
+                    holiday.ExchangeId == exchangeId
+                    && holiday.Date >= fromDate
+                    && holiday.Date <= toDate)
+                .OrderBy(holiday => holiday.Date)]);
+
+    public Task<DateOnly?> FindCalendarHorizonAsync(
+        ExchangeId exchangeId,
+        CancellationToken cancellationToken = default)
+    {
+        var dates = _holidays
+            .Where(holiday => holiday.ExchangeId == exchangeId)
+            .Select(holiday => holiday.Date)
+            .ToList();
+
+        return Task.FromResult(dates.Count == 0 ? (DateOnly?)null : dates.Max());
+    }
+
+    public Task<bool> HasHolidayAsync(
+        ExchangeId exchangeId,
+        DateOnly onDate,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(_holidays.Exists(holiday =>
+            holiday.ExchangeId == exchangeId && holiday.Date == onDate));
+
+    public void AddHoliday(TradingHoliday holiday) => _holidays.Add(holiday);
 
     public void Add(Exchange exchange) => _exchanges.Add(exchange);
 }
