@@ -38,6 +38,22 @@ internal static class MarketDataEndpoints
     /// <summary>Runs returned when the caller does not ask for a number.</summary>
     private const int DefaultRuns = 10;
 
+    /// <summary>Most quality findings a caller may ask for.</summary>
+    private const int MaxQualityIssues = 200;
+
+    /// <summary>Findings returned when the caller does not ask for a number.</summary>
+    private const int DefaultQualityIssues = 50;
+
+    /// <summary>
+    /// Longest window a quality assessment may cover.
+    /// </summary>
+    /// <remarks>
+    /// The read counts sessions day by day and aggregates the audit trail over
+    /// the range, so an unbounded window is a way to make the database do
+    /// arbitrary work on behalf of an anonymous caller.
+    /// </remarks>
+    private const int MaxQualityWindowYears = 10;
+
     /// <summary>
     /// Maps the market data endpoints.
     /// </summary>
@@ -56,6 +72,14 @@ internal static class MarketDataEndpoints
         group.MapGet("/ingestion", GetIngestionHistoryAsync)
             .WithName("GetInstrumentIngestionHistory")
             .WithSummary("Reads the recent ingestion attempts for an instrument's series.");
+
+        group.MapGet("/quality", GetQualityAsync)
+            .WithName("GetInstrumentDataQuality")
+            .WithSummary("Scores how much an instrument's series can be trusted.");
+
+        group.MapGet("/quality/issues", GetQualityIssuesAsync)
+            .WithName("GetInstrumentDataQualityIssues")
+            .WithSummary("Lists the unexplained findings against an instrument's series.");
 
         return endpoints;
     }
@@ -169,4 +193,121 @@ internal static class MarketDataEndpoints
             runs.Count,
             [.. runs.Select(IngestionRunResponse.From)]));
     }
+
+    /// <summary>
+    /// <c>GET /instruments/{instrumentId}/quality</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The four components are what a decision should rest on; the overall
+    /// figure is a summary for a dashboard. A series that is 99% complete and
+    /// 99% consistent is not interchangeable with one that is 100% complete and
+    /// 98% consistent, and the aggregate cannot tell them apart.
+    /// </para>
+    /// <para>
+    /// <c>calendarIsComplete</c> is the field to read first. Completeness
+    /// cannot be measured without a calendar that covers the window, and a
+    /// deployment that has not imported one gets a completeness figure that
+    /// means nothing.
+    /// </para>
+    /// </remarks>
+    private static async Task<Results<Ok<DataQualityReportResponse>, ProblemHttpResult>>
+        GetQualityAsync(
+        Guid instrumentId,
+        string? interval,
+        DateOnly? from,
+        DateOnly? to,
+        IDataQualityService quality,
+        CancellationToken cancellationToken)
+    {
+        if (!BarIntervalParser.TryParse(interval, out var resolution))
+        {
+            return InvalidQualityRequest(
+                $"The interval is not one this system records. Accepted: {BarIntervalParser.DescribeAccepted()}.");
+        }
+
+        // A year back from today, which is the window a dashboard shows and
+        // long enough that one bad session does not dominate the ratios.
+        var toDate = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var fromDate = from ?? toDate.AddYears(-1);
+
+        if (toDate < fromDate)
+        {
+            return InvalidQualityRequest("The window must end after it starts.");
+        }
+
+        if (fromDate.AddYears(MaxQualityWindowYears) < toDate)
+        {
+            return InvalidQualityRequest(
+                $"The window may not span more than {MaxQualityWindowYears} years.");
+        }
+
+        var report = await quality
+            .ScoreAsync(new InstrumentId(instrumentId), resolution, fromDate, toDate, cancellationToken)
+            .ConfigureAwait(false);
+
+        return report is null
+            ? TypedResults.Problem(
+                detail: "No instrument exists with that identifier.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Instrument not found.")
+            : TypedResults.Ok(DataQualityReportResponse.From(report));
+    }
+
+    /// <summary>
+    /// <c>GET /instruments/{instrumentId}/quality/issues</c>.
+    /// </summary>
+    /// <remarks>
+    /// Open findings only. A resolved one is history, and a review screen that
+    /// showed every dismissal ever made would bury the handful that still need
+    /// a decision.
+    /// </remarks>
+    private static async Task<Results<Ok<DataQualityIssuesResponse>, ProblemHttpResult>>
+        GetQualityIssuesAsync(
+        Guid instrumentId,
+        string? interval,
+        int? limit,
+        IInstrumentCatalog catalog,
+        IDataQualityService quality,
+        CancellationToken cancellationToken)
+    {
+        if (!BarIntervalParser.TryParse(interval, out var resolution))
+        {
+            return InvalidQualityRequest(
+                $"The interval is not one this system records. Accepted: {BarIntervalParser.DescribeAccepted()}.");
+        }
+
+        if (limit is < 1 or > MaxQualityIssues)
+        {
+            return InvalidQualityRequest(
+                $"The issue limit must be between 1 and {MaxQualityIssues}.");
+        }
+
+        var id = new InstrumentId(instrumentId);
+        var instrument = await catalog.FindDetailAsync(id, cancellationToken).ConfigureAwait(false);
+
+        if (instrument is null)
+        {
+            return TypedResults.Problem(
+                detail: "No instrument exists with that identifier.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Instrument not found.");
+        }
+
+        var issues = await quality
+            .ListOpenIssuesAsync(id, resolution, limit ?? DefaultQualityIssues, cancellationToken)
+            .ConfigureAwait(false);
+
+        return TypedResults.Ok(new DataQualityIssuesResponse(
+            instrumentId,
+            resolution.ToString(),
+            issues.Count,
+            [.. issues.Select(DataQualityIssueResponse.From)]));
+    }
+
+    private static ProblemHttpResult InvalidQualityRequest(string detail) =>
+        TypedResults.Problem(
+            detail: detail,
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "The data quality request is not valid.");
 }
