@@ -229,12 +229,6 @@ public sealed class InstrumentResolverTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Not exercised by resolution.");
 
-        public Task<IReadOnlyList<Instrument>> ListTickerHistoryAsync(
-            ExchangeId exchangeId,
-            Ticker ticker,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Not exercised by resolution.");
-
         public Task<bool> IsTickerTakenAsync(
             ExchangeId exchangeId,
             Ticker ticker,

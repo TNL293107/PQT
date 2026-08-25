@@ -131,11 +131,14 @@ public sealed class InstrumentMasterPersistenceTests(DependencyContainerFixture 
         await using var reader = await CreateScopeAsync();
         var active = await reader.Instruments.FindActiveByTickerAsync(
             exchange.Id, Ticker.Create("CCC"), TestContext.Current.CancellationToken);
-        var history = await reader.Instruments.ListTickerHistoryAsync(
-            exchange.Id, Ticker.Create("CCC"), TestContext.Current.CancellationToken);
+        // The previous holder is still discoverable, through the relation the
+        // API exposes rather than a read nothing else uses. A chart drawn
+        // before the reassignment is not about this security.
+        var related = await reader.Instruments.ListRelatedAsync(
+            successor.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(successor.Id, active?.Id);
-        Assert.Equal(2, history.Count);
+        Assert.Equal(original.Id, Assert.Single(related).Instrument.InstrumentId);
     }
 
     [Fact]

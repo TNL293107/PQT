@@ -71,14 +71,6 @@ internal sealed class InMemoryInstrumentMaster : IInstrumentRepository
             && instrument.Ticker == ticker
             && instrument.Status != InstrumentStatus.Delisted));
 
-    public Task<IReadOnlyList<Instrument>> ListTickerHistoryAsync(
-        ExchangeId exchangeId,
-        Ticker ticker,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<Instrument>>(
-            [.. _instruments.Values.Where(instrument =>
-                instrument.ExchangeId == exchangeId && instrument.Ticker == ticker)]);
-
     public Task<bool> IsTickerTakenAsync(
         ExchangeId exchangeId,
         Ticker ticker,

@@ -285,6 +285,83 @@ public sealed class BarQualityInspectorTests
         Assert.Contains("No instrument", inspection.Skipped, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_finding_can_be_explained_and_stops_being_open()
+    {
+        // The other half of "stays open until something accounts for it".
+        // Without a way to close one, the open set only grows and the
+        // consistency score decays permanently.
+        var harness = new Harness();
+        harness.WithCalendarThrough(new DateOnly(2026, 12, 31));
+        harness.Store(Week(100m, 100m, 50m, 50m, 50m));
+
+        var inspection = await harness.InspectAsync();
+        harness.CommitIssues();
+
+        var raised = Assert.Single(inspection.Raised);
+
+        // Act
+        var resolved = await harness.ResolveAsync(
+            raised.Id, DataQualityResolution.Explained, "A two-for-one split on 2026-08-05.");
+
+        // Assert
+        Assert.NotNull(resolved);
+        Assert.False(resolved.IsOpen);
+        Assert.Equal(DataQualityIssueStatus.Explained, resolved.Status);
+        Assert.Empty(await harness.ListOpenAsync());
+    }
+
+    [Fact]
+    public async Task A_finding_can_be_dismissed_as_not_a_problem()
+    {
+        var harness = new Harness();
+        harness.WithCalendarThrough(new DateOnly(2026, 12, 31));
+        harness.Store(Week(100m, 100m, 50m, 50m, 50m));
+
+        var inspection = await harness.InspectAsync();
+        harness.CommitIssues();
+
+        var resolved = await harness.ResolveAsync(
+            inspection.Raised[0].Id,
+            DataQualityResolution.Dismissed,
+            "The venue confirmed the print.");
+
+        Assert.Equal(DataQualityIssueStatus.Dismissed, resolved!.Status);
+    }
+
+    [Fact]
+    public async Task Resolving_a_finding_that_does_not_exist_reports_nothing()
+    {
+        var harness = new Harness();
+
+        var resolved = await harness.ResolveAsync(
+            DataQualityIssueId.New(), DataQualityResolution.Dismissed, "Benign.");
+
+        Assert.Null(resolved);
+    }
+
+    [Fact]
+    public async Task A_dismissal_survives_the_next_inspection()
+    {
+        // A nightly run must not raise a fresh copy of a finding somebody has
+        // already decided about.
+        var harness = new Harness();
+        harness.WithCalendarThrough(new DateOnly(2026, 12, 31));
+        harness.Store(Week(100m, 100m, 50m, 50m, 50m));
+
+        var first = await harness.InspectAsync();
+        harness.CommitIssues();
+        await harness.ResolveAsync(
+            first.Raised[0].Id, DataQualityResolution.Dismissed, "Benign.");
+
+        // Act
+        var second = await harness.InspectAsync();
+
+        // Assert
+        Assert.Empty(second.Raised);
+        Assert.Empty(await harness.ListOpenAsync());
+    }
+
     private static OhlcvBar[] Week(
         decimal monday,
         decimal tuesday,
@@ -326,6 +403,7 @@ public sealed class BarQualityInspectorTests
         private readonly InMemoryInstrumentMaster _master = new();
         private readonly FakeDataQualityRepository _issues = new();
         private readonly BarQualityInspector _inspector;
+        private readonly DataQualityService _quality;
 
         public Harness(
             bool knownInstrument = true,
@@ -353,6 +431,15 @@ public sealed class BarQualityInspectorTests
                 _issues,
                 new FakeClock(Now),
                 NullLogger<BarQualityInspector>.Instance);
+
+            _quality = new DataQualityService(
+                _master,
+                new TradingCalendar(_exchanges),
+                Bars,
+                _issues,
+                new FakeIngestionJournal(),
+                new CommittingUnitOfWork(_issues),
+                new FakeClock(Now));
         }
 
         public FakeBarRepository Bars { get; }
@@ -372,6 +459,17 @@ public sealed class BarQualityInspectorTests
 
         /// <summary>Makes staged findings visible, as a commit would.</summary>
         public void CommitIssues() => _issues.Commit();
+
+        public Task<DataQualityIssue?> ResolveAsync(
+            DataQualityIssueId issueId,
+            DataQualityResolution outcome,
+            string reason) =>
+            _quality.ResolveIssueAsync(
+                issueId, outcome, reason, TestContext.Current.CancellationToken);
+
+        public Task<IReadOnlyList<DataQualityIssue>> ListOpenAsync() =>
+            _quality.ListOpenIssuesAsync(
+                HarnessInstrumentId, BarInterval.OneDay, 50, TestContext.Current.CancellationToken);
 
         public Task<QualityInspection> InspectAsync(
             BarInterval interval = BarInterval.OneDay,
@@ -408,6 +506,25 @@ public sealed class BarQualityInspectorTests
                 .SetValue(instrument, HarnessInstrumentId);
 
             return instrument;
+        }
+    }
+
+    /// <summary>
+    /// A unit of work that makes the findings store's staged writes visible.
+    /// </summary>
+    /// <remarks>
+    /// The resolution path commits through the unit of work, so the fake has to
+    /// do what the real one does or the test would assert against writes that
+    /// never landed.
+    /// </remarks>
+    private sealed class CommittingUnitOfWork(FakeDataQualityRepository issues)
+        : PersonalQuant.Application.Abstractions.IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            issues.Commit();
+
+            return Task.FromResult(0);
         }
     }
 

@@ -85,12 +85,6 @@ internal sealed class SingleInstrumentRepository : IInstrumentRepository
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Not exercised by ingestion.");
 
-    public Task<IReadOnlyList<Instrument>> ListTickerHistoryAsync(
-        ExchangeId exchangeId,
-        Ticker ticker,
-        CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("Not exercised by ingestion.");
-
     public Task<bool> IsTickerTakenAsync(
         ExchangeId exchangeId,
         Ticker ticker,
@@ -171,14 +165,6 @@ internal sealed class FakeBarRepository : IBarRepository
                     bar.InstrumentId == query.InstrumentId && bar.Interval == query.Interval)
                 .OrderBy(bar => bar.OpenedAtUtc)
                 .TakeLast(query.Limit)]);
-
-    public Task<OhlcvBar?> FindLatestAsync(
-        InstrumentId instrumentId,
-        BarInterval interval,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult(_bars.Values
-            .Where(bar => bar.InstrumentId == instrumentId && bar.Interval == interval)
-            .MaxBy(bar => bar.OpenedAtUtc));
 
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
