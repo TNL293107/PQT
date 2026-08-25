@@ -4,8 +4,11 @@ Market data is licensed, not owned. This repository's proprietary licence
 covers its source code and says nothing about the data the software may one
 day retrieve — that is governed entirely by whichever provider supplied it.
 
-**Phase 0 status:** no provider is integrated, no API key is in use, and no
-market data exists anywhere in this repository.
+**Status:** no *licensed* provider is integrated and no API key is in use. The
+only prices in this repository are a six-session synthetic series under
+`data/fixtures/`, invented for a ticker that is not listed on any venue, so the
+ingestion pipeline can be run on a fresh clone. No vendor data is present, and
+the rules below are what keep it that way.
 
 ## Rules
 

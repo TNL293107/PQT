@@ -4,8 +4,10 @@ This directory is the single agreed location for local datasets used by the
 terminal. It exists so that data never leaks into source directories and so
 that the Git policy for data is explicit rather than accidental.
 
-**Phase 0 status:** no datasets exist yet. Only this README and the schema
-folder convention are defined.
+**Status:** three interchange contracts under `schemas/`, and small synthetic
+fixtures under `fixtures/` that let the import and ingestion pipelines run on a
+fresh clone. No vendor dataset is present, and none may be added — see the
+rules below.
 
 ## Layout
 

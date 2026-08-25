@@ -15,7 +15,7 @@ engineering project.
 | **Phase**    | 4 — Corporate Actions & Adjusted Data, next (phases run 0–19) |
 | **Complete** | Phases 0–3 — instrument master, ingestion, and data quality   |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 622 green in CI — 532 .NET, 70 Vitest, 14 pytest, 6 CTest     |
+| **Tests**    | 637 green in CI — 546 .NET, 71 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
@@ -33,10 +33,11 @@ mocks.
 
 **What does not exist.** Corporate actions and adjusted prices, fundamentals,
 news, screening, factors, backtesting, portfolio, risk, orders, broker
-integration, AI. Nothing triggers an import or an ingestion run on a timer
-either — both reach outside the system, and the trigger waits for
-authentication. None of these are stubbed or half-built; they are simply not
-written.
+integration, AI. There is also no write surface over HTTP at all: reference
+data arrives through the import pipelines and bars through ingestion, both
+driven by the host on a schedule the operator configures, and a trigger
+endpoint waits for authentication. None of these are stubbed or half-built;
+they are simply not written.
 
 The [roadmap](docs/roadmap/phases.md) sets out all twenty phases and what each
 one has to deliver.

@@ -80,8 +80,9 @@ handling, health checks and OpenAPI. Serves only diagnostics endpoints.
 
 System of record. Version 17, running in Docker with a persistent named
 volume. The application owns the `quant` schema; EF Core migrations own its
-structure. Phase 0 applies one baseline migration that creates the schema and
-the migrations history table and nothing else.
+structure. Seven migrations so far: the baseline schema, the instrument master,
+its search index, the classification taxonomy, market data ingestion with its
+provenance and resume state, identifier aliases, and the data-quality tables.
 
 ### Redis — IMPLEMENTED
 
@@ -106,10 +107,16 @@ CTest. Not referenced by the backend. Phase 16 decides the interop mechanism
 
 ## External systems — all PLANNED
 
-### Market data providers
+### Market data providers — IMPLEMENTED
 
-Historical bars and, later, realtime quotes and trades for HOSE, HNX and
-UPCOM. Entry point is Phase 2.
+Historical bars for HOSE, HNX and UPCOM; realtime quotes and trades later.
+
+The only source shipped is file-backed — CSV exports read from disk, which is a
+real provider under the same contract, and how most Vietnamese historical data
+actually changes hands. It exists so the pipeline can be demonstrated without a
+licence. A vendor client implements the same interface and inherits the
+validation, deduplication, retry, spacing, audit and checkpointing without being
+able to opt out of any of them.
 
 Providers are reached through an `IMarketDataProvider` abstraction so no single
 vendor is hard-coded — Vietnamese market data providers are fewer and less

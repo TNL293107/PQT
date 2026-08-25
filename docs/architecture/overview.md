@@ -99,21 +99,23 @@ references `Domain`. `Infrastructure` implements what `Application` declares.
 `Api` composes. The build enforces this: there is no project reference that
 would allow `Domain` to reach for a database.
 
-In Phase 0, `Domain` and `Application` are close to empty by design. The
-financial model is Phase 1 work, and inventing it before there is a use case
-would be guessing.
+`Domain` and `Application` carry the financial model as far as the completed
+phases justify: instrument identity and its lifecycle, the classification
+taxonomy, identifier aliases, OHLCV bars, and the quality rules that measure a
+series. Nothing beyond that is modelled — a type invented before something
+reads it would be a guess.
 
 ## Component responsibilities
 
-| Component        | Owns                                                        | Phase 0 state                     |
-| ---------------- | ----------------------------------------------------------- | --------------------------------- |
-| `Api`            | Routing, CORS, exception handling, health, OpenAPI           | Health endpoints only             |
-| `Application`    | Use cases, ports such as `IClock`                            | `IClock` and the DI seam          |
-| `Domain`         | Instruments, prices, positions, orders, risk                 | Empty — Phase 1 onwards           |
-| `Infrastructure` | EF Core context, migrations, Redis, health checks            | Connection + migration pipeline   |
-| Frontend         | The terminal UI                                              | System status, capability map     |
-| Quant            | Factors, strategies, backtests, analytics                    | Packaging and config reader       |
-| C++ engine       | Latency-sensitive components                                 | Build, version reporting, tests   |
+| Component        | Owns                                                        | State after Phase 3                        |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------------ |
+| `Api`            | Routing, CORS, exception handling, health, OpenAPI           | Health, instruments, bars, ingestion, quality — all read-only |
+| `Application`    | Use cases and the ports infrastructure implements            | Search, resolution, import, ingestion, quality |
+| `Domain`         | Instruments, prices, positions, orders, risk                 | Instruments, classification, aliases, bars, quality findings |
+| `Infrastructure` | EF Core context, migrations, Redis, providers, health checks | Persistence, file-backed sources, scheduled hosts |
+| Frontend         | The terminal UI                                              | System status, security search, capability map |
+| Quant            | Factors, strategies, backtests, analytics                    | Packaging and config reader                |
+| C++ engine       | Latency-sensitive components                                 | Build, version reporting, tests            |
 
 ## Data flow today
 
@@ -281,10 +283,16 @@ response carries claim, source, timestamp and confidence.
 
 `LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 14.
 
-## What Phase 0 deliberately does not do
+## What the completed phases deliberately do not do
 
-- No financial entities, tables, or migrations beyond an empty baseline.
-- No market data, provider clients, or API keys in use.
+- No corporate actions, so no adjusted prices. Phase 4.
+- No HTTP write surface at all: instruments arrive through the import pipeline
+  and bars through ingestion, and neither has a trigger endpoint. Runs are
+  driven by the host, on a schedule the operator configures.
+- No licensed provider client and no API key in use. The file-backed sources
+  are real providers under the same contracts, so the pipelines can be
+  demonstrated without one.
+- No quality checks on intraday resolutions. The rules are session-scoped.
 - No authentication — there is nothing yet to protect, and guessing the model
   now would be rework.
 - No message broker, Kubernetes, or service mesh. See

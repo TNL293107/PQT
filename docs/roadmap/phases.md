@@ -281,10 +281,14 @@ Tick data is deliberately absent. A tick has no open, high, low or close, and
 modelling it as a zero-length interval would put a row shaped like a bar into a
 table that means something else.
 
-**Not delivered:** a scheduler. Nothing triggers ingestion on a timer, and no
-HTTP endpoint starts a run — a request that causes outbound calls to a
-rate-limited third party is not something to expose before there is
-authentication in front of it. The trigger lands with Phase 18.
+**Driven by the host, not by HTTP.** A background service ingests the listed
+universe on a configured period, and a second one runs the instrument and
+calendar imports once at start-up. Both are off by default: starting the API
+should not begin reading an external source. There is still no endpoint that
+triggers a run — a request causing outbound calls to a rate-limited third
+party waits for the authentication in Phase 18 — but a schedule the operator
+configured is a different thing, and without it checkpointing and resume would
+be machinery nothing exercised.
 
 Bound by [ADR-011](../architecture/decisions/ADR-011-market-data-ingestion.md).
 The export format the file source reads is documented in
