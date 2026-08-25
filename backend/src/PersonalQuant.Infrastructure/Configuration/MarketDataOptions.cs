@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using PersonalQuant.Application.MarketData;
+using PersonalQuant.Domain.Common;
+using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Infrastructure.Configuration;
 
@@ -90,6 +92,64 @@ public sealed class MarketDataOptions
     public string TradingCalendarPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the calendar and instrument
+    /// imports run once at start-up.
+    /// </summary>
+    /// <remarks>
+    /// Off by default, like migration and seeding, and for the same reason: a
+    /// deployed environment should decide for itself when it reads an external
+    /// source. Each import is skipped anyway if no source is configured for it.
+    /// </remarks>
+    public bool ImportReferenceDataOnStartup { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the host ingests market data on
+    /// a timer.
+    /// </summary>
+    /// <remarks>
+    /// Off by default. A fresh clone should not begin calling an external
+    /// source because somebody started the API.
+    /// </remarks>
+    public bool IngestOnSchedule { get; set; }
+
+    /// <summary>Gets or sets how often the ingestion loop wakes, in minutes.</summary>
+    [Range(1, 10_080)]
+    public int IngestionPeriodMinutes { get; set; } = 60;
+
+    /// <summary>
+    /// Gets or sets how long the loop waits before its first pass, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// Long enough for migration and seeding to finish. Ingesting against a
+    /// schema that is still being created would fail every instrument on the
+    /// first pass and log a wall of noise that means nothing.
+    /// </remarks>
+    [Range(0, 3_600)]
+    public int IngestionStartupDelaySeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets the bar resolution the loop ingests, in minutes.
+    /// </summary>
+    /// <remarks>
+    /// One resolution per deployment, and daily by default. A loop that
+    /// ingested every resolution would multiply provider calls by six for data
+    /// nothing reads yet.
+    /// </remarks>
+    [Range(1, 1_440)]
+    public int IngestionBarIntervalMinutes { get; set; } = 1_440;
+
+    /// <summary>
+    /// Gets or sets how many instruments one pass may cover.
+    /// </summary>
+    /// <remarks>
+    /// A bound, not a target. Each instrument is a provider call under the
+    /// spacing policy, so an unbounded universe would make one pass longer
+    /// than the period between passes.
+    /// </remarks>
+    [Range(1, 5_000)]
+    public int IngestionUniverseLimit { get; set; } = 250;
+
+    /// <summary>
     /// Converts the validated settings into the policy the pipeline uses.
     /// </summary>
     /// <returns>The ingestion policy.</returns>
@@ -104,4 +164,26 @@ public sealed class MarketDataOptions
             MinimumCallSpacing = TimeSpan.FromMilliseconds(MinimumCallSpacingMilliseconds),
             InitialBackfill = TimeSpan.FromDays(InitialBackfillDays),
         }.Validated();
+
+    /// <summary>
+    /// Returns the bar resolution the scheduled loop ingests.
+    /// </summary>
+    /// <remarks>
+    /// Validated here rather than trusted: the setting is a number in a file,
+    /// and a value that is not a declared resolution would otherwise reach the
+    /// pipeline and be skipped once per instrument per pass.
+    /// </remarks>
+    /// <returns>The resolution.</returns>
+    /// <exception cref="DomainValidationException">
+    /// The configured value is not a resolution this system records.
+    /// </exception>
+    public BarInterval BuildIngestionInterval()
+    {
+        var interval = (BarInterval)IngestionBarIntervalMinutes;
+
+        return interval.IsDeclared()
+            ? interval
+            : throw new DomainValidationException(
+                $"{IngestionBarIntervalMinutes} minutes is not a bar resolution this system records.");
+    }
 }
