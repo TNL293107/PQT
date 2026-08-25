@@ -82,4 +82,64 @@ internal static partial class InfrastructureLog
         Level = LogLevel.Error,
         Message = "Reference data seeding failed. The API will start, but instrument search may return nothing.")]
     public static partial void ReferenceDataSeedFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1120,
+        Level = LogLevel.Information,
+        Message = "Trading calendar import from {Source} created {Created} closure(s), {AlreadyHeld} already held, {Rejected} rejected.")]
+    public static partial void TradingCalendarImportCompleted(
+        ILogger logger,
+        string source,
+        int created,
+        int alreadyHeld,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 1121,
+        Level = LogLevel.Information,
+        Message = "Instrument import from {Source} created {Created} instrument(s), matched {Matched}, rejected {Rejected}.")]
+    public static partial void InstrumentImportCompleted(
+        ILogger logger,
+        string source,
+        int created,
+        int matched,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 1122,
+        Level = LogLevel.Error,
+        Message = "The {Import} import could not be completed. The API will start, but the reference data it depends on is stale.")]
+    public static partial void ReferenceDataImportFailed(
+        ILogger logger,
+        Exception exception,
+        string import);
+
+    [LoggerMessage(
+        EventId = 1130,
+        Level = LogLevel.Information,
+        Message = "Ingestion pass covered {Universe} instrument(s): {Ingested} attempted, {Failed} could not be attempted, in {ElapsedMs}ms.")]
+    public static partial void IngestionPassCompleted(
+        ILogger logger,
+        int universe,
+        int ingested,
+        int failed,
+        long elapsedMs);
+
+    [LoggerMessage(
+        EventId = 1131,
+        Level = LogLevel.Error,
+        Message = "An ingestion pass could not be completed. The schedule continues; the next pass will retry.")]
+    public static partial void IngestionPassFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1132,
+        Level = LogLevel.Warning,
+        Message = "The ingestion schedule covered {Covered} of {Total} listed instruments. The remainder is never ingested until the universe limit is raised.")]
+    public static partial void IngestionUniverseTruncated(ILogger logger, int covered, int total);
+
+    [LoggerMessage(
+        EventId = 1133,
+        Level = LogLevel.Error,
+        Message = "The ingestion schedule is misconfigured and will do nothing: {Problem}")]
+    public static partial void IngestionScheduleMisconfigured(ILogger logger, string problem);
 }

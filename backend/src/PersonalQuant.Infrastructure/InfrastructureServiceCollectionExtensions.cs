@@ -182,5 +182,13 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<ITradingCalendarProvider>(
                 _ => new FileTradingCalendarProvider(path));
         }
+
+        // The hosts the pipelines were written for. Both check their own flag
+        // and return immediately when it is off, so registering them
+        // unconditionally costs a deployment that wants neither nothing at
+        // all — and keeps the decision in configuration rather than in the
+        // composition root.
+        services.AddHostedService<ReferenceDataImportHostedService>();
+        services.AddHostedService<MarketDataIngestionHostedService>();
     }
 }
