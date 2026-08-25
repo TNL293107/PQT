@@ -1,5 +1,5 @@
 /** How far a capability has actually been built. */
-type CapabilityStatus = "PLANNED" | "IN PROGRESS";
+type CapabilityStatus = "PLANNED" | "IN PROGRESS" | "COMPLETE";
 
 interface Capability {
   readonly name: string;
@@ -25,15 +25,37 @@ interface Milestone {
  * unambiguous — a terminal showing empty chart panels implies features that do
  * not exist.
  */
+/**
+ * Picks the badge style for a status.
+ *
+ * Three states rather than two, because "complete" and "in progress" say
+ * different things to somebody deciding whether to rely on a capability, and
+ * collapsing them would make a shipped phase look like one still moving.
+ */
+function badgeClassName(status?: CapabilityStatus): string {
+  switch (status) {
+    case "COMPLETE":
+      return "capability-list__badge capability-list__badge--complete";
+    case "IN PROGRESS":
+      return "capability-list__badge capability-list__badge--active";
+    default:
+      return "capability-list__badge";
+  }
+}
+
 const MILESTONES: readonly Milestone[] = [
   {
     label: "Milestone 1",
     name: "Data Foundation",
     summary: "Know what an instrument is, then get its history right.",
     capabilities: [
-      { name: "Instrument master", phase: "Phase 1", status: "IN PROGRESS" },
-      { name: "Market data ingestion", phase: "Phase 2" },
-      { name: "Data normalization & quality", phase: "Phase 3" },
+      { name: "Instrument master", phase: "Phase 1", status: "COMPLETE" },
+      { name: "Market data ingestion", phase: "Phase 2", status: "COMPLETE" },
+      {
+        name: "Data normalization & quality",
+        phase: "Phase 3",
+        status: "COMPLETE",
+      },
       { name: "Corporate actions & adjusted data", phase: "Phase 4" },
     ],
   },
@@ -116,13 +138,7 @@ export function CapabilitiesPage() {
                   <span className="capability-list__phase numeric">
                     {capability.phase}
                   </span>
-                  <span
-                    className={
-                      capability.status === "IN PROGRESS"
-                        ? "capability-list__badge capability-list__badge--active"
-                        : "capability-list__badge"
-                    }
-                  >
+                  <span className={badgeClassName(capability.status)}>
                     {capability.status ?? "PLANNED"}
                   </span>
                 </li>

@@ -58,10 +58,20 @@ describe("App shell", () => {
     expect(badges.length).toBeGreaterThan(10);
   });
 
-  it("marks the instrument master as the one capability under way", () => {
+  it("marks the delivered data-foundation phases as complete", () => {
+    // The instrument master, ingestion and data quality all ship. A badge may
+    // only claim it because the behaviour genuinely exists.
     renderAt("/capabilities");
 
-    expect(screen.getAllByText("IN PROGRESS")).toHaveLength(1);
+    expect(screen.getAllByText("COMPLETE")).toHaveLength(3);
+  });
+
+  it("claims nothing is under way while nothing is", () => {
+    // The in-progress badge is reserved for a phase actually being built, so
+    // it is absent between phases rather than left on the last one finished.
+    renderAt("/capabilities");
+
+    expect(screen.queryAllByText("IN PROGRESS")).toHaveLength(0);
   });
 
   it("shows a not-found view for an unknown route", () => {

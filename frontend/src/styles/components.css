@@ -389,6 +389,13 @@
   color: var(--accent);
 }
 
+/* Delivered in full. Distinct from in-progress: the two say different things
+ * to somebody deciding whether to rely on a capability. */
+.capability-list__badge--complete {
+  background: var(--state-online-wash);
+  color: var(--state-online);
+}
+
 /* --- Current security bar ------------------------------------------------
  * The subject line for everything below it. Dense, single row, and loud
  * enough that the ticker is readable at a glance from across a desk.
