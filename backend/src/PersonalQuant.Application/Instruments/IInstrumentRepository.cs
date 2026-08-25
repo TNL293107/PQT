@@ -47,23 +47,6 @@ public interface IInstrumentRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists every instrument that has ever held a ticker on an exchange,
-    /// including delisted ones, most recently created first.
-    /// </summary>
-    /// <remarks>
-    /// Exists so that reassignment of a ticker can be audited rather than
-    /// discovered by surprise.
-    /// </remarks>
-    /// <param name="exchangeId">The venue to search.</param>
-    /// <param name="ticker">The ticker to look up.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>Every instrument that has held the ticker.</returns>
-    Task<IReadOnlyList<Instrument>> ListTickerHistoryAsync(
-        ExchangeId exchangeId,
-        Ticker ticker,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Reports whether a ticker is currently taken on an exchange.
     /// </summary>
     /// <param name="exchangeId">The venue to check.</param>
@@ -188,9 +171,17 @@ public interface IInstrumentRepository
     /// Lists the instruments connected to one by identity.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// One relation, and a factual one: another instrument that has held this
     /// ticker on this venue at another time. Peer groups are a different
     /// question and wait for the data that makes them meaningful.
+    /// </para>
+    /// <para>
+    /// This is also how a reassigned ticker is audited rather than discovered
+    /// by surprise. Vietnamese tickers are released on delisting and given to
+    /// a different issuer, and a chart drawn six years ago may not be about the
+    /// security now holding those three letters.
+    /// </para>
     /// </remarks>
     /// <param name="id">The instrument to relate from.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

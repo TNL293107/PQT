@@ -45,6 +45,58 @@ public interface IDataQualityService
         BarInterval interval,
         int limit,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records that something accounts for a finding, or that it was
+    /// investigated and is not a problem.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other half of "a finding stays open until something accounts for
+    /// it". Without a way to close one, the open set only ever grows and the
+    /// consistency score decays permanently — a series that was explained
+    /// years ago would still be scored as though nobody had looked.
+    /// </para>
+    /// <para>
+    /// Phase 4 is the caller: it matches an open price-limit finding to a
+    /// corporate action and explains it, which is a recorded resolution rather
+    /// than an edit. A human-facing surface waits for the authentication in
+    /// Phase 18, because an anonymous caller able to dismiss findings could
+    /// hide real corruption.
+    /// </para>
+    /// </remarks>
+    /// <param name="issueId">The finding to close.</param>
+    /// <param name="outcome">Whether it is explained or dismissed.</param>
+    /// <param name="reason">What accounts for it, or why it is not a problem.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>
+    /// The closed finding, or <see langword="null"/> when no such finding
+    /// exists.
+    /// </returns>
+    /// <exception cref="Domain.Common.DomainStateException">
+    /// The finding has already been closed.
+    /// </exception>
+    Task<DataQualityIssue?> ResolveIssueAsync(
+        DataQualityIssueId issueId,
+        DataQualityResolution outcome,
+        string reason,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>How a finding is being closed.</summary>
+/// <remarks>
+/// Two words, and they mean opposite things about the data. "Explained" says
+/// the discontinuity was real and something accounts for it; "dismissed" says
+/// there was nothing there. Collapsing them into one "resolved" would lose the
+/// distinction that matters when the series is read years later.
+/// </remarks>
+public enum DataQualityResolution
+{
+    /// <summary>Something known accounts for it — a corporate action, a halt.</summary>
+    Explained = 1,
+
+    /// <summary>Investigated and found not to be a problem.</summary>
+    Dismissed = 2,
 }
 
 /// <summary>
@@ -55,12 +107,16 @@ public interface IDataQualityService
 /// <param name="bars">The canonical series.</param>
 /// <param name="issues">What the rules found.</param>
 /// <param name="journal">The ingestion audit trail.</param>
+/// <param name="unitOfWork">Commits a resolution.</param>
+/// <param name="clock">Supplies the resolution instant.</param>
 internal sealed class DataQualityService(
     IInstrumentRepository instruments,
     ITradingCalendar calendar,
     IBarRepository bars,
     IDataQualityRepository issues,
-    IIngestionJournal journal) : IDataQualityService
+    IIngestionJournal journal,
+    Abstractions.IUnitOfWork unitOfWork,
+    Abstractions.IClock clock) : IDataQualityService
 {
     /// <summary>Most findings a caller may ask for in one read.</summary>
     private const int MaxIssues = 200;
@@ -153,6 +209,42 @@ internal sealed class DataQualityService(
             ? Task.FromResult<IReadOnlyList<DataQualityIssue>>([])
             : issues.ListOpenAsync(
                 instrumentId, interval, Math.Clamp(limit, 1, MaxIssues), cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<DataQualityIssue?> ResolveIssueAsync(
+        DataQualityIssueId issueId,
+        DataQualityResolution outcome,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        if (issueId.IsEmpty)
+        {
+            return null;
+        }
+
+        var issue = await issues.FindAsync(issueId, cancellationToken).ConfigureAwait(false);
+
+        if (issue is null)
+        {
+            return null;
+        }
+
+        // The aggregate decides whether the transition is legal — closing an
+        // already-closed finding would erase the audit trail it exists to
+        // leave — so the refusal propagates rather than being translated here.
+        if (outcome == DataQualityResolution.Explained)
+        {
+            issue.Explain(reason, clock.UtcNow);
+        }
+        else
+        {
+            issue.Dismiss(reason, clock.UtcNow);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return issue;
+    }
 
     private static int Count(
         IReadOnlyDictionary<DataQualityIssueKind, int> counts,

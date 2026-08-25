@@ -58,18 +58,6 @@ public interface IBarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads the newest bar held, if any.
-    /// </summary>
-    /// <param name="instrumentId">The instrument.</param>
-    /// <param name="interval">The resolution.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The newest bar, or <see langword="null"/> when the series is empty.</returns>
-    Task<OhlcvBar?> FindLatestAsync(
-        InstrumentId instrumentId,
-        BarInterval interval,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Stages new bars. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist them.
     /// </summary>

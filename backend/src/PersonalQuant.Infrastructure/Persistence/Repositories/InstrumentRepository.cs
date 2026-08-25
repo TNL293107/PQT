@@ -50,22 +50,6 @@ internal sealed class InstrumentRepository(PersonalQuantDbContext dbContext) : I
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Instrument>> ListTickerHistoryAsync(
-        ExchangeId exchangeId,
-        Ticker ticker,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(ticker);
-
-        return await dbContext.Instruments
-            .Where(instrument =>
-                instrument.ExchangeId == exchangeId && instrument.Ticker == ticker)
-            .OrderByDescending(instrument => instrument.CreatedAtUtc)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
     public Task<bool> IsTickerTakenAsync(
         ExchangeId exchangeId,
         Ticker ticker,
