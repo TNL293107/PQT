@@ -47,6 +47,18 @@ public static class DataRules
     public const int ValidationVersion = 1;
 
     /// <summary>
+    /// The version of the rules that turn corporate actions into the factors
+    /// applied to historical prices.
+    /// </summary>
+    /// <remarks>
+    /// Version 1: cash dividends against the previous close, splits and
+    /// reverse splits by their published ratio, stock dividends and bonus
+    /// issues by additional shares per share held, and rights issues by the
+    /// theoretical ex-rights price.
+    /// </remarks>
+    public const int AdjustmentVersion = 1;
+
+    /// <summary>
     /// The version recorded on data that has not been checked by the rules at
     /// all.
     /// </summary>
