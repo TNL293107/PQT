@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.MarketData;
 
@@ -146,5 +147,41 @@ internal static partial class ApplicationLog
         int rowsRead,
         int created,
         int alreadyHeld,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 3200,
+        Level = LogLevel.Information,
+        Message = "adjustment.recompute considered {Considered} action(s): computed {Computed}, unchanged {Unchanged}, removed {Removed}, explained {Explained} finding(s), rejected {Rejected}.")]
+    public static partial void PriceAdjustmentsRecomputed(
+        ILogger logger,
+        int considered,
+        int computed,
+        int unchanged,
+        int removed,
+        int explained,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 3201,
+        Level = LogLevel.Warning,
+        Message = "adjustment.recompute could not adjust a {Type} going ex on {ExDate}: {Detail}")]
+    public static partial void PriceAdjustmentRejected(
+        ILogger logger,
+        CorporateActionType type,
+        string exDate,
+        string detail);
+
+    [LoggerMessage(
+        EventId = 3210,
+        Level = LogLevel.Information,
+        Message = "corporateaction.import {Source} read {RowsRead} row(s): created {Created}, amended {Amended}, unchanged {Unchanged}, rejected {Rejected}.")]
+    public static partial void CorporateActionsImported(
+        ILogger logger,
+        string source,
+        int rowsRead,
+        int created,
+        int amended,
+        int unchanged,
         int rejected);
 }
