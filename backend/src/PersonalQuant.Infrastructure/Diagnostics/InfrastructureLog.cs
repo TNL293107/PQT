@@ -142,4 +142,15 @@ internal static partial class InfrastructureLog
         Level = LogLevel.Error,
         Message = "The ingestion schedule is misconfigured and will do nothing: {Problem}")]
     public static partial void IngestionScheduleMisconfigured(ILogger logger, string problem);
+
+    [LoggerMessage(
+        EventId = 1123,
+        Level = LogLevel.Information,
+        Message = "Corporate action import from {Source} created {Created} action(s), amended {Amended}, rejected {Rejected}.")]
+    public static partial void CorporateActionImportCompleted(
+        ILogger logger,
+        string source,
+        int created,
+        int amended,
+        int rejected);
 }

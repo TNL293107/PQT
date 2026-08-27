@@ -92,6 +92,17 @@ public sealed class MarketDataOptions
     public string TradingCalendarPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the CSV corporate action file to read, or an empty string
+    /// to leave it unregistered.
+    /// </summary>
+    /// <remarks>
+    /// With no source, no action is recorded and every series reads back
+    /// unadjusted — correct, and the same thing as a series with no actions,
+    /// which is why the adjusted read reports how many factors it applied.
+    /// </remarks>
+    public string CorporateActionPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the calendar and instrument
     /// imports run once at start-up.
     /// </summary>

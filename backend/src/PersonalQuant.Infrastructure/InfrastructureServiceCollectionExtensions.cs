@@ -6,10 +6,12 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Classification;
+using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Infrastructure.Caching;
+using PersonalQuant.Infrastructure.CorporateActions;
 using PersonalQuant.Infrastructure.Exchanges;
 using PersonalQuant.Infrastructure.Instruments;
 using PersonalQuant.Infrastructure.MarketData;
@@ -92,6 +94,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IBarRepository, BarRepository>();
         services.AddScoped<IIngestionJournal, IngestionJournalRepository>();
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
+        services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
 
@@ -182,6 +185,15 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<ITradingCalendarProvider>(
                 _ => new FileTradingCalendarProvider(path));
         }
+
+        if (!string.IsNullOrWhiteSpace(options.CorporateActionPath))
+        {
+            var path = options.CorporateActionPath;
+
+            services.AddSingleton<ICorporateActionProvider>(
+                _ => new FileCorporateActionProvider(path));
+        }
+
 
         // The hosts the pipelines were written for. Both check their own flag
         // and return immediately when it is off, so registering them
