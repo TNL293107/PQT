@@ -34,13 +34,15 @@ public sealed record BarQuery
         BarInterval interval,
         DateTimeOffset? fromUtc,
         DateTimeOffset? toUtc,
-        int limit)
+        int limit,
+        bool adjusted)
     {
         InstrumentId = instrumentId;
         Interval = interval;
         FromUtc = fromUtc;
         ToUtc = toUtc;
         Limit = limit;
+        Adjusted = adjusted;
     }
 
     /// <summary>Gets the instrument to read.</summary>
@@ -59,6 +61,25 @@ public sealed record BarQuery
     public int Limit { get; }
 
     /// <summary>
+    /// Gets a value indicating whether prices are rescaled for corporate
+    /// actions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to <see langword="true"/>, and the default is the point of the
+    /// phase. An unadjusted series makes every return computed across a split
+    /// silently wrong, and a caller who has not thought about it should get the
+    /// series that is right rather than the one that printed.
+    /// </para>
+    /// <para>
+    /// A caller who genuinely wants what printed — reconciling against a
+    /// broker statement, or checking a price the exchange published — asks for
+    /// it, and the answer says which it returned.
+    /// </para>
+    /// </remarks>
+    public bool Adjusted { get; }
+
+    /// <summary>
     /// Validates a read request.
     /// </summary>
     /// <param name="instrumentId">The instrument to read.</param>
@@ -68,6 +89,7 @@ public sealed record BarQuery
     /// <param name="limit">The requested bound, or null for <see cref="DefaultLimit"/>.</param>
     /// <param name="query">The validated query when successful.</param>
     /// <param name="problem">A caller-safe explanation when validation fails.</param>
+    /// <param name="adjusted">Whether to rescale for corporate actions.</param>
     /// <returns><see langword="true"/> when the request is usable.</returns>
     public static bool TryCreate(
         InstrumentId instrumentId,
@@ -76,7 +98,8 @@ public sealed record BarQuery
         DateTimeOffset? toUtc,
         int? limit,
         [NotNullWhen(true)] out BarQuery? query,
-        [NotNullWhen(false)] out string? problem)
+        [NotNullWhen(false)] out string? problem,
+        bool adjusted = true)
     {
         query = null;
 
@@ -109,7 +132,8 @@ public sealed record BarQuery
             return false;
         }
 
-        query = new BarQuery(instrumentId, interval, normalisedFrom, normalisedTo, resolvedLimit);
+        query = new BarQuery(
+            instrumentId, interval, normalisedFrom, normalisedTo, resolvedLimit, adjusted);
         problem = null;
         return true;
     }

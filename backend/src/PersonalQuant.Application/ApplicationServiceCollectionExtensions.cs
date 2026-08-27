@@ -77,5 +77,16 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<Exchanges.ITradingCalendarImportService, Exchanges.TradingCalendarImportService>();
         services.AddScoped<IBarQualityInspector, BarQualityInspector>();
         services.AddScoped<IDataQualityService, DataQualityService>();
+
+        // Corporate actions. The adjustment engine is registered beside the
+        // import that drives it, because an action recorded without its factor
+        // leaves a series unadjusted for an event the system already knows
+        // about.
+        services.AddScoped<
+            CorporateActions.IPriceAdjustmentService,
+            CorporateActions.PriceAdjustmentService>();
+        services.AddScoped<
+            CorporateActions.ICorporateActionImportService,
+            CorporateActions.CorporateActionImportService>();
     }
 }

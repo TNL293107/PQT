@@ -58,6 +58,25 @@ public interface IBarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads the last bar that opened strictly before an instant.
+    /// </summary>
+    /// <remarks>
+    /// The close a corporate action is measured against: the price the market
+    /// last saw with the entitlement attached. Strictly before, because a bar
+    /// opening on the ex-date is already trading without it.
+    /// </remarks>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="interval">The resolution.</param>
+    /// <param name="beforeUtc">The instant to look back from, exclusive.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The bar, or <see langword="null"/> when nothing precedes it.</returns>
+    Task<OhlcvBar?> FindLastBeforeAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset beforeUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages new bars. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist them.
     /// </summary>
