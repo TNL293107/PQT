@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Domain.Classification;
+using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
@@ -50,6 +51,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the aliases instruments are known by outside this system.</summary>
     public DbSet<InstrumentIdentifier> InstrumentIdentifiers => Set<InstrumentIdentifier>();
+
+    /// <summary>Gets the corporate actions issuers announced.</summary>
+    public DbSet<CorporateAction> CorporateActions => Set<CorporateAction>();
+
+    /// <summary>Gets the factors those actions imply.</summary>
+    public DbSet<PriceAdjustment> PriceAdjustments => Set<PriceAdjustment>();
 
     /// <summary>Gets the venues' scheduled closures.</summary>
     public DbSet<TradingHoliday> TradingHolidays => Set<TradingHoliday>();
