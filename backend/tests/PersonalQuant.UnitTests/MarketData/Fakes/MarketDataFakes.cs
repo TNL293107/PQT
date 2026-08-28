@@ -166,6 +166,18 @@ internal sealed class FakeBarRepository : IBarRepository
                 .OrderBy(bar => bar.OpenedAtUtc)
                 .TakeLast(query.Limit)]);
 
+    public Task<OhlcvBar?> FindLastBeforeAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset beforeUtc,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(_bars.Values
+            .Where(bar =>
+                bar.InstrumentId == instrumentId
+                && bar.Interval == interval
+                && bar.OpenedAtUtc < beforeUtc)
+            .MaxBy(bar => bar.OpenedAtUtc));
+
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
         foreach (var bar in bars)

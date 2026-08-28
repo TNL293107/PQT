@@ -47,7 +47,7 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
 
         // Assert
         var bar = Assert.Single(stored);
-        Assert.Equal(27_350.125m, bar.Close.Value);
+        Assert.Equal(27_350.125m, bar.Close);
         Assert.Equal(1_234_567.891m, bar.Turnover);
         Assert.Equal(Period, bar.OpenedAtUtc);
         Assert.Equal("TEST", bar.Source.Value);
@@ -111,9 +111,19 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
         await using var reader = await CreateScopeAsync();
         var stored = Assert.Single(await ReadSeriesAsync(reader, instrumentId));
 
-        Assert.Equal(108m, stored.Close.Value);
+        Assert.Equal(108m, stored.Close);
         Assert.Equal(1, stored.Revision);
-        Assert.Equal(Ingested.AddDays(1), stored.RevisedAtUtc);
+
+        // The restatement stamp lives on the stored bar rather than the read
+        // projection, so it is asserted through the tracked entity.
+        var reloaded = await reader.Bars.ListForUpdateAsync(
+            instrumentId,
+            BarInterval.OneDay,
+            Period,
+            Period.AddDays(1),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(Ingested.AddDays(1), Assert.Single(reloaded).RevisedAtUtc);
     }
 
     [Fact]
@@ -287,16 +297,20 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
             Source,
             Ingested);
 
-    private static async Task<IReadOnlyList<OhlcvBar>> ReadSeriesAsync(
+    private static async Task<IReadOnlyList<SeriesBar>> ReadSeriesAsync(
         MarketDataScope scope,
         InstrumentId instrumentId,
         BarInterval interval = BarInterval.OneDay,
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
-        int? limit = null)
+        int? limit = null,
+        bool adjusted = false)
     {
+        // Raw by default here: these tests are about what the schema stores,
+        // and adjustment is covered where the actions that drive it are.
         Assert.True(
-            BarQuery.TryCreate(instrumentId, interval, from, to, limit, out var query, out var problem),
+            BarQuery.TryCreate(
+                instrumentId, interval, from, to, limit, out var query, out var problem, adjusted),
             problem);
 
         var series = await scope.MarketData.GetSeriesAsync(
