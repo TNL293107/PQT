@@ -121,7 +121,12 @@ public sealed class ReferenceDataSeedingTests(DependencyContainerFixture contain
         var vnm = await scope.Instruments.FindActiveByTickerAsync(
             hose!.Id, Ticker.Create("VNM"), TestContext.Current.CancellationToken);
 
-        vnm!.Rename("Vinamilk", new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.Zero));
+        // Derived from the row the seeder just wrote, not from a fixed date.
+        // The seeder stamps creation with the real clock, so a hardcoded
+        // instant is only valid until the calendar passes it — this test
+        // failed for exactly that reason once the date it was written on went
+        // by. An edit one second after creation is correct whenever it runs.
+        vnm!.Rename("Vinamilk", vnm.CreatedAtUtc.AddSeconds(1));
         await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Act

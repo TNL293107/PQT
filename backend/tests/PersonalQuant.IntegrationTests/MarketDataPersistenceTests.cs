@@ -278,24 +278,38 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
         Assert.Empty(await ReadSeriesAsync(reader, instrumentId));
     }
 
+    /// <summary>Builds a bar the domain will accept for any close.</summary>
+    /// <remarks>
+    /// The range brackets both the open and the close rather than being fixed,
+    /// so a caller can vary the close to whatever the test is actually about —
+    /// a price with six decimal places, or simply a different number — without
+    /// the helper handing the aggregate a high below its own close. With the
+    /// default close this produces exactly the 100/110/95/105 bar it always
+    /// did.
+    /// </remarks>
     private static OhlcvBar Bar(
         InstrumentId instrumentId,
         DateTimeOffset openedAtUtc,
         decimal close = 105m,
         decimal? turnover = null,
-        BarInterval interval = BarInterval.OneDay) =>
-        OhlcvBar.Record(
+        BarInterval interval = BarInterval.OneDay)
+    {
+        const decimal open = 100m;
+        const decimal margin = 5m;
+
+        return OhlcvBar.Record(
             instrumentId,
             interval,
             openedAtUtc,
-            Price.Create(100m),
-            Price.Create(110m),
-            Price.Create(95m),
+            Price.Create(open),
+            Price.Create(Math.Max(open, close) + margin),
+            Price.Create(Math.Min(open, close) - margin),
             Price.Create(close),
             1_000,
             turnover,
             Source,
             Ingested);
+    }
 
     private static async Task<IReadOnlyList<SeriesBar>> ReadSeriesAsync(
         MarketDataScope scope,
