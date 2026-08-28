@@ -35,7 +35,8 @@ public sealed record BarQuery
         DateTimeOffset? fromUtc,
         DateTimeOffset? toUtc,
         int limit,
-        bool adjusted)
+        bool adjusted,
+        DateTimeOffset? knownAsOfUtc)
     {
         InstrumentId = instrumentId;
         Interval = interval;
@@ -43,6 +44,7 @@ public sealed record BarQuery
         ToUtc = toUtc;
         Limit = limit;
         Adjusted = adjusted;
+        KnownAsOfUtc = knownAsOfUtc;
     }
 
     /// <summary>Gets the instrument to read.</summary>
@@ -80,6 +82,32 @@ public sealed record BarQuery
     public bool Adjusted { get; }
 
     /// <summary>
+    /// Gets the observation instant to read the series as of, or
+    /// <see langword="null"/> for the current values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Observation time, not event time. It selects <em>what this system
+    /// believed</em> at that instant, which is the only reading a backtest may
+    /// use: a strategy simulated on a Tuesday cannot see a correction the
+    /// provider published on the Friday.
+    /// </para>
+    /// <para>
+    /// <see langword="null"/> is the current series and is byte-identical to
+    /// the behaviour before point-in-time reads existed. An instant earlier
+    /// than a period's first observation yields no bar for that period — never
+    /// the current value, which would be exactly the leak this exists to stop.
+    /// </para>
+    /// <para>
+    /// Corporate actions are <em>not</em> filtered by announcement date yet, so
+    /// an adjusted series read as of a past instant is point-in-time in its
+    /// prices and not in its adjustments. See
+    /// ADR-018; the remainder is U4's.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? KnownAsOfUtc { get; }
+
+    /// <summary>
     /// Validates a read request.
     /// </summary>
     /// <param name="instrumentId">The instrument to read.</param>
@@ -99,7 +127,8 @@ public sealed record BarQuery
         int? limit,
         [NotNullWhen(true)] out BarQuery? query,
         [NotNullWhen(false)] out string? problem,
-        bool adjusted = true)
+        bool adjusted = true,
+        DateTimeOffset? knownAsOfUtc = null)
     {
         query = null;
 
@@ -133,7 +162,13 @@ public sealed record BarQuery
         }
 
         query = new BarQuery(
-            instrumentId, interval, normalisedFrom, normalisedTo, resolvedLimit, adjusted);
+            instrumentId,
+            interval,
+            normalisedFrom,
+            normalisedTo,
+            resolvedLimit,
+            adjusted,
+            knownAsOfUtc?.ToUniversalTime());
         problem = null;
         return true;
     }

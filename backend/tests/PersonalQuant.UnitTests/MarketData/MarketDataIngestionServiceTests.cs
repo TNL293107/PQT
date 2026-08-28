@@ -339,6 +339,155 @@ public sealed class MarketDataIngestionServiceTests
         Assert.Empty(harness.Journal.Checkpoints);
     }
 
+    [Fact]
+    public async Task A_stored_bar_opens_an_observation_window_at_the_run_instant()
+    {
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        await harness.IngestAsync();
+
+        // Assert
+        var revision = Assert.Single(harness.Bars.Revisions);
+        Assert.Equal(0, revision.Revision);
+        Assert.Equal(Now, revision.ObservedFromUtc);
+        Assert.Null(revision.ObservedToUtc);
+        Assert.True(revision.IsCurrent);
+    }
+
+    [Fact]
+    public async Task The_first_window_opens_when_the_bar_says_it_was_ingested()
+    {
+        // The two views of first observation must agree. If they can drift, the
+        // migration that seeds a history from ingested_at_utc is seeding the
+        // wrong instant and nothing would say so.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        await harness.IngestAsync();
+
+        // Assert
+        var bar = Assert.Single(harness.Bars.All);
+        var revision = Assert.Single(harness.Bars.Revisions);
+        Assert.Equal(bar.IngestedAtUtc, revision.ObservedFromUtc);
+    }
+
+    [Fact]
+    public async Task A_restatement_closes_the_old_window_where_the_new_one_opens()
+    {
+        // Arrange — observe 100, then observe a correction to 101.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday, close: 100m));
+        await harness.IngestAsync();
+
+        var corrected = Now.AddDays(1);
+        harness.Clock.UtcNow = corrected;
+        harness.Returns(Bar(Yesterday, close: 101m));
+
+        // Act
+        await harness.IngestAsync(from: Yesterday, to: Yesterday.AddDays(1));
+
+        // Assert
+        Assert.Equal(2, harness.Bars.Revisions.Count);
+
+        var first = harness.Bars.Revisions[0];
+        var second = harness.Bars.Revisions[1];
+
+        Assert.Equal(100m, first.Close.Value);
+        Assert.Equal(101m, second.Close.Value);
+        Assert.Equal(0, first.Revision);
+        Assert.Equal(1, second.Revision);
+
+        // One instant, used twice. A second clock read would leave a gap here
+        // wide enough for an as-of query to fall into and find nothing.
+        Assert.Equal(corrected, first.ObservedToUtc);
+        Assert.Equal(corrected, second.ObservedFromUtc);
+        Assert.Equal(first.ObservedToUtc, second.ObservedFromUtc);
+        Assert.True(second.IsCurrent);
+    }
+
+    [Fact]
+    public async Task Re_fetching_an_unchanged_period_writes_no_revision()
+    {
+        // The bar is unchanged, so nothing was observed anew. A revision per
+        // fetch would bury the statements that actually differ.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday, close: 100m));
+        await harness.IngestAsync();
+
+        harness.Clock.UtcNow = Now.AddDays(1);
+        harness.Returns(Bar(Yesterday, close: 100m));
+
+        // Act
+        var run = await harness.IngestAsync(from: Yesterday, to: Yesterday.AddDays(1));
+
+        // Assert
+        Assert.Equal(0, run.BarsRevised);
+        Assert.Single(harness.Bars.Revisions);
+        Assert.True(harness.Bars.Revisions[0].IsCurrent);
+    }
+
+    [Fact]
+    public async Task The_open_window_always_matches_the_current_bar()
+    {
+        // The projection and its history are two records of one fact, and a
+        // disagreement between them would make every as-of answer suspect.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday, close: 100m));
+        await harness.IngestAsync();
+
+        harness.Clock.UtcNow = Now.AddDays(1);
+        harness.Returns(Bar(Yesterday, close: 101m));
+        await harness.IngestAsync(from: Yesterday, to: Yesterday.AddDays(1));
+
+        harness.Clock.UtcNow = Now.AddDays(2);
+        harness.Returns(Bar(Yesterday, close: 102m));
+        await harness.IngestAsync(from: Yesterday, to: Yesterday.AddDays(1));
+
+        // Assert
+        var bar = Assert.Single(harness.Bars.All);
+        var open = Assert.Single(harness.Bars.Revisions, revision => revision.IsCurrent);
+
+        Assert.Equal(bar.Close, open.Close);
+        Assert.Equal(bar.Volume, open.Volume);
+        Assert.Equal(bar.Source, open.Source);
+        Assert.Equal(bar.Revision, open.Revision);
+    }
+
+    [Fact]
+    public async Task Every_instant_is_covered_by_exactly_one_revision()
+    {
+        // The property the as-of read depends on. Restate the same period on a
+        // sequence of days, then check every boundary and midpoint: never two
+        // answers, and never none once the bar has been observed.
+        var harness = new Harness();
+        var observed = new List<DateTimeOffset>();
+
+        for (var day = 0; day < 5; day++)
+        {
+            harness.Clock.UtcNow = Now.AddDays(day);
+            observed.Add(harness.Clock.UtcNow);
+            harness.Returns(Bar(Yesterday, close: 100m + day));
+            await harness.IngestAsync(from: Yesterday, to: Yesterday.AddDays(1));
+        }
+
+        Assert.Equal(5, harness.Bars.Revisions.Count);
+
+        foreach (var instant in observed
+            .SelectMany(at => new[] { at.AddTicks(-1), at, at.AddHours(12) }))
+        {
+            var matches = harness.Bars.Revisions.Count(revision => revision.WasKnownAt(instant));
+
+            // Before the first observation there is no answer at all, which is
+            // the honest one — the system had not seen the bar yet.
+            var expected = instant < observed[0] ? 0 : 1;
+
+            Assert.Equal(expected, matches);
+        }
+    }
+
     private static ProviderBar Bar(DateTimeOffset openedAtUtc, decimal close = 105m) =>
         new(openedAtUtc, 100m, 110m, 95m, close, 1_000, null);
 

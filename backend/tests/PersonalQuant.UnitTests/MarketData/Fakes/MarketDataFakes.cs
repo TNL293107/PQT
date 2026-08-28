@@ -141,6 +141,9 @@ internal sealed class FakeBarRepository : IBarRepository
 
     public IReadOnlyCollection<OhlcvBar> All => _bars.Values;
 
+    /// <summary>The observation history, in the order it was written.</summary>
+    public List<BarRevision> Revisions { get; } = [];
+
     public Task<IReadOnlyList<OhlcvBar>> ListForUpdateAsync(
         InstrumentId instrumentId,
         BarInterval interval,
@@ -178,6 +181,35 @@ internal sealed class FakeBarRepository : IBarRepository
                 && bar.OpenedAtUtc < beforeUtc)
             .MaxBy(bar => bar.OpenedAtUtc));
 
+    public Task<IReadOnlyList<BarRevision>> QueryAsOfAsync(
+        BarQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<BarRevision>>(
+            [.. Revisions
+                .Where(revision =>
+                    revision.InstrumentId == query.InstrumentId
+                    && revision.Interval == query.Interval
+                    && query.KnownAsOfUtc is { } asOf
+                    && revision.WasKnownAt(asOf))
+                .OrderBy(revision => revision.OpenedAtUtc)
+                .TakeLast(query.Limit)]);
+
+    public Task<IReadOnlyList<BarRevision>> ListOpenRevisionsForUpdateAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<BarRevision>>(
+            [.. Revisions
+                .Where(revision =>
+                    revision.InstrumentId == instrumentId
+                    && revision.Interval == interval
+                    && revision.OpenedAtUtc >= fromUtc
+                    && revision.OpenedAtUtc < toUtc
+                    && revision.IsCurrent)
+                .OrderBy(revision => revision.OpenedAtUtc)]);
+
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
         foreach (var bar in bars)
@@ -185,6 +217,9 @@ internal sealed class FakeBarRepository : IBarRepository
             _bars[(bar.InstrumentId, bar.Interval, bar.OpenedAtUtc)] = bar;
         }
     }
+
+    public void AddRevisions(IReadOnlyList<BarRevision> revisions) =>
+        Revisions.AddRange(revisions);
 }
 
 /// <summary>An in-memory ingestion journal.</summary>

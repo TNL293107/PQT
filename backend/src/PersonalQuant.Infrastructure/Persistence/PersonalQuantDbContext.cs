@@ -67,6 +67,9 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets the canonical OHLCV series.</summary>
     public DbSet<OhlcvBar> Bars => Set<OhlcvBar>();
 
+    /// <summary>Gets what each bar was believed to be, and when.</summary>
+    public DbSet<BarRevision> BarRevisions => Set<BarRevision>();
+
     /// <summary>Gets the retained provider responses.</summary>
     public DbSet<RawMarketDataBatch> RawMarketDataBatches => Set<RawMarketDataBatch>();
 

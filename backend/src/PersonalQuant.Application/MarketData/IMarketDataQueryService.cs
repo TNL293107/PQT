@@ -94,15 +94,57 @@ internal sealed class MarketDataQueryService(
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        // An as-of read answers from the observation history; without one the
+        // path is exactly what it was before point-in-time reads existed, down
+        // to the query it issues.
+        if (query.KnownAsOfUtc is not null)
+        {
+            var asOf = await bars.QueryAsOfAsync(query, cancellationToken).ConfigureAwait(false);
+
+            return await ProjectAsync(
+                query,
+                asOf,
+                revision => revision.OpenedAtUtc,
+                SeriesBar.Raw,
+                SeriesBar.Adjusted,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var results = await bars.QueryAsync(query, cancellationToken).ConfigureAwait(false);
 
+        return await ProjectAsync(
+            query,
+            results,
+            bar => bar.OpenedAtUtc,
+            SeriesBar.Raw,
+            SeriesBar.Adjusted,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Projects a read into a series, rescaling it unless raw was asked for.
+    /// </summary>
+    /// <remarks>
+    /// Shared by the current and the as-of reads so the two cannot drift. The
+    /// walk that combines factors is the part where a duplicated copy would
+    /// eventually disagree with itself, and a series that adjusts differently
+    /// depending on which read produced it is a bug nobody would find quickly.
+    /// </remarks>
+    private async Task<BarSeries> ProjectAsync<T>(
+        BarQuery query,
+        IReadOnlyList<T> results,
+        Func<T, DateTimeOffset> openedAt,
+        Func<T, SeriesBar> raw,
+        Func<T, AdjustmentFactor, SeriesBar> adjusted,
+        CancellationToken cancellationToken)
+    {
         if (!query.Adjusted)
         {
             return new BarSeries(
                 query.InstrumentId,
                 query.Interval,
                 Adjusted: false,
-                [.. results.Select(SeriesBar.Raw)]);
+                [.. results.Select(raw)]);
         }
 
         var adjustments = await actions
@@ -113,7 +155,7 @@ internal sealed class MarketDataQueryService(
             query.InstrumentId,
             query.Interval,
             Adjusted: true,
-            Rescale(results, adjustments));
+            Rescale(results, adjustments, openedAt, raw, adjusted));
     }
 
     /// <summary>
@@ -132,13 +174,16 @@ internal sealed class MarketDataQueryService(
     /// a handful per instrument per year against thousands of bars.
     /// </para>
     /// </remarks>
-    private static SeriesBar[] Rescale(
-        IReadOnlyList<OhlcvBar> results,
-        IReadOnlyList<PriceAdjustment> adjustments)
+    private static SeriesBar[] Rescale<T>(
+        IReadOnlyList<T> results,
+        IReadOnlyList<PriceAdjustment> adjustments,
+        Func<T, DateTimeOffset> openedAt,
+        Func<T, SeriesBar> raw,
+        Func<T, AdjustmentFactor, SeriesBar> adjusted)
     {
         if (adjustments.Count == 0 || results.Count == 0)
         {
-            return [.. results.Select(SeriesBar.Raw)];
+            return [.. results.Select(raw)];
         }
 
         var ordered = adjustments.OrderByDescending(adjustment => adjustment.ExDate).ToList();
@@ -150,13 +195,13 @@ internal sealed class MarketDataQueryService(
         {
             var bar = results[index];
 
-            while (next < ordered.Count && ordered[next].AppliesTo(bar.OpenedAtUtc))
+            while (next < ordered.Count && ordered[next].AppliesTo(openedAt(bar)))
             {
                 cumulative = cumulative.Combine(ordered[next].Factor);
                 next++;
             }
 
-            rescaled[index] = SeriesBar.Adjusted(bar, cumulative);
+            rescaled[index] = adjusted(bar, cumulative);
         }
 
         return rescaled;

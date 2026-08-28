@@ -112,6 +112,71 @@ public sealed record SeriesBar(
             factor.Shares);
     }
 
+    /// <summary>
+    /// Projects a past statement of a bar exactly as it read at the time.
+    /// </summary>
+    /// <remarks>
+    /// The as-of counterpart of <see cref="Raw(OhlcvBar)"/>. It carries the
+    /// revision's own values, source and ordinal, so a series read as of an
+    /// earlier instant reports the statement that was actually held then rather
+    /// than today's correction of it.
+    /// </remarks>
+    /// <param name="revision">The statement held at the requested instant.</param>
+    /// <returns>The unrescaled projection.</returns>
+    public static SeriesBar Raw(BarRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+
+        return new SeriesBar(
+            revision.OpenedAtUtc,
+            revision.Open.Value,
+            revision.High.Value,
+            revision.Low.Value,
+            revision.Close.Value,
+            revision.Volume,
+            revision.Turnover,
+            revision.Source,
+            revision.Revision,
+            1m,
+            1m);
+    }
+
+    /// <summary>
+    /// Projects a past statement of a bar, rescaled by the actions after it.
+    /// </summary>
+    /// <remarks>
+    /// The factors applied here are the ones known <em>now</em>, not the ones
+    /// known at the requested instant: corporate actions are not yet filtered
+    /// by announcement date. The prices are point-in-time; the adjustment is
+    /// not. Closing that gap is U4's, and it is recorded in ADR-018 rather than
+    /// solved quietly here.
+    /// </remarks>
+    /// <param name="revision">The statement held at the requested instant.</param>
+    /// <param name="factor">The cumulative factor of every later action.</param>
+    /// <returns>The rescaled projection.</returns>
+    public static SeriesBar Adjusted(BarRevision revision, AdjustmentFactor factor)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+
+        if (factor.IsIdentity)
+        {
+            return Raw(revision);
+        }
+
+        return new SeriesBar(
+            revision.OpenedAtUtc,
+            Rescale(revision.Open, factor),
+            Rescale(revision.High, factor),
+            Rescale(revision.Low, factor),
+            Rescale(revision.Close, factor),
+            factor.ApplyToVolume(revision.Volume),
+            revision.Turnover,
+            revision.Source,
+            revision.Revision,
+            factor.Price,
+            factor.Shares);
+    }
+
     private static decimal Rescale(Price price, AdjustmentFactor factor) =>
         decimal.Round(price.Value * factor.Price, Price.MaxScale, MidpointRounding.ToEven);
 }

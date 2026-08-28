@@ -350,8 +350,23 @@ internal sealed class MarketDataIngestionService(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // The observation history of the same range. Loaded alongside the bars
+        // rather than per restatement, because a run that restates forty
+        // periods would otherwise issue forty queries for rows one query
+        // already covers.
+        var openRevisions = await bars
+            .ListOpenRevisionsForUpdateAsync(
+                request.InstrumentId,
+                request.Interval,
+                request.FromUtc,
+                request.ToUtc,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         var byPeriod = existing.ToDictionary(bar => bar.OpenedAtUtc);
+        var openByPeriod = openRevisions.ToDictionary(revision => revision.OpenedAtUtc);
         var toAdd = new List<OhlcvBar>(normalized.Accepted.Count);
+        var history = new List<BarRevision>(normalized.Accepted.Count);
         var revised = 0;
 
         foreach (var bar in normalized.Accepted)
@@ -359,10 +374,11 @@ internal sealed class MarketDataIngestionService(
             if (!byPeriod.TryGetValue(bar.OpenedAtUtc, out var held))
             {
                 toAdd.Add(bar);
+                history.Add(BarRevision.Snapshot(bar, ingestedAtUtc));
                 continue;
             }
 
-            if (held.Revise(
+            if (!held.Revise(
                     bar.Open,
                     bar.High,
                     bar.Low,
@@ -372,14 +388,32 @@ internal sealed class MarketDataIngestionService(
                     source,
                     ingestedAtUtc))
             {
-                revised++;
+                // Re-fetching an unchanged period. Nothing moved, so nothing is
+                // observed anew and the history must not grow — a revision row
+                // per fetch would make the record of what changed unreadable.
+                continue;
             }
+
+            revised++;
+
+            // Both edges take the run's instant, never a second clock read.
+            // The window a statement was held for ends exactly where its
+            // successor's begins, so no as-of instant can fall between them and
+            // find the period missing.
+            if (openByPeriod.TryGetValue(bar.OpenedAtUtc, out var superseded))
+            {
+                superseded.Supersede(ingestedAtUtc);
+            }
+
+            history.Add(BarRevision.Snapshot(held, ingestedAtUtc));
         }
 
         if (toAdd.Count > 0)
         {
             bars.AddRange(toAdd);
         }
+
+        bars.AddRevisions(history);
 
         return new MergeOutcome(toAdd, revised);
     }

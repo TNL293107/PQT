@@ -102,6 +102,18 @@ internal static class MarketDataEndpoints
     /// reconciling against a broker statement wants the raw series and asks
     /// for it.
     /// </para>
+    /// <para>
+    /// <c>knownAsOf</c> reads the series as this system believed it at that
+    /// instant, rather than as it now stands. Omitted, the answer is the
+    /// current series and is identical to what it was before point-in-time
+    /// reads existed. Supplied, a period first observed later is absent rather
+    /// than filled in from today's value — a backtest that could see a
+    /// correction published after its decision is not a backtest.
+    /// </para>
+    /// <para>
+    /// The prices are point-in-time; the corporate actions applied to them are
+    /// not yet filtered by announcement date. See ADR-018.
+    /// </para>
     /// </remarks>
     private static async Task<Results<Ok<BarSeriesResponse>, ProblemHttpResult>> GetBarsAsync(
         Guid instrumentId,
@@ -110,6 +122,7 @@ internal static class MarketDataEndpoints
         DateTimeOffset? to,
         int? limit,
         bool? adjusted,
+        DateTimeOffset? knownAsOf,
         IInstrumentCatalog catalog,
         IMarketDataQueryService marketData,
         CancellationToken cancellationToken)
@@ -125,7 +138,15 @@ internal static class MarketDataEndpoints
         var id = new InstrumentId(instrumentId);
 
         if (!BarQuery.TryCreate(
-                id, resolution, from, to, limit, out var query, out var problem, adjusted ?? true))
+                id,
+                resolution,
+                from,
+                to,
+                limit,
+                out var query,
+                out var problem,
+                adjusted ?? true,
+                knownAsOf))
         {
             return TypedResults.Problem(
                 detail: problem,

@@ -26,6 +26,7 @@ reasoning at the time is preserved.
 | [015](ADR-015-vietnam-market-data-provider.md)               | Vietnamese market data provider integration | Accepted |
 | [016](ADR-016-python-dotnet-research-boundary.md)            | The boundary between the backend and the quant layer | Accepted |
 | [017](ADR-017-qlib-research-adapter.md)                      | Qlib as a research-only adapter | Accepted |
+| [018](ADR-018-point-in-time-market-bars.md)                  | Point-in-time market bars       | Accepted |
 
 ## Format
 

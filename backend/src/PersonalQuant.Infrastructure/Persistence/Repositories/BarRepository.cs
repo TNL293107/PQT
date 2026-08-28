@@ -92,6 +92,75 @@ internal sealed class BarRepository(PersonalQuantDbContext dbContext) : IBarRepo
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<BarRevision>> QueryAsOfAsync(
+        BarQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        if (query.KnownAsOfUtc is not { } knownAsOfUtc)
+        {
+            throw new InvalidOperationException(
+                "An as-of read requires a known-as-of instant on the query.");
+        }
+
+        var revisions = dbContext.BarRevisions
+            .AsNoTracking()
+            .Where(revision =>
+                revision.InstrumentId == query.InstrumentId
+                && revision.Interval == query.Interval
+                // The half-open window. Inclusive at the instant the statement
+                // was first held, exclusive at the instant it was superseded,
+                // so adjacent revisions never both match and no instant falls
+                // between two of them.
+                && revision.ObservedFromUtc <= knownAsOfUtc
+                && (revision.ObservedToUtc == null || revision.ObservedToUtc > knownAsOfUtc));
+
+        if (query.FromUtc is { } fromUtc)
+        {
+            revisions = revisions.Where(revision => revision.OpenedAtUtc >= fromUtc);
+        }
+
+        if (query.ToUtc is { } toUtc)
+        {
+            revisions = revisions.Where(revision => revision.OpenedAtUtc < toUtc);
+        }
+
+        // Bounded from the newest period, for the same reason the current-value
+        // read is: a chart asks for the last N periods, and taking from the
+        // oldest end would silently return the start of the instrument's life.
+        var newestFirst = await revisions
+            .OrderByDescending(revision => revision.OpenedAtUtc)
+            .Take(query.Limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        newestFirst.Reverse();
+
+        return newestFirst;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BarRevision>> ListOpenRevisionsForUpdateAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default) =>
+        // Tracked, like the bars they accompany: a restatement closes the open
+        // window in place, and a change applied to a detached entity would be
+        // computed correctly and never written.
+        await dbContext.BarRevisions
+            .Where(revision =>
+                revision.InstrumentId == instrumentId
+                && revision.Interval == interval
+                && revision.OpenedAtUtc >= fromUtc
+                && revision.OpenedAtUtc < toUtc
+                && revision.ObservedToUtc == null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
         ArgumentNullException.ThrowIfNull(bars);
@@ -102,5 +171,18 @@ internal sealed class BarRepository(PersonalQuantDbContext dbContext) : IBarRepo
         }
 
         dbContext.Bars.AddRange(bars);
+    }
+
+    /// <inheritdoc />
+    public void AddRevisions(IReadOnlyList<BarRevision> revisions)
+    {
+        ArgumentNullException.ThrowIfNull(revisions);
+
+        if (revisions.Count == 0)
+        {
+            return;
+        }
+
+        dbContext.BarRevisions.AddRange(revisions);
     }
 }

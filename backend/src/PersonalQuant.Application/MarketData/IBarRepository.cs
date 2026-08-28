@@ -77,9 +77,65 @@ public interface IBarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads a bounded window of a series as it was believed at an instant.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reads the observation history rather than the current projection, and
+    /// returns for each period the one statement whose observation window
+    /// covers <see cref="BarQuery.KnownAsOfUtc"/>.
+    /// </para>
+    /// <para>
+    /// A period first observed after that instant contributes nothing. It is
+    /// not filled from the current value: a bar the system had not yet seen is
+    /// absent, and pretending otherwise is the leak point-in-time reads exist
+    /// to close.
+    /// </para>
+    /// </remarks>
+    /// <param name="query">The validated query, carrying a non-null as-of.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The statements held at that instant, oldest period first.</returns>
+    Task<IReadOnlyList<BarRevision>> QueryAsOfAsync(
+        BarQuery query,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads the statements already held for a range, for restatement.
+    /// </summary>
+    /// <remarks>
+    /// Tracked, and only the open ones: the ingestion pipeline closes the
+    /// current statement when a source restates a period, and a closed window
+    /// is never reopened.
+    /// </remarks>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="interval">The resolution.</param>
+    /// <param name="fromUtc">The inclusive start of the range.</param>
+    /// <param name="toUtc">The exclusive end of the range.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The open revision of each period held in the range.</returns>
+    Task<IReadOnlyList<BarRevision>> ListOpenRevisionsForUpdateAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages new bars. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist them.
     /// </summary>
     /// <param name="bars">The bars to add.</param>
     void AddRange(IReadOnlyList<OhlcvBar> bars);
+
+    /// <summary>
+    /// Stages observation-history snapshots alongside the bars they describe.
+    /// </summary>
+    /// <remarks>
+    /// Staged through the same unit of work as the bars, so the current
+    /// projection and its history commit together or not at all. A history
+    /// that could commit without its bar would be a record of something that
+    /// never happened.
+    /// </remarks>
+    /// <param name="revisions">The revisions to add.</param>
+    void AddRevisions(IReadOnlyList<BarRevision> revisions);
 }
