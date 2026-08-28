@@ -23,6 +23,9 @@ reasoning at the time is preserved.
 | [012](ADR-012-identifier-aliases-and-provider-import.md)     | Identifier aliases and the provider import pipeline | Accepted |
 | [013](ADR-013-data-quality-and-lineage.md)                   | Data quality rules, the trading calendar and lineage | Accepted |
 | [014](ADR-014-corporate-actions-and-adjusted-prices.md)      | Corporate actions and adjusted prices | Accepted |
+| [015](ADR-015-vietnam-market-data-provider.md)               | Vietnamese market data provider integration | Accepted |
+| [016](ADR-016-python-dotnet-research-boundary.md)            | The boundary between the backend and the quant layer | Accepted |
+| [017](ADR-017-qlib-research-adapter.md)                      | Qlib as a research-only adapter | Accepted |
 
 ## Format
 

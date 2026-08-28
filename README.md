@@ -10,13 +10,35 @@ engineering project.
 
 ## Current status
 
+```
+Phase 0–4                     COMPLETE *
+Research Foundation Upgrade   IN PROGRESS   ← current work
+Phase 5–20                    PLANNED
+
+* implemented and tested, but empirically unvalidated against
+  real Vietnamese market data until U3 is completed.
+```
+
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Phase**    | 5 — Market Intelligence Terminal, next (phases run 0–19)      |
 | **Complete** | Phases 0–4 — master, ingestion, quality, adjusted prices      |
+| **Current**  | Research Foundation Upgrade — U1–U10 (phases run 0–20)        |
+| **Next**     | Phase 5 — Market Intelligence Terminal, after **Gate A**      |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
 | **Tests**    | 706 green in CI — 615 .NET, 71 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
+
+**The caveat that matters.** Phases 2–4 are built, tested and reviewed. They
+have never processed a real Vietnamese price — the only market data here is a
+six-session synthetic series for a ticker listed on no venue. That makes their
+correctness properties **designed and tested but not empirically validated**:
+
+```
+Implemented + tested   ≠   Empirically validated with real market data
+```
+
+Closing that gap is **U3**, and it is mandatory. See the
+[canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
 Redis for real; a complete instrument master — identity and listing lifecycle,
@@ -32,15 +54,42 @@ read, so the raw series is never rewritten; a terminal with Ctrl+K security
 search and a current-security context. All of it covered by tests that run
 against real containers, not mocks.
 
-**What does not exist.** Fundamentals, news, screening, factors, backtesting, portfolio, risk, orders, broker
-integration, AI. There is also no write surface over HTTP at all: reference
-data arrives through the import pipelines and bars through ingestion, both
-driven by the host on a schedule the operator configures, and a trigger
-endpoint waits for authentication. None of these are stubbed or half-built;
-they are simply not written.
+**What does not exist.** Point-in-time reads, universe membership, real market
+data, fundamentals, news, screening, factors, backtesting, portfolio, risk,
+orders, broker integration, AI. The `quant/` and `cpp-engine/` layers contain
+packaging, tooling and tests but **no financial code**. There is also no write
+surface over HTTP at all: reference data arrives through the import pipelines
+and bars through ingestion, both driven by the host on a schedule the operator
+configures, and a trigger endpoint waits for authentication. None of these are
+stubbed or half-built; they are simply not written.
 
-The [roadmap](docs/roadmap/phases.md) sets out all twenty phases and what each
-one has to deliver.
+## Current work — Research Foundation Upgrade
+
+Ten workstreams between Phase 4 and Phase 5. Purpose: make the Phase 0–4 data
+architecture **empirically valid**, and establish the research foundation the
+quantitative phases depend on.
+
+| | Workstream | Gate |
+| --- | --- | --- |
+| **U1** | Temporal / point-in-time correctness | A |
+| **U2** | Universe & survivorship correctness | A |
+| **U3** | **Real Vietnamese data provider integration — MANDATORY** | A |
+| **U4** | Adjustment & announcement awareness | A |
+| **U5** | Canonical dataset contract | A |
+| **U6** | Quant research abstraction layer | B |
+| **U7** | Research storage | B |
+| **U8** | Qlib research adapter | B |
+| **U9** | Experiment tracking & reproducibility | B |
+| **U10** | Python / .NET research boundary | B |
+
+**Gate A** — U1–U5 plus real-data validation — gates Phase 5.
+**Gate B** — U6–U10 — completes the Upgrade and runs in parallel with Phase 5.
+
+> **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
+> fixtures.** Synthetic data does not satisfy Gate A.
+
+The [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md) sets out all twenty-one
+phases, both gates, and what each one has to deliver.
 
 ---
 
@@ -115,7 +164,7 @@ Phase 0.
 │   ├── src/
 │   │   ├── PersonalQuant.Api/              HTTP, middleware, health, OpenAPI
 │   │   ├── PersonalQuant.Application/      use cases, ports
-│   │   ├── PersonalQuant.Domain/           financial model (empty in Phase 0)
+│   │   ├── PersonalQuant.Domain/           financial model
 │   │   └── PersonalQuant.Infrastructure/   PostgreSQL, Redis, migrations
 │   └── tests/               unit + integration
 ├── frontend/                React terminal
@@ -125,7 +174,7 @@ Phase 0.
 ├── docs/
 │   ├── architecture/        overview, context, data policy, ADRs
 │   ├── development/         local setup, git workflow
-│   └── roadmap/             phases
+│   └── roadmap/             canonical roadmap (v2)
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -279,10 +328,10 @@ Phase 0 establishes hygiene, not a security model.
 - Health endpoints log failures in full and disclose nothing to the caller.
 - CI fails the build on a dependency with a known advisory, and scans history
   for secrets.
-- `LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 14.
+- `LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 15.
 
 **There is no authentication yet.** There is nothing to protect, and guessing
-the model now would be rework. It arrives in Phase 18, or sooner if any part of
+the model now would be rework. It arrives in Phase 19, or sooner if any part of
 this leaves localhost.
 
 ## Data policy
@@ -298,19 +347,22 @@ integration.
 
 ## Roadmap
 
-Twenty phases in four milestones. Phases 0 through 4 are complete — the whole
-data foundation — and everything else is planned.
+Twenty-one phases, numbered 0–20. **Phase numbering is canonical and frozen** —
+no phase is ever renumbered, inserted or merged. Phases 0 through 4 are
+complete, the Research Foundation Upgrade is under way, and everything else is
+planned.
 
-| Milestone | Becomes           | Phases | Status                    |
-| --------- | ----------------- | ------ | ------------------------- |
-| 1         | Data foundation   | 0–4    | COMPLETE                  |
-| 2         | Quant platform    | 5–10   | PLANNED                   |
-| 3         | Trading system    | 11–15  | PLANNED                   |
-| 4         | Engineered system | 16–19  | PLANNED                   |
+| Stage | Becomes | Phases | Status |
+| --- | --- | --- | --- |
+| 1 | Data foundation | 0–4 | COMPLETE * |
+| — | **Research foundation** | **U1–U10** | **IN PROGRESS** |
+| 2 | Quant platform | 5–12 | PLANNED |
+| 3 | Trading system | 13–16 | PLANNED |
+| 4 | Engineered system | 17–20 | PLANNED |
 
 Five phases carry the dependency chain everything else inherits, and none may
 be done superficially: **2** (market data ingestion) → **3** (data quality) →
-**4** (corporate actions) → **9** (backtesting) → **10** (risk).
+**4** (corporate actions) → **8** (backtesting) → **9** (risk).
 
 > Data correct → research trustworthy → backtest trustworthy → risk
 > trustworthy → execution trustworthy.
@@ -348,7 +400,38 @@ calendar's: nothing cross-checks an imported ratio against the price series, so
 a ratio transcribed as 20 instead of 2 produces a plausible factor and a ruined
 chart.
 
-Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
+## Long-term advanced research
+
+Placed, not designed. Each has exactly one canonical owner, and none is built
+during the Research Foundation Upgrade — the Upgrade only establishes their
+prerequisites.
+
+| Capability | Owner | Status |
+| --- | --- | --- |
+| Prediction Market Mispricing | Phase 12 | `RESEARCH ONLY` — no legal, liquid Vietnamese market exists |
+| Information Diffusion | Phase 12 | `PLANNED` — unblocked by U1's announcement time |
+| Implied Risk-Neutral Distribution (Breeden–Litzenberger) | Phase 12 | `BLOCKED` — Vietnam has no listed equity options |
+| Backtest Overfitting Detection — core | Phase 8 | `PLANNED` — needs U9's trial count |
+| Advanced multiple-testing (Reality Check, SPA) | Phase 12 | `PLANNED` |
+
+Rationale in [docs/architecture/advanced-research.md](docs/architecture/advanced-research.md).
+
+## How to read status labels
+
+| Label | Means |
+| --- | --- |
+| `COMPLETE` | Implemented, tested, and in the repository |
+| `IN PROGRESS` | Being built now |
+| `PLANNED` | Decided and scheduled; no code |
+| `BLOCKED` | Cannot proceed — a prerequisite outside the project is missing |
+| `DEFERRED` | Deliberately postponed; the trigger to revisit is recorded |
+| `RESEARCH ONLY` | Explored in research; never in the production runtime |
+
+Architecture documents additionally mark sections **DESIGNED** where a design
+exists but no code does. These six are the only status values any PQT document
+uses.
+
+Full detail in [docs/roadmap/pqt-roadmap-v2.md](docs/roadmap/pqt-roadmap-v2.md).
 
 ## Design constraints decided up front
 
@@ -357,9 +440,14 @@ Recorded now because they are expensive to retrofit:
 - **Canonical instrument identity.** Provider symbols are aliases, never keys.
   In Vietnam this is forced rather than merely wise — tickers change on
   exchange transfer and are reassigned after delisting.
-- **Point-in-time correctness.** Every fact carries both the period it
-  describes and the moment it became knowable, so backtests cannot use
-  information that did not exist yet.
+- **Point-in-time correctness.** Event time, effective time, announcement time,
+  observation time and revision are five distinct things and are never
+  collapsed. *Designed, not yet implemented for prices* — `quant.bars` is
+  overwritten on restatement today, and U1 adds the observation history and the
+  `knownAsOf` read. See
+  [data-architecture.md](docs/architecture/data-architecture.md).
+- **No survivorship bias.** Historical universes must reflect what actually
+  existed then. *Designed, not yet implemented* — U2.
 - **Data quality is a pipeline stage**, not an assumption. Thresholds are
   per-exchange, matching the ±7% / ±10% / ±15% daily price limits.
 - **Raw data is never overwritten.** Corporate actions are applied as a
@@ -367,20 +455,24 @@ Recorded now because they are expensive to retrofit:
 - **Deterministic execution path.** `strategy → signal → portfolio → risk → OMS
   → execution → broker`. A strategy has no route to a broker; the risk engine
   can reject.
-- **AI advises, never trades.** The Phase 17 analyst has no path to the OMS.
+- **AI advises, never trades.** The Phase 18 analyst has no path to the OMS.
 
 ## Documentation
 
 | Document                                                                       | Contents                        |
 | ------------------------------------------------------------------------------ | ------------------------------- |
+| [Roadmap v2.0](docs/roadmap/pqt-roadmap-v2.md)                                 | **Canonical** — phases 0–20, U1–U10, gates, statuses |
 | [Architecture overview](docs/architecture/overview.md)                         | Current and target architecture |
+| [Data architecture](docs/architecture/data-architecture.md)                    | Temporal model, universes, adjustment, dataset contract, storage |
+| [Quant research architecture](docs/architecture/quant-research-architecture.md) | Research protocols, Python/.NET boundary, experiments |
+| [Qlib integration](docs/architecture/qlib-integration.md)                      | Adapter boundary and removal procedure |
+| [Advanced research](docs/architecture/advanced-research.md)                    | The five long-term research capabilities |
 | [System context](docs/architecture/system-context.md)                          | Actors and external systems     |
 | [Data policy](docs/architecture/data-policy.md)                                | Market data licensing           |
 | [Instrument search](docs/architecture/instrument-search.md)                    | Search, resolution, current security |
-| [ADRs](docs/architecture/decisions/)                                           | Ten recorded decisions          |
+| [ADRs](docs/architecture/decisions/)                                           | Seventeen recorded decisions    |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
 | [Git workflow](docs/development/git-workflow.md)                               | Branching and commit standards  |
-| [Roadmap](docs/roadmap/phases.md)                                              | All twenty phases               |
 
 ## License
 

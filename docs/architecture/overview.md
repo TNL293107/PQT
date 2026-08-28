@@ -1,8 +1,13 @@
 # Architecture Overview
 
-**Phase: 0 — Foundation & Architecture.** This document describes what exists
-today and the direction it is built to grow in. Anything marked PLANNED is not
-implemented.
+**Phases 0–4 COMPLETE. Currently executing the Research Foundation Upgrade.**
+This document describes what exists today and the direction it is built to grow
+in. Anything marked PLANNED is not implemented.
+
+Phases 2–4 are `COMPLETE` — implemented and tested — but remain **empirically
+unvalidated against real Vietnamese market data** until U3 is completed. The
+canonical statement of project state is
+[`../roadmap/pqt-roadmap-v2.md`](../roadmap/pqt-roadmap-v2.md).
 
 ## Purpose
 
@@ -61,9 +66,15 @@ to simulate.
         to the backend                 to the backend
 ```
 
-The Python and C++ layers are real, built and tested, but they do not yet
-communicate with the backend. Establishing the toolchains before there is
-pressure to use them is the point of Phase 0.
+The Python and C++ layers are real, built and tested, but they contain no
+financial code and do not yet communicate with the backend. Establishing the
+toolchains before there is pressure to use them was the point of Phase 0.
+
+The Python layer is populated in **Gate B** of the Research Foundation Upgrade
+(U6–U10), and the boundary it will use is decided in
+[ADR-016](decisions/ADR-016-python-dotnet-research-boundary.md). The C++ layer
+stays untouched until a measurement justifies it, per
+[ADR-005](decisions/ADR-005-cpp-performance-layer.md).
 
 ## Technology stack
 
@@ -107,7 +118,7 @@ reads it would be a guess.
 
 ## Component responsibilities
 
-| Component        | Owns                                                        | State after Phase 3                        |
+| Component        | Owns                                                        | State after Phase 4                        |
 | ---------------- | ----------------------------------------------------------- | ------------------------------------------ |
 | `Api`            | Routing, CORS, exception handling, health, OpenAPI           | Health, instruments, bars, ingestion, quality — all read-only |
 | `Application`    | Use cases and the ports infrastructure implements            | Search, resolution, import, ingestion, quality |
@@ -198,18 +209,24 @@ The ten domains the system is intended to grow into. All PLANNED.
 Implementation proceeds in vertical slices, not tier by tier. The tiers
 describe what the system *becomes*, in order:
 
-| Milestone | Becomes             | Phases | Content                                                    |
-| --------- | ------------------- | ------ | ----------------------------------------------------------- |
-| 1         | Data foundation     | 0–4    | Instrument master, ingestion, quality, corporate actions     |
-| 2         | Quant platform      | 5–10   | Terminal, fundamentals, news, factors, backtesting, risk     |
-| 3         | Trading system      | 11–15  | Portfolio, paper trading, OMS, broker, reconciliation        |
-| 4         | Engineered system   | 16–19  | C++ hot path, AI analyst, hardening, presentation            |
+| Stage | Becomes | Phases | Content |
+| --- | --- | --- | --- |
+| 1 | Data foundation | 0–4 | Instrument master, ingestion, quality, corporate actions |
+| — | **Research foundation** | **U1–U10** | **Point-in-time, universes, real data, dataset contract, research layer** |
+| 2 | Quant platform | 5–12 | Terminal, fundamentals, factors, backtesting, risk, portfolio, news, advanced research |
+| 3 | Trading system | 13–16 | Paper trading, OMS, broker, reconciliation |
+| 4 | Engineered system | 17–20 | C++ hot path, AI analyst, hardening, presentation |
 
 Five phases carry the dependency chain the rest of the system inherits, and
 none may be done superficially: **2** (ingestion) → **3** (quality) → **4**
-(corporate actions) → **9** (backtesting) → **10** (risk).
+(corporate actions) → **8** (backtesting) → **9** (risk).
 
-See [`../roadmap/phases.md`](../roadmap/phases.md).
+The Research Foundation Upgrade sits between Phase 4 and Phase 5 and is split
+into two gates. **Gate A** — U1–U5 plus real-data validation — gates Phase 5.
+**Gate B** — U6–U10 — completes the Upgrade and may run in parallel with
+Phase 5.
+
+See [`../roadmap/pqt-roadmap-v2.md`](../roadmap/pqt-roadmap-v2.md).
 
 ## Constraints that shape the design
 
@@ -229,14 +246,24 @@ together. See [ADR-008](decisions/ADR-008-vietnam-market-first.md).
 
 ### Point-in-time correctness
 
-A fact has two timestamps: the period it describes and the moment it became
-knowable. Q4 revenue for a fiscal period ending in December is not knowable to
-a strategy running in January if it was reported in February.
+A fact has more than one timestamp. Q4 revenue for a fiscal period ending in
+December is not knowable to a strategy running in January if it was reported in
+February. Storing only the fiscal period makes look-ahead bias unavoidable and,
+worse, invisible — backtests simply look better than reality.
 
-Storing only the fiscal period makes look-ahead bias unavoidable and, worse,
-invisible — backtests simply look better than reality. Fundamental data
-therefore carries both timestamps from Phase 6, and the backtester filters on
-knowability, not on period.
+PQT distinguishes five concepts and never collapses them: **event time**,
+**effective time**, **announcement time**, **observation time**, and
+**revision** — which is the ordinal identity of a statement, not a timestamp,
+and is not a substitute for observation time.
+
+**This is designed, not yet implemented for prices.** `quant.bars` records
+ingestion and revision but is overwritten in place on restatement, so as-of
+reads are not currently possible. U1 of the Research Foundation Upgrade adds an
+append-only observation history and a `knownAsOf` read; U4 makes the adjustment
+path respect announcement time. Fundamental data carries its reporting timestamp
+from Phase 6 and inherits the same mechanism.
+
+Detail in [`data-architecture.md`](data-architecture.md).
 
 ### Data quality is a stage, not a hope
 
@@ -276,16 +303,17 @@ convention.
 
 ### AI advises; it never trades
 
-The AI analyst (Phase 17) reads market data, filings, news and fundamentals and
+The AI analyst (Phase 18) reads market data, filings, news and fundamentals and
 produces cited analysis and hypotheses. It has no path to the OMS. Order
 sizing, risk approval and execution stay deterministic and reviewable. Every
 response carries claim, source, timestamp and confidence.
 
-`LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 14.
+`LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 15.
 
 ## What the completed phases deliberately do not do
 
-- No corporate actions, so no adjusted prices. Phase 4.
+- No real market data. The only prices are a synthetic fixture series; every
+  Phase 2–4 correctness property is therefore unfalsified until U3.
 - No HTTP write surface at all: instruments arrive through the import pipeline
   and bars through ingestion, and neither has a trigger endpoint. Runs are
   driven by the host, on a schedule the operator configures.
