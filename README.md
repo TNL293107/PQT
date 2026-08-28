@@ -25,7 +25,7 @@ Phase 5–20                    PLANNED
 | **Current**  | Research Foundation Upgrade — U1–U10 (phases run 0–20)        |
 | **Next**     | Phase 5 — Market Intelligence Terminal, after **Gate A**      |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 706 green in CI — 615 .NET, 71 Vitest, 14 pytest, 6 CTest     |
+| **Tests**    | 732 green in CI — 539 unit, 102 integration, 71 Vitest, 14 pytest, 6 CTest |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that matters.** Phases 2–4 are built, tested and reviewed. They
@@ -308,9 +308,15 @@ cd cpp-engine && cmake --preset ci && cmake --build --preset ci && ctest --prese
 
 The backend integration tests start real PostgreSQL and Redis containers via
 Testcontainers. Without Docker they **skip with an explicit reason** rather
-than passing quietly. CI runners have a daemon, so all 88 of them execute
-there — a green build means the search ranking, the partial unique index and
-the migration were exercised against a real PostgreSQL 17, not a substitute.
+than passing quietly. CI runners have a daemon, so all 102 of them execute
+there — a green build means the search ranking, the partial unique index, the
+point-in-time observation window and the migration were exercised against a
+real PostgreSQL 17, not a substitute.
+
+Those 102 share one database and nothing resets it between tests, so each one
+isolates itself by using data no other test claims — its own exchange code,
+ticker and identifier. A test that reuses one collides on a unique index and
+fails in its setup.
 
 ## Security
 
