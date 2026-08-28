@@ -27,9 +27,22 @@ public sealed class InstrumentIdentifierTests(DependencyContainerFixture contain
     private static readonly SourceCode Vendor = SourceCode.Create("VENDOR");
     private static readonly SourceCode Other = SourceCode.Create("OTHER");
 
-    /// <summary>Synthetic ISINs, valid by check digit and belonging to nobody.</summary>
+    /// <summary>
+    /// Synthetic ISINs, valid by check digit.
+    /// </summary>
+    /// <remarks>
+    /// One per test that stores a global identifier, never shared. Every class
+    /// here writes to the same database and nothing resets it between tests, so
+    /// uniqueness of the data <em>is</em> the isolation — the same reason the
+    /// exchange codes and tickers below are all distinct. A global identifier
+    /// is unique on scheme and value alone, with no instrument in the key, so
+    /// two tests reusing one ISIN collide on
+    /// <c>ux_instrument_identifiers_global</c> and whichever runs second fails
+    /// in its setup.
+    /// </remarks>
     private const string IsinA = "AU0000XVGZA3";
     private const string IsinB = "US0378331005";
+    private const string IsinC = "XS0000PQT003";
 
     [Fact]
     public async Task An_alias_round_trips_and_is_found_by_its_value()
@@ -166,7 +179,7 @@ public sealed class InstrumentIdentifierTests(DependencyContainerFixture contain
         var venue = await AddExchangeAsync(scope, "IDNF");
         var instrumentId = await AddInstrumentAsync(scope, venue, "IDI", "Detailed Company");
 
-        await AddAliasAsync(scope, instrumentId, IdentifierScheme.Isin, IsinA, source: null);
+        await AddAliasAsync(scope, instrumentId, IdentifierScheme.Isin, IsinC, source: null);
         await AddAliasAsync(scope, instrumentId, IdentifierScheme.ProviderSymbol, "IDI.HM", Vendor);
 
         // Act
