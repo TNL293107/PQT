@@ -88,10 +88,20 @@ internal static class MarketDataEndpoints
     /// <c>GET /instruments/{instrumentId}/bars</c>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// An unknown instrument is a 404 and a known instrument with no data is a
     /// 200 with an empty list. They are different situations — "there is no
     /// such security" and "nothing has been ingested for it yet" — and a chart
     /// that cannot tell them apart shows the wrong message for both.
+    /// </para>
+    /// <para>
+    /// Prices are adjusted for corporate actions unless <c>adjusted=false</c>
+    /// is asked for, and the response says which it returned. The default is
+    /// the safer one: a return computed across an unadjusted split is wrong by
+    /// the split ratio and nothing about the numbers says so. A caller
+    /// reconciling against a broker statement wants the raw series and asks
+    /// for it.
+    /// </para>
     /// </remarks>
     private static async Task<Results<Ok<BarSeriesResponse>, ProblemHttpResult>> GetBarsAsync(
         Guid instrumentId,
@@ -99,6 +109,7 @@ internal static class MarketDataEndpoints
         DateTimeOffset? from,
         DateTimeOffset? to,
         int? limit,
+        bool? adjusted,
         IInstrumentCatalog catalog,
         IMarketDataQueryService marketData,
         CancellationToken cancellationToken)
@@ -113,7 +124,8 @@ internal static class MarketDataEndpoints
 
         var id = new InstrumentId(instrumentId);
 
-        if (!BarQuery.TryCreate(id, resolution, from, to, limit, out var query, out var problem))
+        if (!BarQuery.TryCreate(
+                id, resolution, from, to, limit, out var query, out var problem, adjusted ?? true))
         {
             return TypedResults.Problem(
                 detail: problem,

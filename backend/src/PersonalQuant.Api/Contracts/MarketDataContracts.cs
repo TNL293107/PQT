@@ -26,9 +26,14 @@ namespace PersonalQuant.Api.Contracts;
 /// <param name="Low">The lowest traded price.</param>
 /// <param name="Close">The last traded price.</param>
 /// <param name="Volume">Units traded.</param>
-/// <param name="Turnover">Cash value traded, when the source reported it.</param>
+/// <param name="Turnover">
+/// Cash value traded, when the source reported it. Never rescaled: it is the
+/// cash that actually changed hands rather than a per-share quantity.
+/// </param>
 /// <param name="Source">Where the bar came from.</param>
 /// <param name="Revision">How many times the source has restated the period.</param>
+/// <param name="PriceFactor">What the prices were multiplied by. One when raw.</param>
+/// <param name="ShareFactor">What the volume was multiplied by. One when raw.</param>
 public sealed record BarResponse(
     DateTimeOffset OpenedAtUtc,
     decimal Open,
@@ -38,25 +43,29 @@ public sealed record BarResponse(
     long Volume,
     decimal? Turnover,
     string Source,
-    int Revision)
+    int Revision,
+    decimal PriceFactor,
+    decimal ShareFactor)
 {
     /// <summary>Projects a bar onto the wire contract.</summary>
     /// <param name="bar">The bar to project.</param>
     /// <returns>The response representation.</returns>
-    public static BarResponse From(OhlcvBar bar)
+    public static BarResponse From(SeriesBar bar)
     {
         ArgumentNullException.ThrowIfNull(bar);
 
         return new BarResponse(
             bar.OpenedAtUtc,
-            bar.Open.Value,
-            bar.High.Value,
-            bar.Low.Value,
-            bar.Close.Value,
+            bar.Open,
+            bar.High,
+            bar.Low,
+            bar.Close,
             bar.Volume,
             bar.Turnover,
             bar.Source.Value,
-            bar.Revision);
+            bar.Revision,
+            bar.PriceFactor,
+            bar.ShareFactor);
     }
 }
 
@@ -70,12 +79,24 @@ public sealed record BarResponse(
 /// </remarks>
 /// <param name="InstrumentId">The instrument.</param>
 /// <param name="Interval">The resolution, by name.</param>
+/// <param name="Adjusted">
+/// Whether the prices were rescaled for corporate actions. Always stated: an
+/// adjusted series and a raw one answer different questions, and a client that
+/// cannot tell them apart will eventually compare one against the other.
+/// </param>
+/// <param name="AdjustedBars">
+/// How many bars in this response were actually rescaled. Zero on an adjusted
+/// series means no action went ex inside the window — not that adjustment was
+/// skipped.
+/// </param>
 /// <param name="Count">How many bars are in this response.</param>
 /// <param name="Limit">The bound that was applied.</param>
 /// <param name="Bars">The bars, oldest first.</param>
 public sealed record BarSeriesResponse(
     Guid InstrumentId,
     string Interval,
+    bool Adjusted,
+    int AdjustedBars,
     int Count,
     int Limit,
     IReadOnlyList<BarResponse> Bars)
@@ -91,6 +112,8 @@ public sealed record BarSeriesResponse(
         return new BarSeriesResponse(
             series.InstrumentId.Value,
             series.Interval.ToString(),
+            series.Adjusted,
+            series.Bars.Count(bar => bar.IsAdjusted),
             series.Bars.Count,
             limit,
             [.. series.Bars.Select(BarResponse.From)]);
