@@ -113,9 +113,15 @@ services:
       # calendar covers the year and report a week of real closures as missing
       # sessions. Point TradingCalendarPath at a real calendar before enabling
       # completeness scoring. See data/schemas/trading-calendar-csv.md.
+      #
+      # The fixture corporate actions are invented and concern only DEMO, the
+      # security the fixture bar series describes. They exist so the adjustment
+      # engine runs end to end; point CorporateActionPath at real action
+      # history before trusting an adjusted price.
       MarketData__InstrumentListPath: ${MARKET_DATA_INSTRUMENT_LIST:-/app/data/fixtures/instruments.csv}
       MarketData__FileProviderDirectory: ${MARKET_DATA_BAR_DIRECTORY:-/app/data/fixtures/market-data}
       MarketData__TradingCalendarPath: ${MARKET_DATA_CALENDAR:-}
+      MarketData__CorporateActionPath: ${MARKET_DATA_CORPORATE_ACTIONS:-/app/data/fixtures/corporate-actions.csv}
       MarketData__ImportReferenceDataOnStartup: ${MARKET_DATA_IMPORT_ON_STARTUP:-false}
       MarketData__IngestOnSchedule: ${MARKET_DATA_INGEST_ON_SCHEDULE:-false}
       MarketData__IngestionPeriodMinutes: ${MARKET_DATA_INGESTION_PERIOD_MINUTES:-60}

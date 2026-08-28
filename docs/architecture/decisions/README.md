@@ -22,6 +22,7 @@ reasoning at the time is preserved.
 | [011](ADR-011-market-data-ingestion.md)                      | Market data ingestion, provenance and resume state | Accepted |
 | [012](ADR-012-identifier-aliases-and-provider-import.md)     | Identifier aliases and the provider import pipeline | Accepted |
 | [013](ADR-013-data-quality-and-lineage.md)                   | Data quality rules, the trading calendar and lineage | Accepted |
+| [014](ADR-014-corporate-actions-and-adjusted-prices.md)      | Corporate actions and adjusted prices | Accepted |
 
 ## Format
 

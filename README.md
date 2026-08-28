@@ -12,10 +12,10 @@ engineering project.
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Phase**    | 4 — Corporate Actions & Adjusted Data, next (phases run 0–19) |
-| **Complete** | Phases 0–3 — instrument master, ingestion, and data quality   |
+| **Phase**    | 5 — Market Intelligence Terminal, next (phases run 0–19)      |
+| **Complete** | Phases 0–4 — master, ingestion, quality, adjusted prices      |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 637 green in CI — 546 .NET, 71 Vitest, 14 pytest, 6 CTest     |
+| **Tests**    | 706 green in CI — 615 .NET, 71 Vitest, 14 pytest, 6 CTest     |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
@@ -27,12 +27,12 @@ ingestion pipeline with validation, deduplication, retained raw payloads,
 resume checkpoints and an audit record for every attempt including the ones
 that did nothing; data-quality rules that measure a series against the venue's
 price band and its trading calendar, and record what they find rather than
-correcting it; a terminal with Ctrl+K security search and a current-security
-context. All of it covered by tests that run against real containers, not
-mocks.
+correcting it; corporate actions with adjusted prices applied as a factor on
+read, so the raw series is never rewritten; a terminal with Ctrl+K security
+search and a current-security context. All of it covered by tests that run
+against real containers, not mocks.
 
-**What does not exist.** Corporate actions and adjusted prices, fundamentals,
-news, screening, factors, backtesting, portfolio, risk, orders, broker
+**What does not exist.** Fundamentals, news, screening, factors, backtesting, portfolio, risk, orders, broker
 integration, AI. There is also no write surface over HTTP at all: reference
 data arrives through the import pipelines and bars through ingestion, both
 driven by the host on a schedule the operator configures, and a trigger
@@ -215,6 +215,21 @@ Everything in this list is implemented and covered by tests.
   checked it, so changing a rule is a query rather than a re-validation of
   everything. See
   [ADR-013](docs/architecture/decisions/ADR-013-data-quality-and-lineage.md).
+- **Corporate actions and adjusted prices (Phase 4)** — eight action types,
+  with rights issues and bonus shares first-class rather than dividend
+  variants, because in this market they are routine and their maths is not a
+  dividend's. An adjustment is a price multiplier and a share multiplier stored
+  beside the bars, computed against the close of the last session before the
+  ex-date and stamped with the action version it came from, so a restated ratio
+  makes its factor stale by comparison rather than forcing a re-derivation of
+  everything. **Raw bars are never rewritten** —
+  `GET /instruments/{id}/bars` returns an adjusted series by default and says
+  which it returned, and unadjusted is available labelled, alongside
+  `GET /instruments/{id}/corporate-actions`. An action with no price before it
+  is rejected rather than guessed. An action whose ex-date lands on an open
+  price-limit finding closes it, which is what Phase 3 left this phase to do.
+  See
+  [ADR-014](docs/architecture/decisions/ADR-014-corporate-actions-and-adjusted-prices.md).
 - **Terminal security search** — `Ctrl+K`, type, arrow, `Enter`. Sets the
   terminal's current security, which every later module reads by canonical
   identifier rather than by ticker.
@@ -244,7 +259,7 @@ cd cpp-engine && cmake --preset ci && cmake --build --preset ci && ctest --prese
 
 The backend integration tests start real PostgreSQL and Redis containers via
 Testcontainers. Without Docker they **skip with an explicit reason** rather
-than passing quietly. CI runners have a daemon, so all 53 of them execute
+than passing quietly. CI runners have a daemon, so all 88 of them execute
 there — a green build means the search ranking, the partial unique index and
 the migration were exercised against a real PostgreSQL 17, not a substitute.
 
@@ -283,12 +298,12 @@ integration.
 
 ## Roadmap
 
-Twenty phases in four milestones. Phases 0 through 3 are complete, and
-everything else is planned.
+Twenty phases in four milestones. Phases 0 through 4 are complete — the whole
+data foundation — and everything else is planned.
 
 | Milestone | Becomes           | Phases | Status                    |
 | --------- | ----------------- | ------ | ------------------------- |
-| 1         | Data foundation   | 0–4    | Phases 0–3 done · Phase 4 next |
+| 1         | Data foundation   | 0–4    | COMPLETE                  |
 | 2         | Quant platform    | 5–10   | PLANNED                   |
 | 3         | Trading system    | 11–15  | PLANNED                   |
 | 4         | Engineered system | 16–19  | PLANNED                   |
@@ -318,10 +333,20 @@ to put in front of a trigger.
 **Phase 3 — Data Normalization & Quality** is complete. A discontinuity larger
 than the venue permits, a session the calendar expected and did not get, and a
 bar on a day the market was shut are each recorded as a finding that stays open
-until something explains it. Nothing is corrected automatically: Phase 4 is what
-turns an open price-limit finding into a corporate action. The honest caveat is
-the calendar — it has to be imported, because Vietnam's cannot be derived, and
-until one is, completeness is reported as unmeasured rather than guessed.
+until something explains it. Nothing is corrected automatically. The honest
+caveat is the calendar — it has to be imported, because Vietnam's cannot be
+derived, and until one is, completeness is reported as unmeasured rather than
+guessed.
+
+**Phase 4 — Corporate Actions & Adjusted Data** is complete, which closes the
+data foundation. A split no longer reads as a 50% crash: the series is returned
+adjusted by default, the raw bars are untouched, and the adjustment is a stored
+factor that can be corrected when a ratio is restated. An action landing on an
+open price-limit finding closes it, so the queue Phase 3 left behind is drained
+by the phase that can actually answer it. The caveat here is the mirror of the
+calendar's: nothing cross-checks an imported ratio against the price series, so
+a ratio transcribed as 20 instead of 2 produces a plausible factor and a ruined
+chart.
 
 Full detail in [docs/roadmap/phases.md](docs/roadmap/phases.md).
 

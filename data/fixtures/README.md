@@ -11,6 +11,7 @@ that did may be added. The rules in [`../README.md`](../README.md) apply.
 | [`instruments.csv`](instruments.csv) | [instrument symbol list](../schemas/instrument-csv.md) | the file instrument source, for provider import |
 | [`trading-calendar.csv`](trading-calendar.csv) | [trading calendar](../schemas/trading-calendar-csv.md) | the file calendar source, for completeness scoring |
 | [`market-data/`](market-data/) | [market data CSV](../schemas/market-data-csv.md) | the file market data source, for bar ingestion |
+| [`corporate-actions.csv`](corporate-actions.csv) | [corporate action CSV](../schemas/corporate-action-csv.md) | the file corporate action source, for adjusted prices |
 
 ## Instrument symbol list
 
@@ -50,3 +51,28 @@ figure.
 See [`market-data/README.md`](market-data/README.md). Its ticker is `DEMO`,
 which is not listed on any Vietnamese venue and is not in the symbol list
 above; register an instrument under it before ingesting.
+
+## Corporate actions
+
+Two invented actions against `DEMO`, the same security the market data fixture
+describes, so the adjustment pipeline can be run end to end on a fresh clone:
+
+```
+MarketData__CorporateActionPath=data/fixtures/corporate-actions.csv
+```
+
+The cash dividend is fitted to the price series on purpose. `DEMO` closes at
+25,050 on 2026-08-07 and at 24,700 on 2026-08-10, and the dividend is 350 — so
+the whole of the final session's decline is the dividend coming out, and the
+adjusted series is flat across it where the raw series drops. That is what an
+adjusted chart is for, visible on six sessions.
+
+The second row is a share issuance, which is recorded and rescales nothing. It
+is there so the fixture exercises the path where an action is a real fact about
+the issuer and still produces no factor — a case that reads identically to a
+failed computation unless something distinguishes them.
+
+The import resolves symbols through the provider alias the **instrument**
+import wrote, so an instrument must be registered under `DEMO` for the same
+source first; otherwise both rows are refused as `UnknownInstrument`. There is
+no fallback to the bare ticker, deliberately.

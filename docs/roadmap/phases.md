@@ -53,7 +53,7 @@ Everything else in the system rests on them.
 | 1     | Instrument Master                   | 1         | COMPLETE |
 | 2     | Market Data Ingestion               | 1         | COMPLETE |
 | 3     | Data Normalization & Quality        | 1         | COMPLETE |
-| 4     | Corporate Actions & Adjusted Data   | 1         | PLANNED  |
+| 4     | Corporate Actions & Adjusted Data   | 1         | COMPLETE |
 | 5     | Market Intelligence Terminal        | 2         | PLANNED  |
 | 6     | Fundamental & Financial Data        | 2         | PLANNED  |
 | 7     | News & Alternative Data             | 2         | PLANNED  |
@@ -357,54 +357,76 @@ Bound by [ADR-013](../architecture/decisions/ADR-013-data-quality-and-lineage.md
 The calendar format is documented in
 [`data/schemas/trading-calendar-csv.md`](../../data/schemas/trading-calendar-csv.md).
 
-## Phase 4 — Corporate Actions & Adjusted Data · PLANNED
+## Phase 4 — Corporate Actions & Adjusted Data · COMPLETE
 
 **Backbone phase.** Placed before backtesting deliberately: an unadjusted
 series makes every backtest silently wrong.
 
-**Actions:** cash dividend, stock dividend, stock split, reverse split, rights
-issue, bonus shares, share issuance, symbol change.
+**Delivered**
 
-Rights issues and bonus shares are far more common in Vietnam than in
-developed markets and cannot be treated as edge cases.
-
-```
-CorporateAction
-├── instrument_id
-├── action_type
-├── ex_date
-├── record_date
-├── payment_date
-├── ratio
-├── cash_amount
-├── source
-└── version
-```
-
-**Adjustment engine**
-
-```
-Raw price + corporate actions → adjustment factor → adjusted price
-```
+- **Eight action types**, with rights issues and bonus shares first-class
+  rather than dividend variants: `CashDividend`, `StockDividend`,
+  `BonusShares`, `StockSplit`, `ReverseSplit`, `RightsIssue`, `ShareIssuance`,
+  `SymbolChange`. The first six rescale the series. Rights issues and bonus
+  issues are routine in Vietnam and their maths is not a dividend's — a rights
+  issue's factor depends on the subscription price, and a bonus issue changes
+  the share count with no cash moving.
+- **Each type carries only the amounts it uses.** A cash dividend with a ratio
+  is refused rather than having the surplus ignored: it is a row whose author
+  meant something the format cannot express.
+- **An adjustment factor is two numbers** — a price multiplier and a share
+  multiplier — so adjusted volume is available rather than wrong. Turnover is
+  never rescaled; cash traded is invariant across every action here.
+- **Factors are computed against the close of the last session before the
+  ex-date** and stored in `quant.price_adjustments`, beside the bars rather
+  than over them. The reference close is stored with the factor, because two
+  of the four formulas depend on it and "that factor looks wrong" is otherwise
+  unanswerable from outside.
+- **An action with no price before it is rejected, not guessed**, and reported
+  per action so one unusable row does not stop the others.
+- **Recompute is idempotent and version-stamped.** A factor that still
+  describes its action is left alone; an amendment bumps the action's version
+  and the factor no longer matches, which makes staleness a comparison rather
+  than a re-derivation of everything. The run reports *unchanged* separately
+  from *computed*, so a staleness check that has stopped working is visible.
+- **Import from a CSV source**, with the same rejection reasons and audit trail
+  as the other pipelines, resolving symbols through the provider alias the
+  instrument import wrote — no fallback to the bare ticker, because a ticker is
+  reused across venues and across delistings.
+- **Adjusted by default on the read path.** `GET /bars` returns an adjusted
+  series unless asked otherwise, and the response says which it returned, with
+  the factors on each bar. Unadjusted is not a neutral default: it is silently
+  wrong for almost every question anyone asks of a price series.
+- `GET /instruments/{id}/corporate-actions`, including cancelled ones — an
+  action that was announced and called off is a fact about the issuer, and
+  hiding it would leave a factor's disappearance unexplained.
 
 **Raw data is never overwritten.**
 
 ```
-RAW  →  adjustment  →  ADJUSTED
+RAW  →  adjustment factor  →  ADJUSTED (on read)
 ```
 
-Both are retained and versioned, so an adjustment error is correctable rather
-than destructive.
+`quant.bars` holds what the source printed and keeps holding it. A wrong factor
+is one row in a small derived table and one recompute; a rewritten price series
+has no way back.
 
-**Guards against:** survivorship bias, look-ahead bias, incorrect split
-handling, incorrect dividend handling.
+**Phase 3's queue is now drained.** When a recompute produces a factor whose
+ex-date lands on an open `PriceLimitBreach`, the finding is closed with the
+action that accounts for it — a recorded resolution rather than an edit, with
+the finding's history intact.
 
-**Outcome:** the backtesting engine runs on versioned,
-corporate-action-adjusted historical data.
+**Not delivered:** any cross-check of an imported action against the price
+series. A ratio transcribed as 20 instead of 2 produces a plausible factor and
+a ruined chart, and nothing here catches it — Phase 3's band check sees the
+unadjusted discontinuity, not a wrong adjustment of it. There is also no write
+endpoint and no recompute endpoint: actions arrive through the import and
+factors follow it, both driven by the host.
 
-Phase 3 leaves this phase a queue to work from: every open `PriceLimitBreach`
-finding is a candidate corporate action, and explaining one is a recorded
-resolution rather than an edit.
+Bound by
+[ADR-014](../architecture/decisions/ADR-014-corporate-actions-and-adjusted-prices.md).
+The action format is documented in
+[`data/schemas/corporate-action-csv.md`](../../data/schemas/corporate-action-csv.md).
 
 ---
 
