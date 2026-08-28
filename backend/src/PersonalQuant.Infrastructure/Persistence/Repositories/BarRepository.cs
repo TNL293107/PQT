@@ -75,6 +75,23 @@ internal sealed class BarRepository(PersonalQuantDbContext dbContext) : IBarRepo
     }
 
     /// <inheritdoc />
+    public Task<OhlcvBar?> FindLastBeforeAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        DateTimeOffset beforeUtc,
+        CancellationToken cancellationToken = default) =>
+        // Uses the leading columns of the primary key, so it is a single index
+        // seek backwards rather than a scan of the instrument's history.
+        dbContext.Bars
+            .AsNoTracking()
+            .Where(bar =>
+                bar.InstrumentId == instrumentId
+                && bar.Interval == interval
+                && bar.OpenedAtUtc < beforeUtc)
+            .OrderByDescending(bar => bar.OpenedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
         ArgumentNullException.ThrowIfNull(bars);

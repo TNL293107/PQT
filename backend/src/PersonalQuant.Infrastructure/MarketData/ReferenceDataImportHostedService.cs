@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
@@ -22,11 +23,11 @@ namespace PersonalQuant.Infrastructure.MarketData;
 /// instrument master holds only what the development seed put there.
 /// </para>
 /// <para>
-/// Ordered deliberately: the calendar first, then instruments. An instrument
-/// import can create securities the calendar knows nothing about, but a
-/// completeness figure computed before the calendar exists is meaningless, and
-/// the cheaper of the two goes first so a failure in it is visible before the
-/// longer one starts.
+/// Ordered by dependency: the calendar, then instruments, then corporate
+/// actions. An action names a security by a provider symbol, so it can only be
+/// resolved once the instrument import has recorded that alias — running the
+/// two in the other order would reject every action on the first pass and
+/// record them on the second.
 /// </para>
 /// <para>
 /// Both imports are additive and idempotent, so running at every start-up is
@@ -55,6 +56,8 @@ public sealed class ReferenceDataImportHostedService(
 
         await ImportCalendarAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
         await ImportInstrumentsAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
+        await ImportCorporateActionsAsync(scope.ServiceProvider, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -110,6 +113,31 @@ public sealed class ReferenceDataImportHostedService(
         catch (Exception exception) when (IsRecoverable(exception))
         {
             InfrastructureLog.ReferenceDataImportFailed(logger, exception, "instrument list");
+        }
+    }
+
+    private async Task ImportCorporateActionsAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+    {
+        if (services.GetService<ICorporateActionProvider>() is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var report = await services
+                .GetRequiredService<ICorporateActionImportService>()
+                .ImportAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            InfrastructureLog.CorporateActionImportCompleted(
+                logger, report.Source, report.Created, report.Amended, report.Rejected);
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            InfrastructureLog.ReferenceDataImportFailed(logger, exception, "corporate action");
         }
     }
 
