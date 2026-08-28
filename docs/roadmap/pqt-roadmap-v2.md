@@ -101,6 +101,37 @@ message, an ADR or a code comment must mean the same thing in five years as it
 does today, and the previous roadmap's numbering drift is the reason this rule
 is written down.
 
+### ADR-001 through ADR-014 use pre-rebaseline numbering
+
+Those records were written before this rebaseline and **have deliberately not
+been edited**, under the convention stated in
+[`../architecture/decisions/README.md`](../architecture/decisions/README.md):
+*an ADR is not updated when a decision changes; a new ADR supersedes it, so the
+reasoning at the time is preserved.*
+
+A phase number inside ADR-001…014 therefore refers to the **old** roadmap. The
+mapping is:
+
+| Old | New | Phase |
+| --- | --- | --- |
+| 7 | 11 | News, Events & Alternative Data |
+| 8 | 7 | Factor Research & Feature Platform |
+| 9 | 8 | Backtesting & Research Validation |
+| 10 | 9 | Risk Engine |
+| 11 | 10 | Portfolio Management |
+| 12 | 13 | Paper Trading |
+| 13 | 14 | Order Management System |
+| 14 | 15 | Broker Integration |
+| 15 | 16 | Reconciliation |
+| 16 | 17 | C++ Performance Engine |
+| 17 | 18 | AI Research Analyst |
+| 18 | 19 | Production Hardening |
+| 19 | 20 | Public Demonstration |
+
+Phases 0–6 are unchanged. ADRs from **015 onward** use this roadmap's
+numbering. Living architecture documents outside `decisions/` are kept current
+and use the new numbering throughout.
+
 ---
 
 ## Phase table

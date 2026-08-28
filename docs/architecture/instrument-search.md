@@ -221,7 +221,7 @@ if (resolution.Outcome is InstrumentResolutionOutcome.Resolved)
 }
 ```
 
-Commands, watchlists, alerts, the portfolio and the Phase 17 research analyst
+Commands, watchlists, alerts, the portfolio and the Phase 18 research analyst
 all take this path. None of them should reach for the search service, and none
 of them should hold a ticker.
 

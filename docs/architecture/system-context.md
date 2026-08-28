@@ -57,10 +57,10 @@ environment.
 
 ### Operator — IMPLEMENTED
 
-The single human user. Runs research, reviews results, and (from Phase 14) is
+The single human user. Runs research, reviews results, and (from Phase 15) is
 the only party that can enable live trading. There is no multi-user model and
 no authentication, because there is exactly one operator and nothing yet worth
-protecting. Authentication arrives with Phase 18 — Production Hardening, or
+protecting. Authentication arrives with Phase 19 — Production Hardening, or
 sooner if anything leaves localhost.
 
 ## Internal systems
@@ -96,13 +96,14 @@ rate limiting.
 Installable package with pytest, ruff and mypy configured and passing. It reads
 the same `POSTGRES_*` configuration the backend uses, but nothing invokes it
 from the backend and it opens no connection. How the two layers exchange work —
-shared database, a job queue, or a local service — is a Phase 8 decision, taken
-when there is a workload to size it against.
+shared database, a job queue, or a local service — is decided in
+[ADR-016](decisions/ADR-016-python-dotnet-research-boundary.md), delivered by
+U10 of the Research Foundation Upgrade.
 
 ### C++ engine — PLANNED (link), IMPLEMENTED (toolchain)
 
 CMake project building a static library, a CLI and a GoogleTest suite driven by
-CTest. Not referenced by the backend. Phase 16 decides the interop mechanism
+CTest. Not referenced by the backend. Phase 17 decides the interop mechanism
 (P/Invoke, a native library, or a separate process).
 
 ## External systems — all PLANNED
@@ -147,7 +148,7 @@ only the fiscal period cannot support honest backtesting.
 
 ### News providers
 
-Articles and market commentary, from Phase 7. Requires entity extraction and
+Articles and market commentary, from Phase 11. Requires entity extraction and
 mapping to canonical instrument IDs. Redistribution of article text is almost
 never granted — expect to store references and metadata rather than bodies.
 
@@ -155,7 +156,7 @@ Alternative data enters here too: search trends, news volume, social
 sentiment, and the foreign and proprietary flow series that Vietnamese market
 participants watch closely.
 
-### Broker — PLANNED, Phase 14
+### Broker — PLANNED, Phase 15
 
 Order placement, fills, and position reporting, reached through an adapter
 interface so the system is not welded to one venue.
@@ -165,10 +166,10 @@ Two constraints are fixed now:
 - The risk engine sits **in front of** the OMS. There is no code path from a
   strategy directly to a broker.
 - `LIVE_TRADING_ENABLED` defaults to `false` and remains false through
-  Phase 13. Paper trading (Phase 12) comes first, and reconciliation
-  (Phase 15) follows immediately.
+  Phase 14. Paper trading (Phase 13) comes first, and reconciliation
+  (Phase 16) follows immediately.
 
-### AI provider — PLANNED, Phase 17
+### AI provider — PLANNED, Phase 18
 
 Summarisation and analysis over data the system already holds, with citations
 back to the underlying records.

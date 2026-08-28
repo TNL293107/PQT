@@ -16,7 +16,7 @@ External provider
       ↓
 Provider adapter / collector      ← provider names, units, symbology stop HERE
       ↓
-RAW batch            quant.raw_market_data_batches        exists
+RAW batch            quant.market_data_raw_batches        exists
       ↓
 Normalisation + rejection reasons                          exists
       ↓
