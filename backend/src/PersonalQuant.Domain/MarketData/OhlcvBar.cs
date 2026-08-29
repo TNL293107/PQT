@@ -284,17 +284,26 @@ public sealed class OhlcvBar
         RequireConsistentPrices(open, high, low, close);
         RequireUsableQuantities(volume, turnover);
 
+        // The source is deliberately not part of this comparison. A revision is
+        // the ordinal identity of one statement of a fact, and two providers
+        // reporting the same numbers is one statement corroborated rather than
+        // two made. Counting it would append a row to the observation history
+        // where no value moved, and a point-in-time read replaying that history
+        // would report a restatement that never happened.
         var unchanged =
             Open == open
             && High == high
             && Low == low
             && Close == close
             && Volume == volume
-            && Turnover == turnover
-            && Source == source;
+            && Turnover == turnover;
 
         if (unchanged)
         {
+            // The bar keeps the source that produced it. A provider that agreed
+            // with a number did not produce it, and letting the last reader
+            // claim it would hand the series to whichever source ran most
+            // recently.
             return false;
         }
 

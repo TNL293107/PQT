@@ -303,9 +303,17 @@ corroboration, and a no-op.
 **Coordination point.** This touches the observation history landed in
 `beacd70`. The `BarRevision` invariant — *revision 0's `observed_from_utc`
 equals the bar's `ingested_at_utc`* — is unaffected, because no revision row is
-written at all. The existing U1 tests must be re-run and the property test over
-randomised revision sequences extended with a same-values-different-source
+written at all. The existing U1 tests must be re-run and
+`BarRevisionPersistenceTests` extended with a same-values-different-source
 case.
+
+Note while doing so that
+[`data-architecture.md`](data-architecture.md#required-tests) lists required
+test 5 as *"a property test over randomised revision sequences"*. What exists
+is `Every_instant_across_several_corrections_has_exactly_one_answer`, which is
+deterministic over several corrections. The property it asserts is the right
+one; the doc describes a test shape that was not built, and that discrepancy
+should be settled in the document rather than papered over here.
 
 ### When values actually differ
 
@@ -437,7 +445,7 @@ Gate-A-relevant, and each one falsifiable.
 - [ ] Provider `B` re-fetching a period stored by `A` with identical values produces **no** revision, **no** `bar_revisions` row, and leaves `source = A`.
 - [ ] Provider `B` re-fetching with different values revises the bar and raises exactly one `SourceConflict` finding carrying both source codes and both values.
 - [ ] Re-running the same conflicting fetch raises no second finding, and does not reopen a dismissed one.
-- [ ] The full U1 point-in-time suite passes unmodified, and the randomised revision property test is extended with a same-values-different-source case.
+- [ ] The full U1 point-in-time suite passes unmodified, and `BarRevisionPersistenceTests` is extended with a same-values-different-source case asserting no observation window is written.
 - [ ] A `SourceConflict` finding is committed in the same transaction as the bar that triggered it.
 
 **CLI**

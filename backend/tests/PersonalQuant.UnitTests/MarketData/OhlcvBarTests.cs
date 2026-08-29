@@ -197,12 +197,17 @@ public sealed class OhlcvBarTests
     }
 
     [Fact]
-    public void A_restatement_from_a_different_source_is_recorded_as_a_revision()
+    public void A_second_source_agreeing_on_the_values_is_not_a_revision()
     {
-        // Which source a bar came from is part of what the bar says. Two
-        // providers agreeing on the numbers is still a change of provenance.
+        // A revision is the ordinal identity of one statement of a fact. Two
+        // providers reporting the same numbers is one statement corroborated,
+        // not two — and counting it would put a restatement into the
+        // observation history where no value moved, which is exactly what
+        // makes a point-in-time read untruthful.
         var bar = Record(open: 100m, high: 110m, low: 95m, close: 105m, volume: 1_000);
+        bar.MarkValidated(DataRules.ValidationVersion);
 
+        // Act
         var changed = bar.Revise(
             Price.Create(100m),
             Price.Create(110m),
@@ -213,7 +218,46 @@ public sealed class OhlcvBarTests
             SourceCode.Create("OTHER"),
             Ingested.AddDays(1));
 
+        // Assert
+        Assert.False(changed);
+        Assert.Equal(0, bar.Revision);
+        Assert.Null(bar.RevisedAtUtc);
+
+        // The bar stays attributed to whichever source produced it. A provider
+        // that agreed with a number did not produce it.
+        Assert.Equal("TEST", bar.Source.Value);
+
+        // And nothing moved, so the quality verdict still applies. Clearing it
+        // would send an unchanged bar back through validation on every fetch
+        // from every other source.
+        Assert.Equal(DataRules.ValidationVersion, bar.ValidationVersion);
+    }
+
+    [Fact]
+    public void A_second_source_that_moves_the_values_revises_and_takes_the_bar()
+    {
+        // Two providers disagreeing about a close is a real event. The bar is
+        // revised and re-attributed; the disagreement itself is recorded as a
+        // quality finding by the ingestion pipeline, not here.
+        var bar = Record(open: 100m, high: 110m, low: 95m, close: 105m, volume: 1_000);
+        var later = Ingested.AddDays(1);
+
+        // Act
+        var changed = bar.Revise(
+            Price.Create(100m),
+            Price.Create(110m),
+            Price.Create(95m),
+            Price.Create(106m),
+            1_000,
+            null,
+            SourceCode.Create("OTHER"),
+            later);
+
+        // Assert
         Assert.True(changed);
+        Assert.Equal(1, bar.Revision);
+        Assert.Equal(later, bar.RevisedAtUtc);
+        Assert.Equal(106m, bar.Close.Value);
         Assert.Equal("OTHER", bar.Source.Value);
     }
 

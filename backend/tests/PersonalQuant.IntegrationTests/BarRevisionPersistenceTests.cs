@@ -289,6 +289,75 @@ public sealed class BarRevisionPersistenceTests(DependencyContainerFixture conta
             () => second.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task A_second_source_agreeing_on_the_values_adds_no_observation()
+    {
+        // The history must record what the numbers said, not who was asked. A
+        // second provider reporting the same bar is corroboration, and writing
+        // a window for it would put a restatement into the record where no
+        // value moved -- which any as-of read replaying the history would then
+        // report as a correction that never happened.
+        //
+        // It is not hypothetical: checkpoints are keyed on source, so a second
+        // provider starts with none and backfills across everything the first
+        // already holds.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "PII", "PITI");
+
+        await ObserveAsync(scope, instrumentId, close: 100m, at: T1);
+
+        // Act -- a different source reports the identical bar.
+        await using var second = await CreateScopeAsync();
+
+        var held = Assert.Single(await second.Bars.ListForUpdateAsync(
+            instrumentId,
+            BarInterval.OneDay,
+            Period,
+            Period.AddDays(1),
+            TestContext.Current.CancellationToken));
+
+        var moved = held.Revise(
+            Price.Create(100m),
+            Price.Create(110m),
+            Price.Create(95m),
+            Price.Create(100m),
+            1_000,
+            null,
+            SourceCode.Create("OTHER"),
+            T3);
+
+        await second.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(moved);
+
+        await using var reader = await CreateScopeAsync();
+
+        var bar = Assert.Single(await reader.Bars.ListForUpdateAsync(
+            instrumentId,
+            BarInterval.OneDay,
+            Period,
+            Period.AddDays(1),
+            TestContext.Current.CancellationToken));
+
+        // One statement, still open, still attributed to whoever produced it.
+        var revision = Assert.Single(await reader.Bars.ListOpenRevisionsForUpdateAsync(
+            instrumentId,
+            BarInterval.OneDay,
+            Period,
+            Period.AddDays(1),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, bar.Revision);
+        Assert.Null(bar.RevisedAtUtc);
+        Assert.Equal(Source, bar.Source);
+        Assert.Equal(0, revision.Revision);
+        Assert.Equal(Source, revision.Source);
+        Assert.Null(revision.ObservedToUtc);
+    }
+
     /// <summary>Stores a bar and opens its observation window.</summary>
     private static async Task ObserveAsync(
         MarketDataScope scope,
