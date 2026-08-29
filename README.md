@@ -462,6 +462,12 @@ Recorded now because they are expensive to retrofit:
   → execution → broker`. A strategy has no route to a broker; the risk engine
   can reject.
 - **AI advises, never trades.** The Phase 18 analyst has no path to the OMS.
+  It reaches data through a registry of declared tools, never arbitrary queries.
+- **External data ecosystems are optional and out-of-process.** Vietnamese data
+  is PQT's own; anything else is reached, if ever, through a collector the
+  operator runs outside the system, and never becomes canonical without passing
+  the same normalisation, validation and provenance stages. See
+  [ADR-019](docs/architecture/decisions/ADR-019-openbb-boundary.md).
 
 ## Documentation
 
@@ -472,11 +478,12 @@ Recorded now because they are expensive to retrofit:
 | [Data architecture](docs/architecture/data-architecture.md)                    | Temporal model, universes, adjustment, dataset contract, storage |
 | [Quant research architecture](docs/architecture/quant-research-architecture.md) | Research protocols, Python/.NET boundary, experiments |
 | [Qlib integration](docs/architecture/qlib-integration.md)                      | Adapter boundary and removal procedure |
+| [OpenBB evaluation](docs/architecture/openbb-evaluation.md)                    | What OpenBB is, what PQT takes from it, source tiers |
 | [Advanced research](docs/architecture/advanced-research.md)                    | The five long-term research capabilities |
 | [System context](docs/architecture/system-context.md)                          | Actors and external systems     |
-| [Data policy](docs/architecture/data-policy.md)                                | Market data licensing           |
+| [Data policy](docs/architecture/data-policy.md)                                | Market data licensing, source tiers |
 | [Instrument search](docs/architecture/instrument-search.md)                    | Search, resolution, current security |
-| [ADRs](docs/architecture/decisions/)                                           | Seventeen recorded decisions    |
+| [ADRs](docs/architecture/decisions/)                                           | Nineteen recorded decisions     |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
 | [Git workflow](docs/development/git-workflow.md)                               | Branching and commit standards  |
 

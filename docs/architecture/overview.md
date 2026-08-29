@@ -308,6 +308,11 @@ produces cited analysis and hypotheses. It has no path to the OMS. Order
 sizing, risk approval and execution stay deterministic and reviewable. Every
 response carries claim, source, timestamp and confidence.
 
+It is reached through an MCP server over a registry of declared tools, and the
+registry — not the database — is its data surface. That is what makes the
+prohibition enforceable rather than merely stated: an agent that can call only
+registered tools cannot reach an order path for which no tool exists.
+
 `LIVE_TRADING_ENABLED` defaults to `false` and stays false until Phase 15.
 
 ## What the completed phases deliberately do not do

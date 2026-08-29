@@ -144,9 +144,9 @@ and use the new numbering throughout.
 | 3 | Data Normalization & Quality | Trading calendar, price bands, gaps, staleness, recorded findings | COMPLETE * |
 | 4 | Corporate Actions & Adjusted Data | Eight action types, adjustment factors, adjustment-on-read | COMPLETE * |
 | — | **Research Foundation Upgrade** | **U1–U10; Gate A and Gate B** | **IN PROGRESS** |
-| 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace | PLANNED |
+| 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry | PLANNED |
 | 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` | PLANNED |
-| 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate | PLANNED |
+| 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate, declarative labelled-dataset specification | PLANNED |
 | 8 | Backtesting & Research Validation | Event-driven backtest under Vietnamese market rules, **plus research validation: walk-forward, out-of-sample, perturbation, Deflated Sharpe Ratio, PBO** | PLANNED |
 | 9 | Risk Engine | Ex-ante exposure, ex-post attribution, scenarios | PLANNED |
 | 10 | Portfolio Management | Construction, optimisation, rebalancing | PLANNED |
@@ -157,7 +157,7 @@ and use the new numbering throughout.
 | 15 | Broker Integration | Broker adapters, credentials, safety gates | PLANNED |
 | 16 | Reconciliation | Positions, cash and fills against broker truth | PLANNED |
 | 17 | C++ Performance Engine | Backtest inner loop, order book — **only after measurement**, per [ADR-005](../architecture/decisions/ADR-005-cpp-performance-layer.md) | PLANNED |
-| 18 | AI Research Analyst | Research assistance and cited analysis; **never an order path** | PLANNED |
+| 18 | AI Research Analyst | Research assistance and cited analysis, MCP server, quant tool registry; **never an order path** | PLANNED |
 | 19 | Production Hardening | Authentication, multi-user, secrets, observability, deployment | PLANNED |
 | 20 | Public Demonstration | Portfolio presentation | PLANNED |
 
@@ -326,6 +326,29 @@ kept separate, and the licensing position — is recorded in
 **Also in scope**, because real data makes them prerequisites rather than
 improvements: a bulk-load path for backfill, a real Vietnamese trading calendar
 including Tet with calendar import enabled, and telemetry on the ingestion path.
+
+**Provider plurality, once there is more than one.** U3 is the first point at
+which the registry holds a second provider, and three things break at exactly
+that moment. They are named here rather than discovered later, and each is
+small:
+
+| Gap today | What U3 adds |
+| --- | --- |
+| A provider declares only `Code` and `SupportedIntervals` | Declared capability and coverage metadata — which instruments, which range, which datasets — so an unsupported request is skipped with a reason rather than failing after three retries |
+| `TryResolveDefault` fails outright once two providers are registered | Explicit provider selection on the request. Ambiguity is resolved by the caller, never by registration order |
+| Nothing notices a series assembled from two providers | A mixed-source series raises a Phase 3 data-quality finding, reusing the existing findings machinery |
+| Ingestion and backfill are host-driven with no operator surface | An operator CLI over the existing application layer — the surface the bulk-load path above already needs |
+
+**Automatic provider fallback is rejected, not merely unimplemented.** Falling
+through to a second provider when the first is unavailable would silently
+assemble one series from two symbologies, two adjustment conventions and two
+revision policies, and a backtest would inherit the mixture without knowing.
+PQT records `source` per bar and makes the mixture *visible*; it does not create
+it. This is a deliberate divergence from how OpenBB's provider selection
+behaves, and the reasoning is in
+[`../architecture/openbb-evaluation.md`](../architecture/openbb-evaluation.md).
+
+Keep this note tight. U3 gates Phase 5 and must not swell.
 
 ---
 
@@ -530,6 +553,96 @@ Rationale and prerequisites in
 
 ---
 
+## Capabilities taken from the OpenBB review
+
+OpenBB was evaluated on 2026-08-29. **No new phase and no new workstream was
+created**, and Gate A is unchanged. Four architectural ideas were adopted, each
+assigned to a phase or workstream that already existed; OpenBB itself is
+`DEFERRED` and is not a dependency. Research record in
+[`../architecture/openbb-evaluation.md`](../architecture/openbb-evaluation.md);
+decision in [ADR-019](../architecture/decisions/ADR-019-openbb-boundary.md).
+
+| Capability | Owner | Notes |
+| --- | --- | --- |
+| Provider capability metadata, explicit provider selection, operator CLI | **U3** | Detailed in [U3](#u3--real-vietnamese-data-provider-integration--gate-a--mandatory) above. Automatic fallback rejected |
+| Dataset & coverage registry | **Phase 5** | Answers *what data does PQT hold for this instrument* |
+| Declarative labelled-dataset specification | **Phase 7** | Completes U5 and U6; does not duplicate them |
+| MCP server, quant tool registry, PIT-aware tool contract | **Phase 18** | AI reaches data through registered tools only |
+| Read-side Python facade (`pqt` SDK) | **U6 · U10** | **Already owned.** Named here as a deliverable of the existing workstreams, not as new work |
+
+### The rule underneath all of them
+
+> **One application core, many interfaces. No interface holds business logic.**
+
+REST, the Python facade, the CLI and MCP are four ways into the *same*
+application layer. A capability reachable through one and not the others is a
+layering defect, not a feature, and the existing inward-pointing dependency rule
+([ADR-001](../architecture/decisions/ADR-001-modular-monolith.md)) is what makes
+this enforceable rather than aspirational.
+
+### Phase 5 — dataset & coverage registry
+
+Answers, for any instrument, which datasets PQT holds and to what extent:
+
+```
+FPT
+  Historical price       ✓  2015-01-02 → 2026-08-28   provider VNX   1 finding open
+  Corporate actions      ✓  2015-01-02 → 2026-08-28
+  Universe membership    ✓  VN30 from 2018-03-01
+  Fundamentals           ✗  Phase 6
+  Intraday               △  1d only
+```
+
+**Boundary, stated so the scope cannot drift.** The registry is *read-only
+coverage introspection* over facts the data phases already record. It is **not**
+a provider-management system: it does not configure, enable, credential,
+schedule or health-manage providers, and it owns no state of its own.
+
+It also carries the honesty rule U2 established — an absent dataset and an
+unmeasured one must never render identically.
+
+### Phase 7 — declarative labelled-dataset specification
+
+U5 defines the canonical dataset, U6 the feature and factor protocols, U9 the
+run record. What none of them yet carries is a **declarative specification** of
+a supervised research dataset — universe and as-of, date range, frequency, the
+feature set with versions, and a forward-return **label** column — resolvable to
+a manifest and reproducible from it.
+
+This extends U5's manifest rather than introducing a parallel dataset concept.
+There is one canonical dataset contract and this is a way of asking for one.
+
+### Phase 18 — MCP and the quant tool registry
+
+```
+AI agent  →  MCP server  →  Quant Tool Registry  →  application layer
+```
+
+Each registered tool declares its id, description, input and output schemas,
+data dependencies, permissions, **point-in-time requirements**, **provenance
+requirements**, and a risk classification.
+
+**Boundary, stated so the scope cannot drift.** MCP is an *interface and tool
+boundary only*. No business logic lives in the MCP layer; every tool delegates
+to the same application layer REST, the Python facade and the CLI use. A tool
+that computes something no other interface can reach is the boundary having been
+breached.
+
+Two properties are PQT-specific and are **not** inherited from OpenBB, which has
+neither: every tool takes a `knownAsOf` and every response carries provenance.
+An AI that can answer *what was true on 2019-04-01* only as of 2019-04-01 is the
+whole point of putting a research agent on top of a point-in-time store.
+
+```
+AI  →  OMS / live execution  =  NOT ALLOWED
+```
+
+Unchanged from the constraint already stated for Phase 18. The registry makes it
+*enforceable* rather than merely stated: an agent that can call only registered
+tools cannot reach an order path for which no tool exists.
+
+---
+
 ## Definition of Done
 
 ### Gate A — Research Data Foundation · *gates Phase 5*
@@ -564,7 +677,8 @@ Once Gate A passes, Phase 5 may begin.
 | [`../architecture/quant-research-architecture.md`](../architecture/quant-research-architecture.md) | Research protocols, pipeline, Python/.NET boundary, experiment schema, reproducibility |
 | [`../architecture/qlib-integration.md`](../architecture/qlib-integration.md) | Qlib adapter boundary, ownership split, removal procedure |
 | [`../architecture/advanced-research.md`](../architecture/advanced-research.md) | The five advanced research capabilities |
-| [`../architecture/data-policy.md`](../architecture/data-policy.md) | Market data licensing rules and the provider evaluation checklist |
+| [`../architecture/data-policy.md`](../architecture/data-policy.md) | Market data licensing rules, source tiers, and the provider evaluation checklist |
+| [`../architecture/openbb-evaluation.md`](../architecture/openbb-evaluation.md) | The OpenBB research record, gap analysis and source-tier model |
 | [`../architecture/decisions/`](../architecture/decisions/) | Decisions that were expensive to make and would be expensive to reverse |
 
 ---
@@ -583,6 +697,30 @@ that a reversal is a decision rather than a drift.
 | Qlib as data layer, backtester or runtime | Rejected | PQT's data model carries lineage, revisions and PIT semantics that Qlib's format does not. See [ADR-017](../architecture/decisions/ADR-017-qlib-research-adapter.md) |
 | Third-party backtesters as PQT's engine | Rejected | Vietnamese price bands, lot sizes and settlement are the simulation, not a detail |
 | C++ for factor or indicator computation | Rejected | The numerical stack already dispatches to vectorised native code. [ADR-005](../architecture/decisions/ADR-005-cpp-performance-layer.md) requires a measurement first |
+| OpenBB as a dependency, an import, or an in-process library | Rejected | `AGPL-3.0-only` against this repository's proprietary licence ([ADR-007](../architecture/decisions/ADR-007-private-proprietary-repository.md)). An `IMarketDataProvider` written against it would put an AGPL client in the PQT process, which is the specific arrangement [ADR-019](../architecture/decisions/ADR-019-openbb-boundary.md) prevents |
+| OpenBB as an optional out-of-process Tier 2 collector | `DEFERRED` | No Vietnamese equity provider was identified in the reviewed catalogue, so it does nothing for Gate A. Trigger to revisit, all three required: a needed non-Vietnamese series no Vietnamese provider supplies · the operator has assessed OpenBB's terms and its data providers' terms · the `SourceCode = FILE` provenance gap has been answered. [ADR-019](../architecture/decisions/ADR-019-openbb-boundary.md) |
+| PQT as an OpenBB Workspace backend | Rejected | It would make PQT a data plugin inside another product's UI, and put PQT's interaction model at the mercy of an upstream roadmap. PQT is the terminal |
+| `openbb-technical`, `openbb-quantitative`, `openbb-econometrics` | Rejected | Same rule as every financial-semantics library: they encode US market structure — no price bands, no lot enforcement, no T+2.5 — and each assumption is silently wrong in Vietnam. Phase 7 owns indicators |
+| LangChain, LlamaIndex | Rejected | **Neither is an OpenBB integration.** LangChain appears only in a comparison notebook and LlamaIndex not at all, so the claim that prompted the question was false. On the merits, MCP is already the agent interface and a framework with no capability behind it is a dependency for nothing |
+
+---
+
+## External references
+
+OpenBB was researched from official sources on 2026-08-29 — website,
+documentation and repository. The social-media post that motivated the research
+is deliberately not cited as a technical authority, and several of its claims
+proved false.
+
+The full URL list, the claim-by-claim adjudication and the gap analysis are in
+[`../architecture/openbb-evaluation.md`](../architecture/openbb-evaluation.md).
+The decision is [ADR-019](../architecture/decisions/ADR-019-openbb-boundary.md).
+
+| Source | URL |
+| --- | --- |
+| OpenBB website | https://openbb.co/ |
+| GitHub repository | https://github.com/OpenBB-finance/OpenBB |
+| Documentation | https://docs.openbb.co/ |
 
 ---
 
@@ -591,3 +729,4 @@ that a reversal is a decision rather than a drift.
 - It does not claim PQT has been validated against real Vietnamese market data. It has not. U3 exists for that.
 - It does not claim any provider is licensed, suitable, or legally usable. ADR-015 records what has been verified and what has not.
 - It does not claim the four advanced research capabilities are designed in detail. Their prerequisites are placed; their designs are not written.
+- It does not claim OpenBB has been installed, run, or evaluated against its own terms or those of the data providers it connects to, and it takes no position on whether any particular use of it would be permitted.

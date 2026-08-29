@@ -27,6 +27,7 @@ reasoning at the time is preserved.
 | [016](ADR-016-python-dotnet-research-boundary.md)            | The boundary between the backend and the quant layer | Accepted |
 | [017](ADR-017-qlib-research-adapter.md)                      | Qlib as a research-only adapter | Accepted |
 | [018](ADR-018-point-in-time-market-bars.md)                  | Point-in-time market bars       | Accepted |
+| [019](ADR-019-openbb-boundary.md)                            | OpenBB as a deferred, out-of-process data option | Accepted |
 
 ## Format
 

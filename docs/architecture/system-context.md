@@ -156,6 +156,26 @@ Alternative data enters here too: search trends, news volume, social
 sentiment, and the foreign and proprietary flow series that Vietnamese market
 participants watch closely.
 
+### External data ecosystems — DEFERRED
+
+Tier 2 sources — non-Vietnamese equities, ETFs, options, FX, crypto, global
+macro and news — are reached, if ever, through a collector the **operator**
+installs and runs outside this system. **OpenBB is one such option and is
+`DEFERRED`**: no PQT code contacts it, imports it, depends on it or ships it,
+and none is planned. Its output would enter the same way any file export does,
+through the file-ingestion seam described above.
+
+The reasoning — an `AGPL-3.0-only` project against this repository's
+proprietary licence, no Vietnamese equity provider identified in the reviewed
+catalogue, and no point-in-time model — is in
+[ADR-019](decisions/ADR-019-openbb-boundary.md), with the research record in
+[`openbb-evaluation.md`](openbb-evaluation.md).
+
+One consequence is recorded there and repeated here because it is a lineage
+question: the file seam stamps every bar `SourceCode = FILE`, so an external
+collector's true origin is not preserved at bar level. Answering that is a
+prerequisite for any sustained Tier 2 use.
+
 ### Broker — PLANNED, Phase 15
 
 Order placement, fills, and position reporting, reached through an adapter
@@ -186,6 +206,7 @@ approval and execution remain deterministic and reviewable.
 | API → PostgreSQL        | Credentials from environment; parameterised access  |
 | API → Redis             | In-network; password supported, unset locally       |
 | API → external          | None exist                                          |
+| External ecosystems     | None contacted. Tier 2 collectors are operator-run, out-of-process, and reach PQT only as files ([ADR-019](decisions/ADR-019-openbb-boundary.md)) |
 | Repository → the world  | Private, proprietary; secrets git-ignored           |
 
 Health endpoints are anonymous by design and are written to disclose nothing

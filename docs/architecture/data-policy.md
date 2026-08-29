@@ -28,6 +28,32 @@ the rules below are what keep it that way.
    commercial product. This project is personal research. If that ever
    changes, every provider agreement must be re-read first.
 
+## Source tiers
+
+Data reaches PQT at three tiers. The distinction is **ownership and
+obligation**, not quality.
+
+| Tier | What | Examples | Status |
+| --- | --- | --- | --- |
+| **Tier 1 — PQT Native** | Vietnamese market data PQT ingests directly and treats as its subject | HOSE, HNX, UPCOM, VN30; Vietnamese fundamentals, corporate actions, ownership, news | The project. U3 delivers the first real one |
+| **Tier 2 — External** | Non-Vietnamese or supplementary data reached through an optional, out-of-process collector | US and global equities, ETFs, options, futures, FX, crypto, global macro and news | `DEFERRED`. OpenBB is one possible route — see [ADR-019](decisions/ADR-019-openbb-boundary.md) |
+| **Tier 3 — User / private** | Data the operator supplies | CSV exports, broker statements, proprietary factors, private research sets | The file-ingestion seam already serves this |
+
+### Access broadly, canonicalize selectively
+
+> Being able to *reach* a dataset costs nothing. Making it **canonical** costs a
+> domain model, a quality rule set, a provenance story and a maintenance
+> obligation forever.
+
+**No Tier 2 or Tier 3 data becomes canonical without passing the same stages
+Tier 1 data passes** — normalisation, validation, provenance, point-in-time,
+adjustment. There is no shortcut into `quant.*` and there is no second pipeline.
+
+This is what lets PQT contemplate a broad external ecosystem without inheriting
+hundreds of bespoke domain models: most external data is *consulted*, and only
+the little that earns a place is *canonicalized*. It is also why breadth is not
+a goal. A dataset PQT cannot state the provenance of is not an asset.
+
 ## Provider evaluation checklist
 
 No provider is integrated until each of these is answered in writing, in the
@@ -35,6 +61,11 @@ ADR that adopts it.
 
 ### Licensing
 
+- [ ] **What licence covers the connector, and what licence covers the data?**
+      These are two separate questions and both must be answered. An
+      open-source client says nothing about whether the data it retrieves may
+      be stored or redistributed, and a permissively licensed feed may still
+      arrive through a copyleft library whose terms bind the software.
 - [ ] What licence covers the data — not the API, the data?
 - [ ] Is personal, non-commercial research explicitly permitted?
 - [ ] Is **redistribution** permitted, in any form?
