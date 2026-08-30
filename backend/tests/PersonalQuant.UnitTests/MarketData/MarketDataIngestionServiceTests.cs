@@ -227,6 +227,105 @@ public sealed class MarketDataIngestionServiceTests
     }
 
     [Fact]
+    public async Task With_two_sources_only_one_of_which_serves_the_resolution_that_one_runs()
+    {
+        // The rule that changes when a second provider appears: an unnamed
+        // instruction resolves when exactly one registered source can serve it,
+        // not only when exactly one is registered. Under the old rule this was
+        // a skipped run, and the nightly pass silently stopped ingesting.
+        var intraday = new ScriptedProvider(
+            SourceCode.Create("INTRA"),
+            _ => throw new NotSupportedException("The wrong source was called."))
+        {
+            Capability = TestCapability.For(
+                SourceCode.Create("INTRA"),
+                new HashSet<BarInterval> { BarInterval.OneMinute }),
+        };
+
+        var harness = new Harness(
+            supportedIntervals: new HashSet<BarInterval> { BarInterval.OneDay },
+            second: intraday);
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.NotEqual(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Equal(1, harness.Provider.CallCount);
+        Assert.Equal(0, intraday.CallCount);
+    }
+
+    [Fact]
+    public async Task A_source_that_fails_is_never_followed_by_a_second_one()
+    {
+        // The property, not the absence of a feature. A second source is a
+        // second symbology, a second adjustment convention and a second
+        // restatement policy; falling through to one would assemble a series
+        // out of both and nothing downstream could tell.
+        var standby = new ScriptedProvider(
+            SourceCode.Create("STANDBY"),
+            _ => throw new NotSupportedException("A fallback was attempted."))
+        {
+            Capability = TestCapability.For(
+                SourceCode.Create("STANDBY"),
+                new HashSet<BarInterval> { BarInterval.OneMinute }),
+        };
+
+        var harness = new Harness(
+            supportedIntervals: new HashSet<BarInterval> { BarInterval.OneDay },
+            second: standby);
+        harness.Fails(new MarketDataProviderException("The source is down.", isTransient: true));
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Failed, run.Outcome);
+        Assert.Equal(0, standby.CallCount);
+    }
+
+    [Fact]
+    public async Task Two_sources_that_could_both_serve_it_skip_the_run_rather_than_pick_one()
+    {
+        // Ambiguity is an error and stays one. Choosing by registration order
+        // would attribute the series to whichever was composed first.
+        var other = new ScriptedProvider(
+            SourceCode.Create("OTHER"),
+            _ => throw new NotSupportedException("The wrong source was called."));
+
+        var harness = new Harness(second: other);
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Contains("OTHER", run.FailureReason, StringComparison.Ordinal);
+        Assert.Equal(0, harness.Provider.CallCount);
+        Assert.Equal(0, other.CallCount);
+    }
+
+    [Fact]
+    public async Task A_resolution_no_source_serves_names_the_source_and_the_resolution()
+    {
+        // The reason lands in the run that explains a gap in a series. "The
+        // provider cannot serve this request" is a gap nobody can close.
+        var harness = new Harness(
+            supportedIntervals: new HashSet<BarInterval> { BarInterval.OneDay });
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        var run = await harness.IngestAsync(interval: BarInterval.OneHour);
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Contains("OneHour", run.FailureReason, StringComparison.Ordinal);
+        Assert.Contains(Source.Value, run.FailureReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_run_with_no_finished_period_since_the_last_one_is_skipped()
     {
         var harness = new Harness();
@@ -500,8 +599,13 @@ public sealed class MarketDataIngestionServiceTests
         private Func<MarketDataRequest, Task<MarketDataFetchResult>> _behaviour =
             _ => Task.FromResult(MarketDataFetchResult.Empty(string.Empty, "text/csv"));
 
-        public Harness(bool knownInstrument = true, IReadOnlySet<BarInterval>? supportedIntervals = null)
+        public Harness(
+            bool knownInstrument = true,
+            IReadOnlySet<BarInterval>? supportedIntervals = null,
+            ScriptedProvider? second = null)
         {
+            Second = second;
+
             InstrumentId = InstrumentId.New();
             Clock = new FakeClock(Now);
             Bars = new FakeBarRepository();
@@ -511,12 +615,14 @@ public sealed class MarketDataIngestionServiceTests
 
             Provider = new ScriptedProvider(Source, request => _behaviour(request))
             {
-                SupportedIntervals = supportedIntervals ?? new HashSet<BarInterval>
-                {
-                    BarInterval.OneMinute,
-                    BarInterval.OneHour,
-                    BarInterval.OneDay,
-                },
+                Capability = TestCapability.For(
+                    Source,
+                    supportedIntervals ?? new HashSet<BarInterval>
+                    {
+                        BarInterval.OneMinute,
+                        BarInterval.OneHour,
+                        BarInterval.OneDay,
+                    }),
             };
 
             var policy = new IngestionPolicy
@@ -534,7 +640,8 @@ public sealed class MarketDataIngestionServiceTests
             _service = new MarketDataIngestionService(
                 new SingleInstrumentRepository(
                     knownInstrument ? SingleInstrumentRepository.Known(InstrumentId) : null),
-                new MarketDataProviderRegistry([Provider]),
+                new MarketDataProviderRegistry(
+                    second is null ? [Provider] : [Provider, second]),
                 new MarketDataFetcher(
                     policy, limiter, delays, NullLogger<MarketDataFetcher>.Instance),
                 new MarketDataNormalizer(),
@@ -560,6 +667,8 @@ public sealed class MarketDataIngestionServiceTests
         public NoOpQualityInspector Inspector { get; }
 
         public ScriptedProvider Provider { get; }
+
+        public ScriptedProvider? Second { get; }
 
         public void Returns(params ProviderBar[] bars) =>
             _behaviour = _ => Task.FromResult(

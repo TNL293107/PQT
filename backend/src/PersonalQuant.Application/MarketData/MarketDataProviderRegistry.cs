@@ -26,17 +26,25 @@ public interface IMarketDataProviderRegistry
     bool TryResolve(SourceCode code, [NotNullWhen(true)] out IMarketDataProvider? provider);
 
     /// <summary>
-    /// Finds the source to use when a caller did not name one.
+    /// Chooses the one source that can serve a request, or says why none was
+    /// chosen.
     /// </summary>
     /// <remarks>
-    /// Only meaningful when exactly one source is registered. With several,
-    /// picking one would mean the same instruction ingested from different
-    /// providers depending on registration order, and the bars would be
-    /// attributed to whichever happened to win.
+    /// <para>
+    /// The rule is <em>exactly one registered source can serve this request</em>,
+    /// not <em>exactly one source is registered</em>. A deployment holding a
+    /// daily Vietnamese feed and an intraday-only feed has no ambiguity about a
+    /// daily request: only one candidate can answer it.
+    /// </para>
+    /// <para>
+    /// Ambiguity stays an error. There is no tie-break, no priority order and
+    /// no fallback to a second source when the first cannot answer — a mixed
+    /// series is made visible, never assembled silently.
+    /// </para>
     /// </remarks>
-    /// <param name="provider">The single registered source, when there is one.</param>
-    /// <returns><see langword="true"/> when there is exactly one source.</returns>
-    bool TryResolveDefault([NotNullWhen(true)] out IMarketDataProvider? provider);
+    /// <param name="criteria">What the caller knows about the data it wants.</param>
+    /// <returns>The chosen source, or the specific reason there is none.</returns>
+    ProviderSelection SelectProvider(ProviderCriteria criteria);
 }
 
 /// <summary>
@@ -66,6 +74,11 @@ internal sealed class MarketDataProviderRegistry : IMarketDataProviderRegistry
                 throw new InvalidOperationException(
                     $"Two market data providers are registered under the code '{provider.Code}'.");
             }
+
+            // A source declaring nothing it can serve would skip every run it
+            // was ever given, at midnight, silently. Composition is the place
+            // to find that out.
+            provider.Capability.Validate(provider.Code);
         }
 
         Providers = [.. _byCode.Values.OrderBy(provider => provider.Code.Value, StringComparer.Ordinal)];
@@ -83,10 +96,100 @@ internal sealed class MarketDataProviderRegistry : IMarketDataProviderRegistry
     }
 
     /// <inheritdoc />
-    public bool TryResolveDefault([NotNullWhen(true)] out IMarketDataProvider? provider)
+    public ProviderSelection SelectProvider(ProviderCriteria criteria)
     {
-        provider = Providers.Count == 1 ? Providers[0] : null;
+        ArgumentNullException.ThrowIfNull(criteria);
 
-        return provider is not null;
+        if (criteria.Source is { } named)
+        {
+            return TryResolve(named, out var provider)
+                ? Qualify(provider, criteria)
+                : ProviderSelection.Refuse(
+                    ProviderSelectionOutcome.Unknown,
+                    $"No market data source is registered under the code '{named}'.");
+        }
+
+        var candidates = Providers.Where(provider => CanServe(provider, criteria)).ToList();
+
+        return candidates.Count switch
+        {
+            1 => ProviderSelection.Select(candidates[0]),
+
+            // One registered source that cannot serve it is qualified rather
+            // than counted, so the reason names the dimension that failed
+            // instead of reporting that nothing matched.
+            0 when Providers.Count == 1 => Qualify(Providers[0], criteria),
+
+            0 => ProviderSelection.Refuse(
+                ProviderSelectionOutcome.None,
+                Providers.Count == 0
+                    ? "No market data source is registered."
+                    : $"No registered market data source serves {Describe(criteria)}. Registered: "
+                        + $"{string.Join(", ", Providers.Select(provider => provider.Code.Value))}."),
+
+            // Named rather than chosen. Two sources that can both answer are
+            // two answers to one question, and registration order is not a
+            // reason to prefer either.
+            _ => ProviderSelection.Refuse(
+                ProviderSelectionOutcome.Ambiguous,
+                $"Several market data sources serve {Describe(criteria)} and none was named: "
+                    + $"{string.Join(", ", candidates.Select(provider => provider.Code.Value))}."),
+        };
+    }
+
+    /// <summary>
+    /// Explains why a named source cannot serve a request, naming the
+    /// dimension that failed.
+    /// </summary>
+    private static ProviderSelection Qualify(
+        IMarketDataProvider provider,
+        ProviderCriteria criteria)
+    {
+        var capability = provider.Capability;
+
+        if (!capability.Serves(criteria.Interval))
+        {
+            return ProviderSelection.Refuse(
+                ProviderSelectionOutcome.Incapable,
+                $"'{provider.Code}' does not serve {criteria.Interval} bars.");
+        }
+
+        if (!capability.Covers(criteria.Exchange))
+        {
+            return ProviderSelection.Refuse(
+                ProviderSelectionOutcome.Incapable,
+                $"'{provider.Code}' does not cover {criteria.Exchange}.");
+        }
+
+        if (!capability.Serves(criteria.AssetType))
+        {
+            return ProviderSelection.Refuse(
+                ProviderSelectionOutcome.Incapable,
+                $"'{provider.Code}' does not serve {criteria.AssetType} instruments.");
+        }
+
+        return ProviderSelection.Select(provider);
+    }
+
+    private static bool CanServe(IMarketDataProvider provider, ProviderCriteria criteria) =>
+        provider.Capability.Serves(criteria.Interval)
+        && provider.Capability.Covers(criteria.Exchange)
+        && provider.Capability.Serves(criteria.AssetType);
+
+    private static string Describe(ProviderCriteria criteria)
+    {
+        var parts = new List<string> { $"{criteria.Interval} bars" };
+
+        if (criteria.Exchange is { } exchange)
+        {
+            parts.Add($"on {exchange}");
+        }
+
+        if (criteria.AssetType is { } assetType)
+        {
+            parts.Add($"for {assetType} instruments");
+        }
+
+        return string.Join(" ", parts);
     }
 }

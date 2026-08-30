@@ -290,6 +290,43 @@ internal sealed class FakeIngestionJournal : IIngestionJournal
     public void AddCheckpoint(IngestionCheckpoint checkpoint) => Checkpoints.Add(checkpoint);
 }
 
+/// <summary>Builds provider capability declarations for tests.</summary>
+/// <remarks>
+/// Every dimension defaults to unrestricted, so a test states only the one it
+/// is about. A fake that declared a narrow capability by accident would skip
+/// runs for a reason the test never intended to exercise.
+/// </remarks>
+internal static class TestCapability
+{
+    public static ProviderCapability For(
+        SourceCode code,
+        IReadOnlySet<BarInterval>? intervals = null,
+        IReadOnlySet<ExchangeCode>? exchanges = null,
+        IReadOnlySet<AssetType>? assetTypes = null,
+        bool adjustsPricesAtSource = false) =>
+        new()
+        {
+            Code = code,
+            DisplayName = code.Value,
+            Intervals = intervals ?? new HashSet<BarInterval>
+            {
+                BarInterval.OneMinute,
+                BarInterval.FiveMinutes,
+                BarInterval.FifteenMinutes,
+                BarInterval.ThirtyMinutes,
+                BarInterval.OneHour,
+                BarInterval.OneDay,
+            },
+            Exchanges = exchanges ?? new HashSet<ExchangeCode>(),
+            AssetTypes = assetTypes ?? new HashSet<AssetType>(),
+            ReportedFields = new ProviderReportedFields { Turnover = true },
+            Limitations = new ProviderLimitations
+            {
+                AdjustsPricesAtSource = adjustsPricesAtSource,
+            },
+        };
+}
+
 /// <summary>A provider returning whatever a test hands it.</summary>
 internal sealed class ScriptedProvider(
     SourceCode code,
@@ -299,16 +336,7 @@ internal sealed class ScriptedProvider(
 
     public SourceCode Code { get; } = code;
 
-    public IReadOnlySet<BarInterval> SupportedIntervals { get; init; } =
-        new HashSet<BarInterval>
-        {
-            BarInterval.OneMinute,
-            BarInterval.FiveMinutes,
-            BarInterval.FifteenMinutes,
-            BarInterval.ThirtyMinutes,
-            BarInterval.OneHour,
-            BarInterval.OneDay,
-        };
+    public ProviderCapability Capability { get; init; } = TestCapability.For(code);
 
     public Task<MarketDataFetchResult> FetchBarsAsync(
         MarketDataRequest request,

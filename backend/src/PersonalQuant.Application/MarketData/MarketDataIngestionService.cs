@@ -63,27 +63,34 @@ internal sealed class MarketDataIngestionService(
         ArgumentNullException.ThrowIfNull(instruction);
 
         var startedAtUtc = clock.UtcNow;
-        var provider = ResolveProvider(instruction);
 
-        // The audit record is opened before anything can go wrong, and its
-        // source is the one that was actually going to be read. When no
-        // provider resolves there is nothing to attribute the attempt to, so
-        // the refusal is reported to the caller instead of being written
-        // against a source that does not exist.
-        if (provider is null)
+        // Read before the source is chosen, and with no side effect either
+        // way. The venue and the asset type are selection criteria — a source
+        // that covers HOSE and not UPCOM has to be able to refuse the second —
+        // and they are only knowable from the instrument.
+        var instrument = await instruments
+            .FindResultByIdAsync(instruction.InstrumentId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var selection = registry.SelectProvider(new ProviderCriteria(
+            instruction.Interval,
+            instruction.Source,
+            instrument?.ExchangeCode,
+            instrument?.AssetType));
+
+        // No source was going to be read, so there is nothing to attribute the
+        // attempt to. The run is recorded against the reserved code and the
+        // reason names what failed — which source, and on which dimension.
+        // Nothing is tried after this: a second source is a second answer, and
+        // falling through to one would assemble a series from two symbologies.
+        if (selection.Provider is not { } provider)
         {
             return await RecordUnattemptableAsync(
                 instruction,
                 startedAtUtc,
-                instruction.Source is null
-                    ? "No market data source is registered, or several are and none was named."
-                    : $"No market data source is registered under the code '{instruction.Source}'.",
+                selection.Reason ?? "No market data source could serve the request.",
                 cancellationToken).ConfigureAwait(false);
         }
-
-        var instrument = await instruments
-            .FindResultByIdAsync(instruction.InstrumentId, cancellationToken)
-            .ConfigureAwait(false);
 
         if (instrument is null)
         {
@@ -96,21 +103,6 @@ internal sealed class MarketDataIngestionService(
                     startedAtUtc.AddTicks(instruction.Interval.ToDuration().Ticks),
                     startedAtUtc),
                 run => run.Skip("No instrument exists with that identifier.", clock.UtcNow),
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!provider.SupportedIntervals.Contains(instruction.Interval))
-        {
-            return await CloseAsync(
-                IngestionRun.Start(
-                    provider.Code,
-                    instruction.InstrumentId,
-                    instruction.Interval,
-                    startedAtUtc,
-                    startedAtUtc.AddTicks(instruction.Interval.ToDuration().Ticks),
-                    startedAtUtc),
-                run => run.Skip(
-                    $"'{provider.Code}' does not serve {instruction.Interval} bars.", clock.UtcNow),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -252,16 +244,6 @@ internal sealed class MarketDataIngestionService(
         LogRejections(instrument.Ticker.Value, provider.Code.Value, normalized);
 
         return run;
-    }
-
-    private IMarketDataProvider? ResolveProvider(IngestionInstruction instruction)
-    {
-        if (instruction.Source is null)
-        {
-            return registry.TryResolveDefault(out var single) ? single : null;
-        }
-
-        return registry.TryResolve(instruction.Source, out var named) ? named : null;
     }
 
     /// <summary>

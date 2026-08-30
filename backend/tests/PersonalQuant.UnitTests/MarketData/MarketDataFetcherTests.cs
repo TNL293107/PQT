@@ -4,6 +4,7 @@ using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
+using PersonalQuant.UnitTests.MarketData.Fakes;
 
 namespace PersonalQuant.UnitTests.MarketData;
 
@@ -217,8 +218,9 @@ public sealed class MarketDataFetcherTests
 
         public SourceCode Code { get; } = SourceCode.Create("STUB");
 
-        public IReadOnlySet<BarInterval> SupportedIntervals { get; } =
-            new HashSet<BarInterval> { BarInterval.OneDay };
+        public ProviderCapability Capability { get; } = TestCapability.For(
+            SourceCode.Create("STUB"),
+            new HashSet<BarInterval> { BarInterval.OneDay });
 
         public Task<MarketDataFetchResult> FetchBarsAsync(
             MarketDataRequest request,

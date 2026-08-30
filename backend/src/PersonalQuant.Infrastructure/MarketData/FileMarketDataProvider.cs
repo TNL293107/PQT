@@ -52,10 +52,46 @@ internal sealed class FileMarketDataProvider(string rootDirectory) : IMarketData
 
     /// <inheritdoc />
     /// <remarks>
-    /// Every resolution: a file can hold whatever was exported into it. A
-    /// vendor implementation would declare only what its endpoints serve.
+    /// What a directory of CSV files actually offers: every resolution, no
+    /// venue or asset restriction, and no stated coverage floor — a file holds
+    /// whatever was exported into it. A vendor declaration looks nothing like
+    /// this, and that is the point of declaring it rather than assuming it.
     /// </remarks>
-    public IReadOnlySet<BarInterval> SupportedIntervals { get; } = new HashSet<BarInterval>
+    public ProviderCapability Capability { get; } = new()
+    {
+        Code = SourceCode.Create(ProviderCode),
+        DisplayName = "Local CSV directory",
+        Intervals = AllIntervals,
+
+        // Not stated, because a directory's contents are not knowable without
+        // reading it. Unknown, never unbounded.
+        EarliestAvailable = null,
+
+        ReportedFields = new ProviderReportedFields
+        {
+            // The column is optional in the format and present in the fixture.
+            Turnover = true,
+
+            // A price export carries neither. Both are properties of a
+            // corporate-action or restatement feed, and this is neither.
+            AnnouncementDates = false,
+            Restatements = false,
+        },
+
+        Limitations = new ProviderLimitations
+        {
+            // A local read has no call bound and no spacing to respect.
+            MaxPeriodsPerCall = null,
+            MinimumCallSpacing = null,
+
+            // A file holds whatever was put in it, and the pipeline's contract
+            // is that stored prices are raw. An export of adjusted prices is a
+            // different dataset and needs its own source code.
+            AdjustsPricesAtSource = false,
+        },
+    };
+
+    private static IReadOnlySet<BarInterval> AllIntervals { get; } = new HashSet<BarInterval>
     {
         BarInterval.OneMinute,
         BarInterval.FiveMinutes,

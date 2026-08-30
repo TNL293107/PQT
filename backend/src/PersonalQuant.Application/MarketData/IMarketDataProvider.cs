@@ -33,15 +33,26 @@ public interface IMarketDataProvider
     SourceCode Code { get; }
 
     /// <summary>
-    /// Gets the resolutions this source can serve.
+    /// Gets what this source declares it can serve.
     /// </summary>
     /// <remarks>
     /// Declared rather than discovered by failure. A provider that only has
     /// end-of-day data should cause an intraday request to be skipped with a
     /// reason, not to fail after three retries against an endpoint that was
-    /// never going to answer.
+    /// never going to answer — and the same holds for a venue it does not
+    /// cover, an asset type it does not serve, and history it does not hold.
     /// </remarks>
-    IReadOnlySet<BarInterval> SupportedIntervals { get; }
+    ProviderCapability Capability { get; }
+
+    /// <summary>
+    /// Gets the resolutions this source can serve.
+    /// </summary>
+    /// <remarks>
+    /// Kept, and derived. It is the dimension the pipeline reads most often,
+    /// and one delegating property is cheaper than a rename that ripples
+    /// through the ingestion service, its tests and every provider.
+    /// </remarks>
+    IReadOnlySet<BarInterval> SupportedIntervals => Capability.Intervals;
 
     /// <summary>
     /// Fetches the bars covering a request.
