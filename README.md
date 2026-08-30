@@ -25,7 +25,7 @@ Phase 5–20                    PLANNED
 | **Current**  | Research Foundation Upgrade — U1–U10 (phases run 0–20)        |
 | **Next**     | Phase 5 — Market Intelligence Terminal, after **Gate A**      |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 732 green in CI — 539 unit, 102 integration, 71 Vitest, 14 pytest, 6 CTest |
+| **Tests**    | 815 green in CI — 601 unit, 123 integration, 71 Vitest, 14 pytest, 6 CTest |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that matters.** Phases 2–4 are built, tested and reviewed. They
@@ -52,20 +52,26 @@ price band and its trading calendar, and record what they find rather than
 correcting it; corporate actions with adjusted prices applied as a factor on
 read, so the raw series is never rewritten; an append-only observation history
 for bars and a `knownAsOf` read over it, so a series can be read as this system
-believed it at a past instant; a terminal with Ctrl+K security search and a
+believed it at a past instant; append-only universe membership with an as-of
+constituent read, where a date nobody sourced answers *unknown* rather than
+returning an empty index; a terminal with Ctrl+K security search and a
 current-security context. All of it covered by tests that run against real
 containers, not mocks.
 
-**What does not exist.** Universe membership, real market data, fundamentals,
-news, screening, factors, backtesting, portfolio, risk, orders, broker
-integration, AI. Point-in-time reads exist for prices only: an adjusted series
-read as of a past instant is point-in-time in its prices and not in its
-adjustments, and closing that is U4's. The `quant/` and `cpp-engine/` layers
-contain packaging, tooling and tests but **no financial code**. There is also
-no write surface over HTTP at all: reference data arrives through the import
-pipelines and bars through ingestion, both driven by the host on a schedule the
-operator configures, and a trigger endpoint waits for authentication. None of these are
-stubbed or half-built; they are simply not written.
+**What does not exist.** Real market data, fundamentals, news, screening,
+factors, backtesting, portfolio, risk, orders, broker integration, AI. Two
+qualifications matter more than the list. Point-in-time reads exist for prices
+only: an adjusted series read as of a past instant is point-in-time in its
+prices and not in its adjustments, and closing that is U4's. And the universe
+model exists while a real membership history does not — **no VN30 constituents
+are recorded**, every universe carries an open coverage finding saying so, and
+every constituent read of one answers *unknown*. The `quant/` and `cpp-engine/`
+layers contain packaging, tooling and tests but **no financial code**. There is
+also no write surface over HTTP at all: reference data arrives through the
+import pipelines and bars through ingestion, both driven by the host on a
+schedule the operator configures, and a trigger endpoint waits for
+authentication. None of these are stubbed or half-built; they are simply not
+written.
 
 ## Current work — Research Foundation Upgrade
 
@@ -94,8 +100,15 @@ history beside `quant.bars` and a `knownAsOf` read over it, per
 [ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md).
 Announcement time is still recorded and unused, so an as-of read is
 point-in-time in its prices and not in its adjustments — U4 closes that, and
-until it does this is not an as-of read research may rely on. U2–U10 have no
-code.
+until it does this is not an as-of read research may rely on.
+
+**Where U2 stands.** The model is implemented — half-open append-only
+membership, an as-of read, a database constraint refusing overlap while
+permitting re-entry, and coverage findings raised by the import. The history is
+not: nothing here states a real index's constituents, and seeding today's VN30
+to stand in for earlier years is exactly the bias the workstream removes. See
+[ADR-020](docs/architecture/decisions/ADR-020-universe-membership-and-coverage.md).
+U3–U10 have no code.
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A.
@@ -304,6 +317,20 @@ Everything in this list is implemented and covered by tests.
   announcement date**, which is U4's, so an adjusted as-of read is not yet one
   research may rely on. See
   [ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md).
+- **Universe membership (U2)** — `quant.universes`,
+  `quant.universe_memberships` and `quant.universe_coverage_findings`.
+  Membership is append-only over a half-open interval, so a review that removes
+  one name and admits another counts each on exactly one side of the review
+  date; re-entry is a second spell, and the gap between the two stays visible
+  to an as-of read. Overlap is refused by a `gist` exclusion constraint over a
+  `daterange` rather than by the importer, and an interval covering no session
+  by a check constraint. A universe records the span it *claims* to know
+  separately from its rows, so a date nobody sourced answers **unknown** — and
+  an unknown answer has no member list to read, because an empty list is the
+  shape the survivorship bug takes. The gap is also written down: an unsourced
+  universe carries an open coverage finding. Imported from CSV, and **no real
+  index membership is seeded**. See
+  [ADR-020](docs/architecture/decisions/ADR-020-universe-membership-and-coverage.md).
 - **Terminal security search** — `Ctrl+K`, type, arrow, `Enter`. Sets the
   terminal's current security, which every later module reads by canonical
   identifier rather than by ticker.
@@ -333,12 +360,12 @@ cd cpp-engine && cmake --preset ci && cmake --build --preset ci && ctest --prese
 
 The backend integration tests start real PostgreSQL and Redis containers via
 Testcontainers. Without Docker they **skip with an explicit reason** rather
-than passing quietly. CI runners have a daemon, so all 102 of them execute
+than passing quietly. CI runners have a daemon, so all 123 of them execute
 there — a green build means the search ranking, the partial unique index, the
 point-in-time observation window and the migration were exercised against a
 real PostgreSQL 17, not a substitute.
 
-Those 102 share one database and nothing resets it between tests, so each one
+Those 123 share one database and nothing resets it between tests, so each one
 isolates itself by using data no other test claims — its own exchange code,
 ticker and identifier. A test that reuses one collides on a unique index and
 fails in its setup.
@@ -480,7 +507,12 @@ Recorded now because they are expensive to retrofit:
   [ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md)
   and [data-architecture.md](docs/architecture/data-architecture.md).
 - **No survivorship bias.** Historical universes must reflect what actually
-  existed then. *Designed, not yet implemented* — U2.
+  existed then. *Implemented, and unpopulated* — membership is append-only over
+  a half-open interval, re-entry is a second spell rather than an edit, and a
+  universe records the span it claims to know so that an unsourced date reads
+  as unknown instead of as an empty index. No real index history is recorded
+  yet, and the gap is a finding rather than a silence. See
+  [ADR-020](docs/architecture/decisions/ADR-020-universe-membership-and-coverage.md).
 - **Data quality is a pipeline stage**, not an assumption. Thresholds are
   per-exchange, matching the ±7% / ±10% / ±15% daily price limits.
 - **Raw data is never overwritten.** Corporate actions are applied as a

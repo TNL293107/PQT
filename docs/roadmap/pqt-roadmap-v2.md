@@ -296,6 +296,23 @@ obtainable; **coverage gaps are recorded as data-quality findings rather than
 left to look like completeness.** An empty membership history and a complete
 one must never be indistinguishable.
 
+**Where it stands.** The model is implemented: half-open append-only
+membership, an as-of read, a gist exclusion constraint refusing overlap while
+permitting re-entry, a coverage claim stored on the universe, and coverage
+findings raised by the import in its own transaction. Design and rejected
+alternatives are in
+[`../architecture/decisions/ADR-020-universe-membership-and-coverage.md`](../architecture/decisions/ADR-020-universe-membership-and-coverage.md).
+
+What does not exist is a real membership history. **No VN30 constituents are
+seeded**: sourcing them means transcribing published review notices, and
+seeding today's set as a stand-in for earlier years would commit the bias this
+workstream removes. Until a history is transcribed, every universe carries an
+open coverage finding and every as-of read against it answers *unknown*.
+
+**U3 does not wait for this.** Ingesting one real ticker needs no membership
+history. Driving the ingestion policy from a universe becomes possible once one
+is populated; it is an option, not a prerequisite.
+
 ---
 
 ### U3 — Real Vietnamese Data Provider Integration · Gate A · **MANDATORY**

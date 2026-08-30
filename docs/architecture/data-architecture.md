@@ -31,7 +31,7 @@ Announcement filter  actions with announced_on <= as-of    U4
       ↓
 ADJUSTED-AS-OF series                                      U4
       ↓
-Universe filter      constituents as of the same instant   U2
+Universe filter      constituents as of the same instant   exists (U2)
       ↓
 CANONICAL DATASET    Parquet + manifest, hashed            U5
       ↓
@@ -165,15 +165,29 @@ new path is opt-in.
 
 ## Universe and membership (U2)
 
+**Status: implemented.** The tables, the as-of read, the constraints and the
+coverage findings exist and are exercised against a real PostgreSQL. What does
+not exist is a real membership history: no VN30 constituents are recorded, the
+fixtures are synthetic, and every universe nobody has sourced carries an open
+coverage finding saying so.
+
 ```
 quant.universes
   id, code (VN30 | VNINDEX | HOSE_ALL | …), name, kind, source
+  coverage_from, coverage_until                 -- the claim; both NULL = claims nothing
 
 quant.universe_memberships                      -- append-only, never deleted
-  universe_id, instrument_id
-  effective_from, effective_to NULL             -- NULL means still a member
-  announced_on, source
+  universe_id, instrument_id, effective_from    -- pk; re-entry is a second row
+  effective_to NULL                             -- exclusive; NULL means still a member
+  announced_on, source, recorded_at_utc
+  EXCLUDE USING gist (universe_id =, instrument_id =, daterange(from, to, '[)') &&)
+
+quant.universe_coverage_findings                -- one open per universe and kind
+  id, universe_id, kind, detail, detected_at_utc, status, …
 ```
+
+Design and the alternatives rejected are in
+[`decisions/ADR-020-universe-membership-and-coverage.md`](decisions/ADR-020-universe-membership-and-coverage.md).
 
 Queried as `constituents(universe, as_of)`. Supports historical index
 membership, entry date, removal date, delisted securities, suspended securities
@@ -191,9 +205,14 @@ delisted security keeps its identity and its history. Membership solves the
 other half — knowing *when* it belonged.
 
 **Coverage gaps are findings, not silence.** Historical VN30 membership is hard
-to source. Where it cannot be established, the gap is recorded as a
-data-quality finding so that an empty membership history and a complete one are
-never indistinguishable.
+to source. Where it cannot be established, the gap is recorded as a finding in
+`quant.universe_coverage_findings`, so that an empty membership history and a
+complete one are never indistinguishable.
+
+The read enforces the same thing structurally. A universe records the span it
+*claims* to know, separately from its rows; a date outside that claim answers
+**unknown**, and an unknown answer has no member list to read at all. An empty
+list only ever means an empty market.
 
 **Ingestion follows the universe.** Once membership exists, the ingestion policy
 can be driven by a universe rather than by a configured ticker list, which is
@@ -344,7 +363,7 @@ dependency that can fail a deployment while contributing nothing is a liability.
 | Look-ahead on prices | As-of reads over observation time | U1 |
 | Look-ahead on actions | `announced_on <= knownAsOf`, strict mode for research | U4 |
 | Look-ahead on fundamentals | Same mechanism, inherited via `reported_at` | Phase 6 |
-| Survivorship | Recorded historical membership | U2 |
+| Survivorship | Recorded historical membership, and a coverage claim that keeps unsourced apart from empty | U2 |
 | Revision and restatement | Append-only observation history | U1 |
 | Silent input change | Manifest hash verified on load | U5 |
 | Provider coupling | Adapter boundary; canonical schema owns the semantics | U3 |
