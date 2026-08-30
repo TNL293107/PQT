@@ -5,9 +5,15 @@ description = "Quantitative research layer for the Personal Quant Terminal."
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
 
-# Phase 0 has no runtime dependencies. Numerical and data libraries
-# (numpy, pandas, polars, pyarrow) arrive with Phase 8 — Quant Research
-# Framework — when there is something to compute.
+# No runtime dependencies. Numerical and data libraries (numpy, pandas,
+# polars, pyarrow) arrive with Phase 7 — Factor Research & Feature Platform —
+# when there is something to compute, and not before.
+#
+# Neither U5 nor U6 is that point. U5's dataset contract is decimal, hashed
+# and read from files — deliberately not float64. U6 is protocols: each one
+# declares a lookback and an as-of, none of them computes. A dependency added
+# before a computation justifies it is one nobody can argue for removing
+# later.
 dependencies = []
 
 [project.optional-dependencies]

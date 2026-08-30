@@ -50,17 +50,21 @@ resume checkpoints and an audit record for every attempt including the ones
 that did nothing; data-quality rules that measure a series against the venue's
 price band and its trading calendar, and record what they find rather than
 correcting it; corporate actions with adjusted prices applied as a factor on
-read, so the raw series is never rewritten; a terminal with Ctrl+K security
-search and a current-security context. All of it covered by tests that run
-against real containers, not mocks.
+read, so the raw series is never rewritten; an append-only observation history
+for bars and a `knownAsOf` read over it, so a series can be read as this system
+believed it at a past instant; a terminal with Ctrl+K security search and a
+current-security context. All of it covered by tests that run against real
+containers, not mocks.
 
-**What does not exist.** Point-in-time reads, universe membership, real market
-data, fundamentals, news, screening, factors, backtesting, portfolio, risk,
-orders, broker integration, AI. The `quant/` and `cpp-engine/` layers contain
-packaging, tooling and tests but **no financial code**. There is also no write
-surface over HTTP at all: reference data arrives through the import pipelines
-and bars through ingestion, both driven by the host on a schedule the operator
-configures, and a trigger endpoint waits for authentication. None of these are
+**What does not exist.** Universe membership, real market data, fundamentals,
+news, screening, factors, backtesting, portfolio, risk, orders, broker
+integration, AI. Point-in-time reads exist for prices only: an adjusted series
+read as of a past instant is point-in-time in its prices and not in its
+adjustments, and closing that is U4's. The `quant/` and `cpp-engine/` layers
+contain packaging, tooling and tests but **no financial code**. There is also
+no write surface over HTTP at all: reference data arrives through the import
+pipelines and bars through ingestion, both driven by the host on a schedule the
+operator configures, and a trigger endpoint waits for authentication. None of these are
 stubbed or half-built; they are simply not written.
 
 ## Current work — Research Foundation Upgrade
@@ -84,6 +88,14 @@ quantitative phases depend on.
 
 **Gate A** — U1–U5 plus real-data validation — gates Phase 5.
 **Gate B** — U6–U10 — completes the Upgrade and runs in parallel with Phase 5.
+
+**Where U1 stands.** The price half is implemented: an append-only observation
+history beside `quant.bars` and a `knownAsOf` read over it, per
+[ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md).
+Announcement time is still recorded and unused, so an as-of read is
+point-in-time in its prices and not in its adjustments — U4 closes that, and
+until it does this is not an as-of read research may rely on. U2–U10 have no
+code.
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A.
@@ -279,6 +291,19 @@ Everything in this list is implemented and covered by tests.
   price-limit finding closes it, which is what Phase 3 left this phase to do.
   See
   [ADR-014](docs/architecture/decisions/ADR-014-corporate-actions-and-adjusted-prices.md).
+- **Point-in-time bar reads (U1, prices)** — `quant.bar_revisions`, an
+  append-only observation history beside `quant.bars`. A stored bar and every
+  later restatement each append a row carrying a half-open observation window,
+  and `GET /instruments/{id}/bars?knownAsOf=` reads through it: the series as
+  this system believed it at that instant, with a period first observed later
+  absent rather than filled in from today's value. Omitted, the read is the
+  current series and behaves exactly as it did before. `revision` is not used
+  as a clock — it is the ordinal identity of a statement and carries no time,
+  so it cannot answer what was known at an instant. **The prices are
+  point-in-time; the corporate actions applied to them are not yet filtered by
+  announcement date**, which is U4's, so an adjusted as-of read is not yet one
+  research may rely on. See
+  [ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md).
 - **Terminal security search** — `Ctrl+K`, type, arrow, `Enter`. Sets the
   terminal's current security, which every later module reads by canonical
   identifier rather than by ticker.
@@ -448,10 +473,12 @@ Recorded now because they are expensive to retrofit:
   exchange transfer and are reassigned after delisting.
 - **Point-in-time correctness.** Event time, effective time, announcement time,
   observation time and revision are five distinct things and are never
-  collapsed. *Designed, not yet implemented for prices* — `quant.bars` is
-  overwritten on restatement today, and U1 adds the observation history and the
-  `knownAsOf` read. See
-  [data-architecture.md](docs/architecture/data-architecture.md).
+  collapsed. *Implemented for prices* — `quant.bars` holds the current best
+  value, `quant.bar_revisions` holds the observation history, and a `knownAsOf`
+  read answers what this system believed at an instant. Announcement time
+  remains recorded and unused, so adjustment still looks ahead until U4. See
+  [ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md)
+  and [data-architecture.md](docs/architecture/data-architecture.md).
 - **No survivorship bias.** Historical universes must reflect what actually
   existed then. *Designed, not yet implemented* — U2.
 - **Data quality is a pipeline stage**, not an assumption. Thresholds are

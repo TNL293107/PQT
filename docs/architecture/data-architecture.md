@@ -1,9 +1,10 @@
 # Data Architecture
 
 **Status: DESIGNED.** This document describes the data architecture the
-Research Foundation Upgrade delivers. Sections marked *exists* are implemented
-in Phases 0–4; everything else is designed and not yet written. Nothing here is
-a claim about running code unless it says *exists*.
+Research Foundation Upgrade delivers. Sections marked *exists* are implemented:
+Phases 0–4, plus U1's observation history and as-of read for prices. Everything
+else is designed and not yet written. Nothing here is a claim about running
+code unless it says *exists*.
 
 Roadmap and workstream numbering: [`../roadmap/pqt-roadmap-v2.md`](../roadmap/pqt-roadmap-v2.md).
 
@@ -22,9 +23,9 @@ Normalisation + rejection reasons                          exists
       ↓
 CANONICAL bars       quant.bars  (current best value)      exists
       ↓
-Observation history  quant.bar_revisions (append-only)     U1
+Observation history  quant.bar_revisions (append-only)     exists (U1)
       ↓
-AS-OF view           what PQT believed at an instant       U1
+AS-OF view           what PQT believed at an instant       exists (U1)
       ↓
 Announcement filter  actions with announced_on <= as-of    U4
       ↓
@@ -52,7 +53,7 @@ restoring a backup.
 | 1 | **Event time** | When did the period occur? | `bars.opened_at_utc` | exists |
 | 2 | **Effective time** | When did the fact become true in the world? | `corporate_actions.ex_date` | exists |
 | 3 | **Announcement time** | When did it become public? | `corporate_actions.announced_on` | exists, **unused** |
-| 4 | **Observation time** | When did PQT learn it? | `bar_revisions.observed_from_utc` / `observed_to_utc` | U1 |
+| 4 | **Observation time** | When did PQT learn it? | `bar_revisions.observed_from_utc` / `observed_to_utc` | exists, prices only |
 | 5 | **Revision** | Which statement of the fact is this? | `bars.revision`, `corporate_actions.version` | exists |
 
 Collapsing any pair produces a specific, named defect:
@@ -74,11 +75,20 @@ given instant, and the number alone will not say.
 Both are stored. Both are required. Neither substitutes for the other. This is
 written down because `bars.revision` and `bars.revised_at_utc` already exist and
 look, at a glance, as though they solve point-in-time. They do not: `Revise()`
-overwrites the row, so the previous value leaves `quant.bars` entirely.
+overwrites the row, so the previous value leaves `quant.bars` entirely — it is
+recoverable only from the observation history beside it, and only by observation
+time, never by revision number.
 
 ---
 
 ## Point-in-time reads (U1)
+
+**Status: implemented for prices.** `quant.bar_revisions` and the `knownAsOf`
+read below exist and are exercised against a real PostgreSQL. They cover bars
+and nothing else: corporate actions carry a `version` and no observation
+history, and `announced_on` is still unread, so an adjusted series read as of a
+past instant is point-in-time in its prices and not in its adjustments. U4
+closes that; until then this is not an as-of read research may rely on.
 
 ### Design
 

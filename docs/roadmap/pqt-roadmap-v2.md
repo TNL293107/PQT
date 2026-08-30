@@ -263,6 +263,14 @@ neither substitutes for the other.
 Design, the T0–T3 scenario and the required tests are in
 [`../architecture/data-architecture.md`](../architecture/data-architecture.md).
 
+**Where it stands.** The price half is implemented: `quant.bar_revisions`, the
+append-only observation history, and the `knownAsOf` read over it, per
+[`../architecture/decisions/ADR-018-point-in-time-market-bars.md`](../architecture/decisions/ADR-018-point-in-time-market-bars.md).
+Concept 3 remains `exists, unused` — the corporate actions applied to an as-of
+series are today's, so an adjusted as-of read is point-in-time in its prices
+and not in its adjustments. That is U4's, and until U4 lands this read is not
+one research may rely on.
+
 ---
 
 ### U2 — Universe & Survivorship Correctness · Gate A

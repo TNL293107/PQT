@@ -256,12 +256,15 @@ PQT distinguishes five concepts and never collapses them: **event time**,
 **revision** — which is the ordinal identity of a statement, not a timestamp,
 and is not a substitute for observation time.
 
-**This is designed, not yet implemented for prices.** `quant.bars` records
-ingestion and revision but is overwritten in place on restatement, so as-of
-reads are not currently possible. U1 of the Research Foundation Upgrade adds an
-append-only observation history and a `knownAsOf` read; U4 makes the adjustment
-path respect announcement time. Fundamental data carries its reporting timestamp
-from Phase 6 and inherits the same mechanism.
+**Implemented for prices; not yet for the adjustment path.** `quant.bars` is
+still overwritten in place on restatement, but U1 added `quant.bar_revisions`
+beside it — an append-only observation history — and a `knownAsOf` read over
+it, so a price series can be read as this system believed it at an instant.
+Announcement time is still recorded and unread: the corporate actions applied
+to an as-of series are today's, so an adjusted as-of read is point-in-time in
+its prices and not in its adjustments. U4 makes the adjustment path respect
+announcement time. Fundamental data carries its reporting timestamp from
+Phase 6 and inherits the same mechanism.
 
 Detail in [`data-architecture.md`](data-architecture.md).
 
