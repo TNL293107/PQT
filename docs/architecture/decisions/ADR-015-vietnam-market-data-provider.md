@@ -213,6 +213,69 @@ The selected source declares `ReportedFields.Restatements = false` and
 5. **This is not a commercial-use grant.** If PQT ever generates revenue, the
    data question is reopened before anything else happens.
 
+---
+
+## Verified · 2026-08-30 · the free feeds serve adjusted prices
+
+The first calls were made. They answered one capability question decisively and
+it is the one that matters most, because PQT's entire Phase 4 shape is *raw
+prices, adjusted on read*.
+
+`FPT`, four sessions from 10–14 January 2022, daily:
+
+| Source | Endpoint | Close on 11/01/2022 | Raw or derived |
+| --- | --- | --- | --- |
+| Vietcap (VCI) | `trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart` | `44810.34` | **Adjusted** |
+| DNSE | `api.dnse.com.vn/chart-api/v2/ohlcs/stock` | `44.81` (thousands) | **Adjusted** |
+| SSI iBoard | `iboard-api.ssi.com.vn/statistics/charts/history` | `44.81` (thousands) | **Adjusted** |
+| CafeF | `cafef.vn/du-lieu/ajax/.../pricehistory.ashx` | `GiaDongCua` raw **and** `GiaDieuChinh` adjusted, side by side | **Both** |
+
+Three independent brokers return the same number to the hundredth. The
+fingerprint is the value itself: `44810.34` is a fraction of a dong, and HOSE
+trades `FPT` on a 50-dong tick. **No such price ever traded.** It is a
+back-adjusted number, and the agreement between three sources is agreement
+about a derivation, not corroboration of a fact.
+
+`accumulatedValue` is also `null` on those older bars, so turnover is not
+available for history from VCI even where prices are.
+
+### Why this blocks storing them as bars
+
+`quant.bars` holds what the market printed. The adjustment layer multiplies it
+on read, by a factor derived from recorded corporate actions. Feeding it a
+series that is *already* adjusted means adjusting twice, and the second
+adjustment is invisible: the numbers stay plausible, the returns stay smooth,
+and every backtest over the range is wrong by the product of every factor since.
+
+This is exactly the situation `ProviderLimitations.AdjustsPricesAtSource`
+exists to declare and rule V9 exists to refuse. The declaration is not
+paperwork — it is the difference between a source that can populate this schema
+and one that cannot.
+
+### The tension this creates, stated rather than resolved
+
+| | Long history (5 years) | Raw prices |
+| --- | --- | --- |
+| VCI / DNSE / SSI | ✔ verified back to 2022 | ✘ adjusted at source |
+| CafeF | ✘ the endpoint caps at 65 sessions | ✔ raw close published beside the adjusted one |
+
+Free sources offer **long-and-adjusted** or **short-and-raw**, and U3 asked for
+long-and-raw. That is a finding about the Vietnamese free-data landscape, not a
+bug to code around, and it is precisely the class of thing this ADR predicted:
+*"a feed that cannot be stored ... is unusable for backtesting no matter what
+it costs."*
+
+It also disarms one of U3's two acceptance tests. A known bonus or split
+produces **no discontinuity** in an adjusted series, so an adjusted feed cannot
+falsify the corporate-action engine — there is nothing left in the numbers for
+the engine to explain.
+
+**Open, and the operator's decision:** whether to take the adjusted series as a
+separate declared dataset, to take a short raw window, to keep both as two
+datasets that are never merged, or to source raw history from the exchange's own
+published files. Nothing is implemented against any of them until that is
+settled, because the choice changes what the adapter is *for*.
+
 ## Seven questions that must be kept separate
 
 Conflating any two of these is how a project acquires data it has no right to
