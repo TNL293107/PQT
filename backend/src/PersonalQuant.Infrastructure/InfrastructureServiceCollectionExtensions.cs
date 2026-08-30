@@ -205,6 +205,32 @@ public static class InfrastructureServiceCollectionExtensions
                 _ => new FileUniverseMembershipProvider(path));
         }
 
+        if (!string.IsNullOrWhiteSpace(options.VietcapBaseUrl))
+        {
+            // A typed client, so the handler is pooled and the timeout is the
+            // pipeline's rather than the default hundred seconds. The provider
+            // itself holds no policy: retries and spacing are applied around
+            // it, once, for every source.
+            services
+                .AddHttpClient<IMarketDataProvider, VietcapMarketDataProvider>(client =>
+                {
+                    client.BaseAddress = new Uri(
+                        options.VietcapBaseUrl.EndsWith('/')
+                            ? options.VietcapBaseUrl
+                            : options.VietcapBaseUrl + "/",
+                        UriKind.Absolute);
+
+                    client.Timeout = options.BuildPolicy().ProviderTimeout;
+
+                    // The endpoint serves a browser front end and refuses a
+                    // request that does not look like one. Stating what this
+                    // is, rather than impersonating a specific browser.
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                        "PersonalQuantTerminal/0.1 (+research)");
+                    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+                });
+        }
+
 
         // The hosts the pipelines were written for. Both check their own flag
         // and return immediately when it is off, so registering them

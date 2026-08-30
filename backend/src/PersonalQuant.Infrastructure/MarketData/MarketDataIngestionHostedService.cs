@@ -42,6 +42,20 @@ public sealed class MarketDataIngestionHostedService(
     IOptions<MarketDataOptions> options,
     ILogger<MarketDataIngestionHostedService> logger) : BackgroundService
 {
+    /// <summary>
+    /// The source the scheduled pass names, or null to let selection decide.
+    /// </summary>
+    /// <remarks>
+    /// Naming none is correct while exactly one registered source can serve
+    /// the request, and stops being correct the moment two can: selection
+    /// reports the ambiguity rather than picking by registration order, and
+    /// every run is skipped with both candidates named in its reason.
+    /// </remarks>
+    private readonly SourceCode? _scheduledSource =
+        string.IsNullOrWhiteSpace(options.Value.IngestionSource)
+            ? null
+            : SourceCode.Create(options.Value.IngestionSource);
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -198,7 +212,7 @@ public sealed class MarketDataIngestionHostedService(
             if (!IngestionInstruction.TryCreate(
                     instrumentId,
                     interval,
-                    source: null,
+                    source: _scheduledSource,
                     fromUtc: null,
                     toUtc: null,
                     out var instruction,

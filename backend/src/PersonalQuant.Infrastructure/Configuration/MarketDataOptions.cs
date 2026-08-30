@@ -117,6 +117,38 @@ public sealed class MarketDataOptions
     public string UniverseDirectory { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the base address of the Vietcap public chart endpoint, or
+    /// an empty string to leave that source unregistered.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Empty by default, like every other source. A deployment that has not
+    /// been pointed at a provider calls nothing, which is the only safe
+    /// default for a source that reaches a third party over the network.
+    /// </para>
+    /// <para>
+    /// <strong>This source serves prices already adjusted for corporate
+    /// actions.</strong> It declares that, and a series from it is a different
+    /// dataset from a raw one — see ADR-015.
+    /// </para>
+    /// </remarks>
+    public string VietcapBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the source code the scheduled ingestion pass reads from,
+    /// or an empty string to let selection decide.
+    /// </summary>
+    /// <remarks>
+    /// Empty is correct while exactly one registered source can serve the
+    /// scheduled request. It stops being correct the moment two can: the pass
+    /// names no source, selection reports the ambiguity rather than picking by
+    /// registration order, and every run is skipped with both candidates
+    /// named. Naming one here is how an operator resolves that — deliberately,
+    /// in configuration, rather than by composition order.
+    /// </remarks>
+    public string IngestionSource { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the calendar and instrument
     /// imports run once at start-up.
     /// </summary>
