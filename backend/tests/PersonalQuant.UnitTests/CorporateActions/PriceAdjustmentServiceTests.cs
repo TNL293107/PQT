@@ -281,12 +281,49 @@ public sealed class PriceAdjustmentServiceTests
     }
 
     /// <summary>Wires the real engine and read path over in-memory ports.</summary>
+    [Fact]
+    public async Task A_series_its_source_already_adjusted_is_not_adjusted_again()
+    {
+        // The failure this prevents is silent. A source-adjusted series
+        // rescaled by PQT's own factors stays plausible and smooth, and is
+        // wrong by the product of every factor since — no quality rule can see
+        // it, and no chart looks odd.
+        var harness = new Harness(sourceAdjusts: true);
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync();
+
+        // Act
+        var series = await harness.ReadAsync(adjusted: true);
+
+        // Assert
+        Assert.True(series.Adjusted);
+        Assert.True(series.AdjustedAtSource);
+        Assert.All(series.Bars, bar => Assert.Equal(100m, bar.Close));
+        Assert.All(series.Bars, bar => Assert.False(bar.IsAdjusted));
+    }
+
+    [Fact]
+    public async Task A_raw_read_of_a_source_adjusted_series_is_still_raw()
+    {
+        // Asking for what printed still returns what was stored. This system
+        // did not adjust it, and cannot un-adjust what the source did — the
+        // answer says which it is rather than pretending.
+        var harness = new Harness(sourceAdjusts: true);
+        harness.StoreWeek();
+
+        var series = await harness.ReadAsync(adjusted: false);
+
+        Assert.False(series.Adjusted);
+        Assert.False(series.AdjustedAtSource);
+    }
+
     private sealed class Harness
     {
         private readonly PriceAdjustmentService _service;
         private readonly MarketDataQueryService _query;
 
-        public Harness()
+        public Harness(bool sourceAdjusts = false)
         {
             InstrumentId = InstrumentId.New();
             Bars = new FakeBarRepository();
@@ -301,7 +338,23 @@ public sealed class PriceAdjustmentServiceTests
                 new FakeClock(Now),
                 NullLogger<PriceAdjustmentService>.Instance);
 
-            _query = new MarketDataQueryService(Bars, new FakeIngestionJournal(), Actions);
+            // With nothing registered no source declares that it adjusts at
+            // source, and the read rescales exactly as it always has.
+            var registry = sourceAdjusts
+                ? new MarketDataProviderRegistry(
+                    [
+                        new ScriptedProvider(Source, _ => throw new NotSupportedException())
+                        {
+                            Capability = TestCapability.For(Source, adjustsPricesAtSource: true),
+                        },
+                    ])
+                : new MarketDataProviderRegistry([]);
+
+            _query = new MarketDataQueryService(
+                Bars,
+                new FakeIngestionJournal(),
+                Actions,
+                registry);
         }
 
         public InstrumentId InstrumentId { get; }

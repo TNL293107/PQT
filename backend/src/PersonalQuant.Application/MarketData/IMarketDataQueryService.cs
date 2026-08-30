@@ -64,7 +64,8 @@ public sealed record BarSeries(
     InstrumentId InstrumentId,
     BarInterval Interval,
     bool Adjusted,
-    IReadOnlyList<SeriesBar> Bars)
+    IReadOnlyList<SeriesBar> Bars,
+    bool AdjustedAtSource = false)
 {
     /// <summary>Gets the opening instant of the oldest bar, if any.</summary>
     public DateTimeOffset? FirstOpenedAtUtc => Bars.Count == 0 ? null : Bars[0].OpenedAtUtc;
@@ -82,7 +83,8 @@ public sealed record BarSeries(
 internal sealed class MarketDataQueryService(
     IBarRepository bars,
     IIngestionJournal journal,
-    ICorporateActionRepository actions) : IMarketDataQueryService
+    ICorporateActionRepository actions,
+    IMarketDataProviderRegistry providers) : IMarketDataQueryService
 {
     /// <summary>Most runs a caller may ask for in one read.</summary>
     private const int MaxRuns = 50;
@@ -138,13 +140,26 @@ internal sealed class MarketDataQueryService(
         Func<T, AdjustmentFactor, SeriesBar> adjusted,
         CancellationToken cancellationToken)
     {
+        var projected = results.Select(raw).ToList();
+
         if (!query.Adjusted)
+        {
+            return new BarSeries(query.InstrumentId, query.Interval, Adjusted: false, projected);
+        }
+
+        // A series whose source already adjusted it must not be adjusted
+        // again. The second pass is invisible — the numbers stay plausible and
+        // the returns stay smooth — and the series ends up wrong by the
+        // product of every factor since. The answer still reports itself as
+        // adjusted, because it is; what changes is who did it.
+        if (projected.Any(bar => AdjustsAtSource(bar.Source)))
         {
             return new BarSeries(
                 query.InstrumentId,
                 query.Interval,
-                Adjusted: false,
-                [.. results.Select(raw)]);
+                Adjusted: true,
+                projected,
+                AdjustedAtSource: true);
         }
 
         var adjustments = await actions
@@ -157,6 +172,19 @@ internal sealed class MarketDataQueryService(
             Adjusted: true,
             Rescale(results, adjustments, openedAt, raw, adjusted));
     }
+
+    /// <summary>
+    /// Reports whether the source that produced a bar had already adjusted it.
+    /// </summary>
+    /// <remarks>
+    /// A source no longer registered cannot be asked, and is treated as raw —
+    /// which is what every source was before one declared otherwise, and keeps
+    /// the read identical to what it has always been for data this deployment
+    /// did not fetch itself.
+    /// </remarks>
+    private bool AdjustsAtSource(SourceCode source) =>
+        providers.TryResolve(source, out var provider)
+        && provider.Capability.Limitations.AdjustsPricesAtSource;
 
     /// <summary>
     /// Applies the cumulative factor of every action that came after each bar.

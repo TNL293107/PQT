@@ -79,6 +79,13 @@ public sealed record BarResponse(
 /// </remarks>
 /// <param name="InstrumentId">The instrument.</param>
 /// <param name="Interval">The resolution, by name.</param>
+/// <param name="AdjustedAtSource">
+/// Whether the adjustment was the provider's rather than this system's. When
+/// it is, no factor of PQT's was applied: the source served an already-derived
+/// series, and adjusting it again would be wrong by the product of every
+/// factor since. A caller reconciling against a broker statement needs to know
+/// which of the two it is holding.
+/// </param>
 /// <param name="Adjusted">
 /// Whether the prices were rescaled for corporate actions. Always stated: an
 /// adjusted series and a raw one answer different questions, and a client that
@@ -96,6 +103,7 @@ public sealed record BarSeriesResponse(
     Guid InstrumentId,
     string Interval,
     bool Adjusted,
+    bool AdjustedAtSource,
     int AdjustedBars,
     int Count,
     int Limit,
@@ -113,6 +121,7 @@ public sealed record BarSeriesResponse(
             series.InstrumentId.Value,
             series.Interval.ToString(),
             series.Adjusted,
+            series.AdjustedAtSource,
             series.Bars.Count(bar => bar.IsAdjusted),
             series.Bars.Count,
             limit,
