@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Domain.Instruments;
+using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Infrastructure.Persistence.Repositories;
@@ -18,6 +19,14 @@ namespace PersonalQuant.Infrastructure.Persistence.Repositories;
 /// <param name="dbContext">The unit of work to read and stage through.</param>
 internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUniverseRepository
 {
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Universe>> ListAsync(
+        CancellationToken cancellationToken = default) =>
+        await dbContext.Universes
+            .OrderBy(universe => universe.Code)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     /// <inheritdoc />
     public Task<Universe?> FindByCodeAsync(
         UniverseCode code,
@@ -75,6 +84,49 @@ internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUn
             .CountAsync(membership => membership.UniverseId == universeId, cancellationToken);
 
     /// <inheritdoc />
+    public async Task<UniverseMembershipSpan> DescribeMembershipAsync(
+        UniverseId universeId,
+        CancellationToken cancellationToken = default)
+    {
+        // One round trip and one pass over the universe's rows. Reading the
+        // spells to compute this in memory would make a review's cost grow with
+        // the history it is reviewing, which is backwards.
+        var span = await dbContext.UniverseMemberships
+            .AsNoTracking()
+            .Where(membership => membership.UniverseId == universeId)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Count = group.Count(),
+                EarliestFrom = group.Min(membership => (DateOnly?)membership.EffectiveFrom),
+                LatestEnd = group.Max(membership => membership.EffectiveTo),
+                OpenSpells = group.Count(membership => membership.EffectiveTo == null),
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return span is null
+            ? UniverseMembershipSpan.Empty
+            : new UniverseMembershipSpan(
+                span.Count,
+                span.EarliestFrom,
+                span.LatestEnd,
+                span.OpenSpells > 0);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<UniverseCoverageFinding>> ListOpenFindingsAsync(
+        UniverseId universeId,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.UniverseCoverageFindings
+            .Where(finding =>
+                finding.UniverseId == universeId
+                && finding.Status == DataQualityIssueStatus.Open)
+            .OrderBy(finding => finding.Kind)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public void Add(Universe universe)
     {
         ArgumentNullException.ThrowIfNull(universe);
@@ -88,5 +140,13 @@ internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUn
         ArgumentNullException.ThrowIfNull(membership);
 
         dbContext.UniverseMemberships.Add(membership);
+    }
+
+    /// <inheritdoc />
+    public void Add(UniverseCoverageFinding finding)
+    {
+        ArgumentNullException.ThrowIfNull(finding);
+
+        dbContext.UniverseCoverageFindings.Add(finding);
     }
 }

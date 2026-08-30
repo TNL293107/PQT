@@ -168,6 +168,10 @@ public sealed class UniverseCatalogTests
         Universe? universe,
         IReadOnlyList<InstrumentId>? members = null) : IUniverseRepository
     {
+        public Task<IReadOnlyList<Universe>> ListAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Universe>>(universe is null ? [] : [universe]);
+
         public Task<Universe?> FindByCodeAsync(
             UniverseCode code,
             CancellationToken cancellationToken = default) =>
@@ -190,8 +194,20 @@ public sealed class UniverseCatalogTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(members?.Count ?? 0);
 
+        public Task<UniverseMembershipSpan> DescribeMembershipAsync(
+            UniverseId universeId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(UniverseMembershipSpan.Empty);
+
+        public Task<IReadOnlyList<UniverseCoverageFinding>> ListOpenFindingsAsync(
+            UniverseId universeId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<UniverseCoverageFinding>>([]);
+
         public void Add(Universe universe) => throw new NotSupportedException();
 
         public void Add(UniverseMembership membership) => throw new NotSupportedException();
+
+        public void Add(UniverseCoverageFinding finding) => throw new NotSupportedException();
     }
 }

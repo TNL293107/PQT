@@ -22,6 +22,19 @@ namespace PersonalQuant.Application.Universes;
 public interface IUniverseRepository
 {
     /// <summary>
+    /// Lists every universe defined, by code.
+    /// </summary>
+    /// <remarks>
+    /// The coverage review reads this. Unbounded on purpose: universes are
+    /// named sets an operator defines, counted in tens rather than thousands,
+    /// and a review that paged them could report a clean state for a page it
+    /// never reached.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Every universe, ordered by code.</returns>
+    Task<IReadOnlyList<Universe>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Finds a universe by its code.
     /// </summary>
     /// <param name="code">The code to look up.</param>
@@ -80,6 +93,33 @@ public interface IUniverseRepository
         UniverseId universeId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Describes what a universe's membership rows span.
+    /// </summary>
+    /// <remarks>
+    /// Aggregated in the database. A coverage review asks this of every
+    /// universe and needs three numbers, not a membership history.
+    /// </remarks>
+    /// <param name="universeId">The universe.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The span its rows cover, empty when it has none.</returns>
+    Task<UniverseMembershipSpan> DescribeMembershipAsync(
+        UniverseId universeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists a universe's unexplained coverage findings.
+    /// </summary>
+    /// <remarks>
+    /// Tracked, because the review closes the ones whose gap has been filled.
+    /// </remarks>
+    /// <param name="universeId">The universe.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The findings still open.</returns>
+    Task<IReadOnlyList<UniverseCoverageFinding>> ListOpenFindingsAsync(
+        UniverseId universeId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stages a new universe.</summary>
     /// <param name="universe">The universe to add.</param>
     void Add(Universe universe);
@@ -87,4 +127,8 @@ public interface IUniverseRepository
     /// <summary>Stages a new membership spell.</summary>
     /// <param name="membership">The spell to add.</param>
     void Add(UniverseMembership membership);
+
+    /// <summary>Stages a new coverage finding.</summary>
+    /// <param name="finding">The finding to add.</param>
+    void Add(UniverseCoverageFinding finding);
 }
