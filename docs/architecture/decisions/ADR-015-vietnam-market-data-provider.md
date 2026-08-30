@@ -125,6 +125,94 @@ client's feature list.
 The matrix is maintained in this ADR and updated as cells are verified. A
 provider is not selected until the rows it will be relied on for are filled in.
 
+**No capability cell has moved.** Everything below was answered from published
+licence text and documentation, which is the half of the evaluation that can be
+done without touching an endpoint. The capability rows stay `VERIFY` until the
+first real call is made, and that call is what this section exists to permit.
+
+---
+
+## Selection · 2026-08-30
+
+**Constraint stated by the operator:** free, continuously updatable, no broker
+account. That removes SSI FastConnect, FiinQuant and any commercial feed from
+consideration, and leaves the free endpoints published by Vietnamese brokers
+for their own web front ends.
+
+### Decision — a native adapter, no third-party client
+
+PQT calls the source's public endpoint directly through an adapter implementing
+`IMarketDataProvider`. It does **not** take a dependency on `vnstock` or any
+other wrapper.
+
+Three reasons, in order of weight:
+
+1. **Licence containment.** `vnstock` is published under a custom licence for
+   personal, non-commercial use: *"use of Vnstock for commercial purposes by
+   any organization is prohibited"*, extending to *"activities where Vnstock
+   directly or indirectly contributes to generating revenue or cash flow for an
+   organization without written approval"*. Personal and academic research is
+   free of charge, which covers this repository today — but a client library
+   whose terms turn on what the *user* later does is a licence attached to
+   PQT's future, and this project is proprietary. Reaching the same endpoints
+   directly leaves only the data question, which has to be answered either way.
+2. **The parsing rule.** Prices are parsed as `decimal` from the wire text. A
+   wrapper that has already deserialised through a `double` — which is what a
+   pandas-shaped client does — has lost the exact value before PQT sees it, and
+   a close that comes back a fraction different compounds into returns the
+   market never produced.
+3. **The layering.** Provider names, units and symbology stop at the adapter.
+   A client library that returns its own frame shape moves that boundary into
+   whatever consumes the frame.
+
+`vnstock` remains the better tool for interactive exploration, and nothing here
+argues otherwise. It is a dependency decision, not a quality judgement.
+
+### The seven questions, answered
+
+| # | Question | Answer |
+| --- | --- | --- |
+| 1 | **API / client availability** | Yes. The endpoints a broker serves its own web charts from are reachable without a key or an account. |
+| 2 | **Underlying source** | A Vietnamese broker's public market-data endpoint — not the exchange. The prices originate at HOSE/HNX/UPCOM and reach PQT second-hand. |
+| 3 | **Data ownership** | The exchange, and the broker republishing it. Not PQT, and not any client library. |
+| 4 | **Licensing / terms of service** | **No published grant found.** These are undocumented endpoints serving a public web front end, not a documented API with terms. Nothing states that retention is permitted, and nothing states that it is forbidden. |
+| 5 | **Storage rights** | **Not granted in writing.** PQT retains data locally, for personal research, on the operator's own machine. That is a position taken with the absence of a grant understood, not a right this ADR claims to hold. |
+| 6 | **Redistribution rights** | **Not granted, and therefore not exercised.** No real market data enters this repository, no export leaves the operator's machine, and no chart built from it is published. |
+| 7 | **Historical revision behaviour** | **Unknown, and assumed to be silent rewrite.** No restatement or correction feed is published. `quant.bar_revisions` is therefore PQT's *only* record of what changed and when. |
+
+### What answer 7 costs, stated plainly
+
+The selected source declares `ReportedFields.Restatements = false` and
+`ReportedFields.AnnouncementDates = false`, and both are load-bearing:
+
+- **U4 strict mode has no announcement dates from this source.** Corporate
+  actions must come from somewhere that publishes them, or strict mode excludes
+  every action with a null `announced_on` and a backtest sees no adjustments at
+  all. That is the honest failure and it is the one U4 has to be built against.
+- **Reproducibility rests entirely on U1.** A source that silently rewrites
+  history cannot be replayed. The observation history is not a nice-to-have
+  here; it is the only thing standing between a corrected close and a backtest
+  that quietly changes its answer between two runs.
+
+### Rules this selection is bound by
+
+1. **Fixtures stay synthetic.** Nothing fetched is committed. `data/` keeps the
+   invented `DEMO` series, and the real series lives in a git-ignored directory
+   and in the operator's database.
+2. **One ticker, then a decision.** The first ingest is `FPT` on HOSE over five
+   years. Widening to the rest of HOSE is a separate decision made after the
+   pipeline has been falsified against real data — not a consequence of this
+   one.
+3. **Rate limits are respected by the existing call limiter**, not by a new
+   mechanism. The guest tier on these endpoints is measured in tens of requests
+   per minute; a five-year daily backfill for one ticker is a handful of calls.
+4. **A licence change stops the path.** If terms appear that forbid retention,
+   [`../data-policy.md`](../data-policy.md) governs: stop ingestion, delete,
+   record. Nothing about the pipeline depends on this source specifically —
+   that is what the adapter boundary is for.
+5. **This is not a commercial-use grant.** If PQT ever generates revenue, the
+   data question is reopened before anything else happens.
+
 ## Seven questions that must be kept separate
 
 Conflating any two of these is how a project acquires data it has no right to
@@ -170,4 +258,6 @@ remains the governing document for market data licensing.
 - Telemetry on the ingestion path is required, because a pipeline running against a live source without observability is a pipeline nobody can debug.
 - Contract tests run against **recorded** responses, never against a live endpoint in CI.
 - Fixtures added under `data/` must remain synthetic or trivially small. A recognisable vendor extract is a licensing incident, per [`../data-policy.md`](../data-policy.md).
-- **Open:** which provider is selected. The matrix decides it, and this ADR is updated with the outcome and the verified rows. A change of provider after selection is a new ADR, not an edit to this one.
+- **Selected:** a free public broker endpoint, reached by a native adapter, with no third-party client library. Recorded in *Selection · 2026-08-30* above, together with the seven answers. A change of provider after this is a new ADR, not an edit to that section.
+- **The capability matrix is still unverified.** No cell may move until a real call has been made and its answer checked. What the selection section settles is licensing, which is the part that must be settled *first*.
+- **Storage rests on an absence rather than a grant.** That is recorded rather than smoothed over, and it bounds what this data may ever be used for: personal research, locally, never redistributed.
