@@ -16,6 +16,7 @@ using PersonalQuant.Infrastructure.CorporateActions;
 using PersonalQuant.Infrastructure.Exchanges;
 using PersonalQuant.Infrastructure.Instruments;
 using PersonalQuant.Infrastructure.MarketData;
+using PersonalQuant.Infrastructure.Universes;
 using PersonalQuant.Infrastructure.Configuration;
 using PersonalQuant.Infrastructure.HealthChecks;
 using PersonalQuant.Infrastructure.Persistence;
@@ -194,6 +195,14 @@ public static class InfrastructureServiceCollectionExtensions
 
             services.AddSingleton<ICorporateActionProvider>(
                 _ => new FileCorporateActionProvider(path));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.UniverseDirectory))
+        {
+            var path = options.UniverseDirectory;
+
+            services.AddSingleton<IUniverseMembershipProvider>(
+                _ => new FileUniverseMembershipProvider(path));
         }
 
 

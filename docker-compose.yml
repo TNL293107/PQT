@@ -122,6 +122,7 @@ services:
       MarketData__FileProviderDirectory: ${MARKET_DATA_BAR_DIRECTORY:-/app/data/fixtures/market-data}
       MarketData__TradingCalendarPath: ${MARKET_DATA_CALENDAR:-}
       MarketData__CorporateActionPath: ${MARKET_DATA_CORPORATE_ACTIONS:-/app/data/fixtures/corporate-actions.csv}
+      MarketData__UniverseDirectory: ${MARKET_DATA_UNIVERSES:-/app/data/fixtures/universes}
       MarketData__ImportReferenceDataOnStartup: ${MARKET_DATA_IMPORT_ON_STARTUP:-false}
       MarketData__IngestOnSchedule: ${MARKET_DATA_INGEST_ON_SCHEDULE:-false}
       MarketData__IngestionPeriodMinutes: ${MARKET_DATA_INGESTION_PERIOD_MINUTES:-60}

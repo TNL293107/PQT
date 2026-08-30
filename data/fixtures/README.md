@@ -12,6 +12,7 @@ that did may be added. The rules in [`../README.md`](../README.md) apply.
 | [`trading-calendar.csv`](trading-calendar.csv) | [trading calendar](../schemas/trading-calendar-csv.md) | the file calendar source, for completeness scoring |
 | [`market-data/`](market-data/) | [market data CSV](../schemas/market-data-csv.md) | the file market data source, for bar ingestion |
 | [`corporate-actions.csv`](corporate-actions.csv) | [corporate action CSV](../schemas/corporate-action-csv.md) | the file corporate action source, for adjusted prices |
+| [`universes/`](universes/) | [universe CSV](../schemas/universe-csv.md) | the file universe source, for point-in-time constituent sets |
 
 ## Instrument symbol list
 
@@ -76,3 +77,31 @@ The import resolves symbols through the provider alias the **instrument**
 import wrote, so an instrument must be registered under `DEMO` for the same
 source first; otherwise both rows are refused as `UnknownInstrument`. There is
 no fallback to the bare ticker, deliberately.
+
+## Universes
+
+Two invented sets in [`universes/`](universes/), over the real tickers in the
+symbol list above. **Neither is a claim about a real index.** `DEMO_INDEX` is
+synthetic, and no fixture here states VN30's membership: that history has to be
+sourced from published review notices, and inventing it — or seeding today's
+constituents and letting them stand in for every earlier year — is the
+survivorship bias this workstream exists to remove, committed to the repository.
+
+```
+MarketData__UniverseDirectory=data/fixtures/universes
+```
+
+`DEMO_INDEX` claims coverage from 2026-01-02 onwards and carries five spells,
+including a re-entry: `VNM.HM` leaves on 2026-04-01 and returns on 2026-07-01,
+so a constituent read for May finds four names and one for July finds five. The
+months between the two spells are the part a survivorship-free backtest has to
+be able to see.
+
+`DEMO_EMPTY` is defined and deliberately has no membership and no coverage
+claim. Every import raises a coverage finding against it, and every constituent
+read of it answers *unknown* rather than returning an empty set. That is the
+whole point of the fixture: an unsourced universe and a complete one must never
+look alike, and here they demonstrably do not.
+
+Symbols resolve through the provider alias the **instrument** import wrote, so
+run that import first; otherwise every row is refused as `UnknownInstrument`.

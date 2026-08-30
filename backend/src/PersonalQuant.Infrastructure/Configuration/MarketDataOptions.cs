@@ -103,6 +103,20 @@ public sealed class MarketDataOptions
     public string CorporateActionPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the directory holding the universe definition and
+    /// membership CSV files, or an empty string to leave the source
+    /// unregistered.
+    /// </summary>
+    /// <remarks>
+    /// A directory rather than a path, because the source is two files that
+    /// have to agree: what the universes are and which span of their history
+    /// this directory claims to hold, and the history itself. With no source,
+    /// no universe is recorded and every constituent read is unknown — which
+    /// is the honest state, and the coverage review has nothing to review.
+    /// </remarks>
+    public string UniverseDirectory { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the calendar and instrument
     /// imports run once at start-up.
     /// </summary>

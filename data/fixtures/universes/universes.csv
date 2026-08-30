@@ -1,0 +1,3 @@
+code,name,kind,coverage_from,coverage_until
+DEMO_INDEX,Demonstration Index (synthetic),Index,2026-01-02,
+DEMO_EMPTY,Demonstration Universe With No History (synthetic),Index,,

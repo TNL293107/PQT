@@ -7,6 +7,7 @@ using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
+using PersonalQuant.Application.Universes;
 using PersonalQuant.Infrastructure.Configuration;
 using PersonalQuant.Infrastructure.Diagnostics;
 
@@ -58,6 +59,7 @@ public sealed class ReferenceDataImportHostedService(
         await ImportInstrumentsAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
         await ImportCorporateActionsAsync(scope.ServiceProvider, cancellationToken)
             .ConfigureAwait(false);
+        await ImportUniversesAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -138,6 +140,50 @@ public sealed class ReferenceDataImportHostedService(
         catch (Exception exception) when (IsRecoverable(exception))
         {
             InfrastructureLog.ReferenceDataImportFailed(logger, exception, "corporate action");
+        }
+    }
+
+    /// <summary>
+    /// Records universe membership, and reviews what is still missing from it.
+    /// </summary>
+    /// <remarks>
+    /// Last, because a membership row names a security by a provider symbol and
+    /// can only be resolved once the instrument import has recorded that alias.
+    /// The coverage review runs inside the import's own transaction, so a
+    /// universe and the record of what is missing from it are committed
+    /// together.
+    /// </remarks>
+    private async Task ImportUniversesAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+    {
+        // Absent rather than misconfigured. A deployment with no membership
+        // source records no universe, and every constituent read against it is
+        // unknown — which is a supported state and the honest one.
+        if (services.GetService<IUniverseMembershipProvider>() is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var report = await services
+                .GetRequiredService<IUniverseImportService>()
+                .ImportAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            InfrastructureLog.UniverseImportCompleted(
+                logger,
+                report.Source,
+                report.UniversesDefined,
+                report.SpellsCreated,
+                report.SpellsClosed,
+                report.Rejected,
+                report.Coverage.StillOpen);
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            InfrastructureLog.ReferenceDataImportFailed(logger, exception, "universe membership");
         }
     }
 

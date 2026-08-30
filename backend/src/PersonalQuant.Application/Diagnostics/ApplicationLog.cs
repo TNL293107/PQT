@@ -173,6 +173,20 @@ internal static partial class ApplicationLog
         string detail);
 
     [LoggerMessage(
+        EventId = 3310,
+        Level = LogLevel.Information,
+        Message = "universe.import {Source} read {RowsRead} row(s): created {Created}, closed {Closed}, unchanged {Unchanged}, rejected {Rejected}; {OpenFindings} coverage finding(s) open.")]
+    public static partial void UniverseMembershipImported(
+        ILogger logger,
+        string source,
+        int rowsRead,
+        int created,
+        int closed,
+        int unchanged,
+        int rejected,
+        int openFindings);
+
+    [LoggerMessage(
         EventId = 3210,
         Level = LogLevel.Information,
         Message = "corporateaction.import {Source} read {RowsRead} row(s): created {Created}, amended {Amended}, unchanged {Unchanged}, rejected {Rejected}.")]

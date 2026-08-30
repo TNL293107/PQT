@@ -4,7 +4,7 @@ Tracked schema definitions for data that crosses a system boundary — provider
 payloads, file interchange formats, and contracts shared between the .NET
 backend, the Python quant layer, and the C++ engine.
 
-**Status:** four contracts, all read by file-backed sources that are real
+**Status:** five contracts, all read by file-backed sources that are real
 providers from the pipelines' point of view — the ones the ingestion and import
 paths are proved against without a licence.
 
@@ -14,6 +14,7 @@ paths are proved against without a licence.
 | [`market-data-csv.md`](market-data-csv.md) | the market data ingestion pipeline |
 | [`trading-calendar-csv.md`](trading-calendar-csv.md) | completeness scoring, via the calendar import |
 | [`corporate-action-csv.md`](corporate-action-csv.md) | the corporate action import, and the adjusted read behind it |
+| [`universe-csv.md`](universe-csv.md) | the universe import, and the point-in-time constituent read behind it |
 
 Vendor payload contracts land here as they are integrated.
 
@@ -38,6 +39,14 @@ issues and bonus shares are first-class action types there rather than dividend
 variants, because in this market they are routine and their maths is not a
 dividend's — a rights issue's factor depends on the subscription price, and a
 bonus issue changes the share count without any cash moving.
+
+The Research Foundation Upgrade added `quant.bar_revisions` (U1), the
+append-only observation history behind an as-of price read, then
+`quant.universes`, `quant.universe_memberships` and
+`quant.universe_coverage_findings` (U2). Membership is half-open and
+append-only, overlap is refused by a gist exclusion constraint, and the
+coverage claim on `quant.universes` is what lets an unsourced date read as
+unknown rather than as an empty index.
 
 `quant.bars` is untouched by all of it. Adjustment is a factor applied on read,
 never a rewrite — see

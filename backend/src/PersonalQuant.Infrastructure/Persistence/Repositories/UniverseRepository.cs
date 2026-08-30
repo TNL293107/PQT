@@ -21,11 +21,28 @@ internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUn
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<Universe>> ListAsync(
-        CancellationToken cancellationToken = default) =>
-        await dbContext.Universes
+        CancellationToken cancellationToken = default)
+    {
+        var stored = await dbContext.Universes
             .OrderBy(universe => universe.Code)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        // Universes staged in this unit of work and not yet committed. A query
+        // does not return them, and the coverage review runs inside the
+        // import's transaction precisely so that a universe and the record of
+        // what is missing from it commit together — which it cannot do if it
+        // cannot see the universe the import just defined.
+        var staged = dbContext.ChangeTracker
+            .Entries<Universe>()
+            .Where(entry => entry.State == EntityState.Added)
+            .Select(entry => entry.Entity);
+
+        return stored
+            .Concat(staged)
+            .OrderBy(universe => universe.Code.Value, StringComparer.Ordinal)
+            .ToList();
+    }
 
     /// <inheritdoc />
     public Task<Universe?> FindByCodeAsync(
@@ -105,13 +122,77 @@ internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUn
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return span is null
-            ? UniverseMembershipSpan.Empty
-            : new UniverseMembershipSpan(
-                span.Count,
-                span.EarliestFrom,
-                span.LatestEnd,
-                span.OpenSpells > 0);
+        // Folded together with what this unit of work has staged, for the same
+        // reason the universe list is: the review runs before the commit, and a
+        // span that ignored the rows the import has just produced would raise a
+        // finding against a universe it had this moment populated.
+        var entries = dbContext.ChangeTracker
+            .Entries<UniverseMembership>()
+            .Where(entry => entry.Entity.UniverseId == universeId)
+            .ToList();
+
+        var added = entries
+            .Where(entry => entry.State == EntityState.Added)
+            .Select(entry => entry.Entity)
+            .ToList();
+
+        // Remove is the only mutation a spell has, so a modified row was open
+        // in the database and is closed here.
+        var closedHere = entries
+            .Where(entry => entry.State == EntityState.Modified)
+            .Select(entry => entry.Entity)
+            .ToList();
+
+        var count = (span?.Count ?? 0) + added.Count;
+
+        if (count == 0)
+        {
+            return UniverseMembershipSpan.Empty;
+        }
+
+        var earliest = Earliest(
+            span?.EarliestFrom,
+            added.Select(membership => (DateOnly?)membership.EffectiveFrom));
+
+        var latestEnd = Latest(
+            span?.LatestEnd,
+            added.Concat(closedHere).Select(membership => membership.EffectiveTo));
+
+        var openSpells = (span?.OpenSpells ?? 0)
+            + added.Count(membership => membership.IsCurrent)
+            - closedHere.Count;
+
+        return new UniverseMembershipSpan(count, earliest, latestEnd, openSpells > 0);
+    }
+
+    private static DateOnly? Earliest(DateOnly? stored, IEnumerable<DateOnly?> staged)
+    {
+        var earliest = stored;
+
+        foreach (var candidate in staged)
+        {
+            if (candidate is { } value && (earliest is not { } held || value < held))
+            {
+                earliest = value;
+            }
+        }
+
+        return earliest;
+    }
+
+    private static DateOnly? Latest(DateOnly? stored, IEnumerable<DateOnly?> staged)
+    {
+        var latest = stored;
+
+        foreach (var candidate in staged)
+        {
+            if (candidate is { } value && (latest is not { } held || value > held))
+            {
+                latest = value;
+            }
+        }
+
+        return latest;
     }
 
     /// <inheritdoc />

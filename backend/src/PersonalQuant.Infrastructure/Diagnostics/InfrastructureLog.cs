@@ -153,4 +153,17 @@ internal static partial class InfrastructureLog
         int created,
         int amended,
         int rejected);
+
+    [LoggerMessage(
+        EventId = 1124,
+        Level = LogLevel.Information,
+        Message = "Universe import from {Source} defined {Defined} universe(s), created {Created} spell(s), closed {Closed}, rejected {Rejected}; {OpenFindings} coverage finding(s) open.")]
+    public static partial void UniverseImportCompleted(
+        ILogger logger,
+        string source,
+        int defined,
+        int created,
+        int closed,
+        int rejected,
+        int openFindings);
 }

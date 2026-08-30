@@ -48,7 +48,13 @@ public sealed class PersonalQuantApiFactory(IReadOnlyDictionary<string, string?>
         (string Host, int Port, string Database, string Username, string Password) postgres,
         (string Host, int Port) redis,
         bool applyMigrations) =>
-        new(new Dictionary<string, string?>(StringComparer.Ordinal)
+        new(BaseSettings(postgres, redis, applyMigrations));
+
+    private static Dictionary<string, string?> BaseSettings(
+        (string Host, int Port, string Database, string Username, string Password) postgres,
+        (string Host, int Port) redis,
+        bool applyMigrations) =>
+        new(StringComparer.Ordinal)
         {
             ["Postgres:Host"] = postgres.Host,
             ["Postgres:Port"] = postgres.Port.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -62,7 +68,32 @@ public sealed class PersonalQuantApiFactory(IReadOnlyDictionary<string, string?>
             ["Redis:Port"] = redis.Port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["Redis:ConnectTimeoutMilliseconds"] = "5000",
             ["Cors:AllowedOrigins"] = "http://localhost:3000",
-        });
+        };
+
+    /// <summary>
+    /// Creates a factory pointed at real dependencies and a universe source on
+    /// disk.
+    /// </summary>
+    /// <remarks>
+    /// The real file provider, reading real files. The universe import's
+    /// contract is with a directory of CSV, and a fake provider in its place
+    /// would prove the reconciliation while leaving the parsing and the
+    /// resolution untested.
+    /// </remarks>
+    /// <param name="postgres">PostgreSQL connection details.</param>
+    /// <param name="redis">Redis connection details.</param>
+    /// <param name="universeDirectory">Directory holding the universe CSV files.</param>
+    /// <returns>A configured factory.</returns>
+    public static PersonalQuantApiFactory WithUniverseDirectory(
+        (string Host, int Port, string Database, string Username, string Password) postgres,
+        (string Host, int Port) redis,
+        string universeDirectory)
+    {
+        var settings = BaseSettings(postgres, redis, applyMigrations: true);
+        settings["MarketData:UniverseDirectory"] = universeDirectory;
+
+        return new PersonalQuantApiFactory(settings);
+    }
 
     /// <inheritdoc />
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -70,6 +101,17 @@ public sealed class PersonalQuantApiFactory(IReadOnlyDictionary<string, string?>
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseEnvironment(Environments.Production);
+
+        // Applied twice, deliberately. AddInMemoryCollection reaches anything
+        // that binds options lazily, which is most of the host; UseSetting
+        // reaches host configuration, which is what composition-time reads see
+        // — the registration that decides whether a file source exists at all
+        // happens before the app is built and cannot wait for the former.
+        foreach (var (key, value) in settings.Where(entry => entry.Value is not null))
+        {
+            builder.UseSetting(key, value);
+        }
+
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(settings));
     }

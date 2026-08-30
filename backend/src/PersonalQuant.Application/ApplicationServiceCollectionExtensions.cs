@@ -33,6 +33,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<
             Universes.IUniverseCoverageReview,
             Universes.UniverseCoverageReview>();
+        services.AddScoped<
+            Universes.IUniverseImportService,
+            Universes.UniverseImportService>();
 
         AddMarketData(services);
 
