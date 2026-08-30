@@ -198,7 +198,7 @@ Phase 0.
 ├── data/                    schemas and fixtures (bulk data git-ignored)
 ├── docs/
 │   ├── architecture/        overview, context, data policy, ADRs
-│   ├── development/         local setup, git workflow
+│   ├── development/         local setup, backups, git workflow
 │   └── roadmap/             canonical roadmap (v2)
 ├── docker-compose.yml
 └── .env.example
@@ -544,6 +544,7 @@ Recorded now because they are expensive to retrofit:
 | [Instrument search](docs/architecture/instrument-search.md)                    | Search, resolution, current security |
 | [ADRs](docs/architecture/decisions/)                                           | Nineteen recorded decisions     |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
+| [Database backup](docs/development/database-backup.md)                         | Backup and restore drill, before real data |
 | [Git workflow](docs/development/git-workflow.md)                               | Branching and commit standards  |
 
 ## License

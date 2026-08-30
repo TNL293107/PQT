@@ -156,6 +156,13 @@ Automatic migration on start-up is controlled by
 `Postgres:ApplyMigrationsOnStartup`. It is enabled in `Development` and in
 Compose, and defaults to `false` everywhere else.
 
+## 4b. Backups, before real data
+
+Everything in the database today can be regenerated from the repository. Real
+market data cannot, and neither can the observation history recorded alongside
+it. Take and **verify** a backup before the first ingest of real prices:
+[`database-backup.md`](database-backup.md).
+
 ## 5. Running the tests
 
 ### Backend
