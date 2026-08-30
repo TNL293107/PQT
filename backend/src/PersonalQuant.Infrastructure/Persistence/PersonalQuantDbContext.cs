@@ -5,6 +5,7 @@ using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
+using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Infrastructure.Persistence;
 
@@ -78,6 +79,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the ingestion audit trail.</summary>
     public DbSet<IngestionRun> IngestionRuns => Set<IngestionRun>();
+
+    /// <summary>Gets the named sets of securities.</summary>
+    public DbSet<Universe> Universes => Set<Universe>();
+
+    /// <summary>Gets which securities belonged to those sets, and when.</summary>
+    public DbSet<UniverseMembership> UniverseMemberships => Set<UniverseMembership>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

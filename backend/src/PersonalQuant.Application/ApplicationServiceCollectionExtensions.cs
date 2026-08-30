@@ -29,6 +29,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IInstrumentResolver, InstrumentResolver>();
         services.AddScoped<IInstrumentCatalog, InstrumentCatalog>();
         services.AddScoped<IInstrumentImportService, InstrumentImportService>();
+        services.AddScoped<Universes.IUniverseCatalog, Universes.UniverseCatalog>();
 
         AddMarketData(services);
 

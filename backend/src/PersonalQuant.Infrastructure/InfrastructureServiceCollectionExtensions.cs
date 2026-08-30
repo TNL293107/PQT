@@ -10,6 +10,7 @@ using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Application.Universes;
 using PersonalQuant.Infrastructure.Caching;
 using PersonalQuant.Infrastructure.CorporateActions;
 using PersonalQuant.Infrastructure.Exchanges;
@@ -95,6 +96,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IIngestionJournal, IngestionJournalRepository>();
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
         services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
+        services.AddScoped<IUniverseRepository, UniverseRepository>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
 
