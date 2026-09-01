@@ -270,11 +270,64 @@ produces **no discontinuity** in an adjusted series, so an adjusted feed cannot
 falsify the corporate-action engine — there is nothing left in the numbers for
 the engine to explain.
 
-**Open, and the operator's decision:** whether to take the adjusted series as a
-separate declared dataset, to take a short raw window, to keep both as two
-datasets that are never merged, or to source raw history from the exchange's own
-published files. Nothing is implemented against any of them until that is
-settled, because the choice changes what the adapter is *for*.
+**Decided by the operator:** take the adjusted series as a separate declared
+dataset, and keep looking for raw history in parallel.
+
+---
+
+## First real ingest · 2026-09-01
+
+`FPT`, daily, 2021-12-27 to 2026-08-28. **1,164 bars, 0 rejected, 0 revised.**
+A second pass stored 0 and revised 0, so the checkpoint and the storage key are
+idempotent against a real source and not only against a fixture.
+
+The run was bounded to one ticker by configuration. Reference-data seeding alone
+puts ten HOSE equities in the master, and an unrestricted first pass would have
+fetched and stored five years of a third party's data for nine securities nobody
+asked about.
+
+### What the run proved
+
+| Claim | Evidence |
+| --- | --- |
+| Prices survive as decimals | Stored closes carry six decimal places — `93017.520000` — exactly as the source sent them |
+| Point-in-time reads work on real data | `knownAsOf` one second before the observation instant returns **0 bars**; one second after returns the series. No fallback to the current value |
+| A source-adjusted series is not adjusted again | The read reports `adjusted: true`, `adjustedAtSource: true`, `adjustedBars: 0`, and every price factor is 1 |
+| Turnover is honestly absent | `turnover: null` throughout, as the capability declares |
+| Quality rules fire on real data | One `MissingSession` finding, discussed below |
+
+### Two defects the real data found, which no probe had
+
+**The endpoint compresses large responses whether or not the request asks it
+to.** A three-day probe comes back as plain JSON; a five-year request comes back
+gzipped. The adapter read the bytes as text, the parse failed, and the run was
+recorded as a provider failure. Every capability probe up to that point had been
+small enough to miss it. `HttpClientHandler.AutomaticDecompression` is now
+configured, and the failure message names the cause.
+
+**The calendar was wrong, and the pipeline said so.** The one quality finding
+was a `MissingSession` for Friday 2 January 2026: the calendar expected a
+session and no bar existed. Three independent sources — Vietcap, DNSE and SSI —
+have no bar for that date either, which made a provider gap unlikely.
+
+The exchange's annual notice, published in December 2025, listed only 1 January
+as closed. The government then swapped Friday 2 January to Saturday 10 January,
+and the exchange announced the extra closed session separately. The transcribed
+calendar predated that announcement.
+
+The correction was taken **from the later announcement, not from the data**.
+Fitting the calendar to the observed sessions would have destroyed the only
+thing that makes it useful: it is the independent statement against which a
+missing session is judged. A calendar derived from the bars cannot find a
+missing bar.
+
+**58 of 59 closed sessions across five years agreed with the data on the first
+attempt, and the one disagreement was the calendar's fault.** That is the
+strongest available evidence that both are right.
+
+The finding itself remains **open**. Nothing in this system closes a finding
+automatically, and the operator surface that would let a human close one is the
+CLI U3 still owes.
 
 ## Seven questions that must be kept separate
 

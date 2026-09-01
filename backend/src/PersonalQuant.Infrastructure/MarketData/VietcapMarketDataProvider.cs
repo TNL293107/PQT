@@ -218,8 +218,12 @@ internal sealed class VietcapMarketDataProvider(IHttpClientFactory clients) : IM
         }
         catch (JsonException exception)
         {
+            // Named explicitly because it has happened: the endpoint
+            // compresses a large response unasked, and a client without
+            // automatic decompression reads the bytes as text and gets this.
             throw new MarketDataProviderException(
-                "The Vietcap chart endpoint returned a body that is not JSON.",
+                "The Vietcap chart endpoint returned a body that is not JSON. "
+                + "If the response was large, check that the client decompresses.",
                 isTransient: false,
                 exception);
         }

@@ -235,6 +235,44 @@ public sealed class MarketDataOptions
     /// The configured value is not a resolution this system records.
     /// </exception>
     /// <summary>
+    /// Gets or sets the tickers the scheduled pass may ingest, comma
+    /// separated, or an empty string for every listed instrument.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The guard that keeps a first run against a real provider to the
+    /// securities it was meant to cover. The ingestion universe is otherwise
+    /// every listed instrument, and reference-data seeding alone puts ten HOSE
+    /// equities in the master — so an unrestricted first pass fetches and
+    /// stores years of a third party's data for nine securities nobody asked
+    /// about.
+    /// </para>
+    /// <para>
+    /// A limit by count cannot express this: it depends on an ordering nobody
+    /// chose, and the instrument it happens to keep is whichever sorts first.
+    /// </para>
+    /// </remarks>
+    public string IngestionTickers { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Reads the tickers the scheduled pass is restricted to.
+    /// </summary>
+    /// <param name="tickers">
+    /// The set to keep, upper-cased, or empty when the pass is unrestricted.
+    /// </param>
+    /// <returns><see langword="true"/> when at least one ticker is named.</returns>
+    public bool TryBuildIngestionTickers(out IReadOnlySet<string> tickers)
+    {
+        var named = IngestionTickers
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(entry => entry.ToUpperInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        tickers = named;
+        return named.Count > 0;
+    }
+
+    /// <summary>
     /// Reads the source the scheduled pass should name.
     /// </summary>
     /// <remarks>

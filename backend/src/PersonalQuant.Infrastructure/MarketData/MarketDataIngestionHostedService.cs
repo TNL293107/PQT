@@ -198,7 +198,26 @@ public sealed class MarketDataIngestionHostedService(
                     logger, page.Items.Count, page.Total);
             }
 
-            return [.. page.Items.Select(item => item.InstrumentId)];
+            var items = page.Items.AsEnumerable();
+
+            if (options.Value.TryBuildIngestionTickers(out var allowed))
+            {
+                var kept = page.Items
+                    .Where(item => allowed.Contains(item.Ticker.Value))
+                    .ToList();
+
+                // Said out loud. A pass that silently ingested less than the
+                // master holds would leave a gap whose only explanation was a
+                // configuration value nobody was looking at.
+                var named = string.Join(", ", allowed);
+
+                InfrastructureLog.IngestionUniverseRestricted(
+                    logger, kept.Count, page.Items.Count, named);
+
+                items = kept;
+            }
+
+            return [.. items.Select(item => item.InstrumentId)];
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {

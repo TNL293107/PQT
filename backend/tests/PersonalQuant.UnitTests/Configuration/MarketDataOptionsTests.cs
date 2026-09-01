@@ -73,6 +73,29 @@ public sealed class MarketDataOptionsTests
     }
 
     [Fact]
+    public void No_configured_tickers_leaves_the_pass_unrestricted()
+    {
+        // Today's behaviour, and the default: the pass covers every listed
+        // instrument.
+        var options = new MarketDataOptions();
+
+        Assert.False(options.TryBuildIngestionTickers(out var tickers));
+        Assert.Empty(tickers);
+    }
+
+    [Fact]
+    public void Configured_tickers_are_split_trimmed_and_upper_cased()
+    {
+        var options = new MarketDataOptions { IngestionTickers = " fpt , vnm ,, HPG " };
+
+        Assert.True(options.TryBuildIngestionTickers(out var tickers));
+        Assert.Equal(3, tickers.Count);
+        Assert.Contains("FPT", tickers);
+        Assert.Contains("VNM", tickers);
+        Assert.Contains("HPG", tickers);
+    }
+
+    [Fact]
     public void No_configured_ingestion_source_is_not_a_misconfiguration()
     {
         // Naming none is correct while exactly one registered source can serve

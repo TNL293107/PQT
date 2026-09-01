@@ -138,6 +138,16 @@ internal static partial class InfrastructureLog
     public static partial void IngestionUniverseTruncated(ILogger logger, int covered, int total);
 
     [LoggerMessage(
+        EventId = 1134,
+        Level = LogLevel.Information,
+        Message = "The ingestion universe is restricted to {Kept} of {Available} listed instrument(s) by configuration: {Tickers}.")]
+    public static partial void IngestionUniverseRestricted(
+        ILogger logger,
+        int kept,
+        int available,
+        string tickers);
+
+    [LoggerMessage(
         EventId = 1133,
         Level = LogLevel.Error,
         Message = "The ingestion schedule is misconfigured and will do nothing: {Problem}")]

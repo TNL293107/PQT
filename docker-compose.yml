@@ -134,6 +134,7 @@ services:
       MarketData__IngestionPeriodMinutes: ${MARKET_DATA_INGESTION_PERIOD_MINUTES:-60}
       MarketData__InitialBackfillDays: ${MARKET_DATA_BACKFILL_DAYS:-365}
       MarketData__IngestionUniverseLimit: ${MARKET_DATA_UNIVERSE_LIMIT:-250}
+      MarketData__IngestionTickers: ${MARKET_DATA_INGESTION_TICKERS:-}
 
       Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     volumes:

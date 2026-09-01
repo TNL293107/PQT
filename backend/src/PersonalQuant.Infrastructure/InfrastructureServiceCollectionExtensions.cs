@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -232,6 +233,19 @@ public static class InfrastructureServiceCollectionExtensions
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(
                     "PersonalQuantTerminal/0.1 (+research)");
                 client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                // The endpoint compresses a large response whether or not the
+                // request asked it to. A five-year request comes back gzipped;
+                // a three-day one does not, which is how this survived every
+                // probe and failed on the first real backfill. Without
+                // decompression the body is read as mojibake, the parse fails,
+                // and the retained raw payload — the thing that exists so a
+                // parsing bug can be corrected later — is stored as noise.
+                AutomaticDecompression = DecompressionMethods.GZip
+                    | DecompressionMethods.Deflate
+                    | DecompressionMethods.Brotli,
             });
 
             services.AddSingleton<IMarketDataProvider>(provider =>

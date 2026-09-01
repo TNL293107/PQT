@@ -51,7 +51,15 @@ never existed.
 | 2023 | 11 | 20 – 26 Jan |
 | 2024 | 12 | 8 – 14 Feb |
 | 2025 | 12 | 27 – 31 Jan |
-| 2026 | 12 | 16 – 20 Feb |
+| 2026 | 13 | 16 – 20 Feb |
+
+**One of those 59 came from being caught rather than transcribed.** The annual
+notice for 2026 listed only 1 January as closed; the government later swapped
+Friday 2 January to Saturday 10 January and the exchange announced the extra
+closed session separately. The first real ingest raised a `MissingSession`
+finding for that Friday, and the correction was then taken from the later
+announcement — not from the data. A calendar fitted to the observed bars cannot
+find a missing bar.
 
 Every Tet closes five trading days. The spans an announcement gives include the
 weekends inside them; those are dropped here, because weekends are structural
