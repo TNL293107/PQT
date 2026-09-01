@@ -20,6 +20,11 @@ system would believe its calendar covers the year and report a week of real
 closures as missing sessions. With no calendar at all it reports completeness
 as unmeasured, which is true.
 
+The tracked calendar under `data/fixtures/` is now a real one — 2022 through
+2026, transcribed from the exchange's annual notices — so the import can be
+enabled. It ends where the notices end, and a completeness figure asked for a
+range past that is unmeasured rather than assumed.
+
 Read `calendarIsComplete` on the quality report before reading any completeness
 figure.
 

@@ -34,18 +34,44 @@ HOSE, HNX and UPCOM.
 
 ## Trading calendar
 
-**Incomplete on purpose, and not usable as a real calendar.** It carries only
-the four statutory fixed-date Vietnamese holidays, which are the ones that can
-be stated without a source. Tet and the Hung Kings commemoration follow the
-lunar calendar, and substitute days for holidays falling at a weekend are set
-by annual decree — none of those can be derived, and inventing them here would
-put dates into the system of record that nothing stands behind.
+**Real, sourced, and complete for 2022 through 2026.** 58 closed sessions
+across the three venues, every one of them transcribed from the Ho Chi Minh
+Stock Exchange's own annual holiday notice.
 
-The consequence is visible rather than hidden: import this file and the system
-will believe its calendar covers 2026, then report the whole of Tet as missing
-sessions. It exists to exercise the import and the completeness rules, not to
-be trusted. Replace it with a real calendar before reading a completeness
-figure.
+This is the one fixture that is not synthetic, and it is not vendor data
+either: an exchange's published closure schedule is a public announcement, and
+the dates in it are facts about which days a market did not open. It is the
+only way this system can tell a session that is missing from a session that
+never existed.
+
+| Year | Closed sessions | Tet |
+| ---- | --------------- | --- |
+| 2022 | 11 | 31 Jan – 4 Feb |
+| 2023 | 11 | 20 – 26 Jan |
+| 2024 | 12 | 8 – 14 Feb |
+| 2025 | 12 | 27 – 31 Jan |
+| 2026 | 12 | 16 – 20 Feb |
+
+Every Tet closes five trading days. The spans an announcement gives include the
+weekends inside them; those are dropped here, because weekends are structural
+for every venue this system covers and the format records closures rather than
+non-trading days.
+
+Two things the notices state that this file deliberately does not carry:
+
+- **Make-up working Saturdays.** When a holiday is extended by swapping a
+  Monday for a Saturday — 4 May 2024, 22 August 2026 — the exchange does not
+  trade on the Saturday either. Recording it would be recording a weekend, and
+  the calendar already knows about weekends.
+- **Settlement-only closures.** A day on which the depository does not settle
+  but the exchange does trade is not a closed session, and this file is about
+  sessions.
+
+**Coverage ends after 2026.** The 2027 notice is published in late 2026, and
+until it is transcribed here the calendar covers what it covers — the
+completeness report says `calendarIsComplete` for the range it was asked
+about, and a range reaching past the last recorded year is reported as
+unmeasured rather than assumed open.
 
 ## Market data
 
