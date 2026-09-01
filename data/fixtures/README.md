@@ -13,6 +13,7 @@ that did may be added. The rules in [`../README.md`](../README.md) apply.
 | [`market-data/`](market-data/) | [market data CSV](../schemas/market-data-csv.md) | the file market data source, for bar ingestion |
 | [`corporate-actions.csv`](corporate-actions.csv) | [corporate action CSV](../schemas/corporate-action-csv.md) | the file corporate action source, for adjusted prices |
 | [`universes/`](universes/) | [universe CSV](../schemas/universe-csv.md) | the file universe source, for point-in-time constituent sets |
+| [`instruments-fpt.csv`](instruments-fpt.csv) | [instrument symbol list](../schemas/instrument-csv.md) | the single-ticker list U3's first real ingest runs against |
 
 ## Instrument symbol list
 

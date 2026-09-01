@@ -106,13 +106,17 @@ services:
       # fixtures inside the read-only mount below, so the pipelines can be run
       # on a fresh clone without a vendor key.
       #
-      # Both switches are OFF by default and that is deliberate. Starting the
-      # API should not begin reading external sources, and the fixture calendar
-      # is knowingly incomplete — it carries the four fixed-date Vietnamese
-      # holidays and not Tet, so importing it makes the system believe its
-      # calendar covers the year and report a week of real closures as missing
-      # sessions. Point TradingCalendarPath at a real calendar before enabling
-      # completeness scoring. See data/schemas/trading-calendar-csv.md.
+      # Both switches are OFF by default and that is deliberate: starting the
+      # API should not begin reading external sources.
+      #
+      # The calendar is real — 2022-2026, transcribed from the exchange's own
+      # annual holiday notices — so completeness can be measured once the
+      # import is enabled. It ends where the notices end.
+      #
+      # VietcapBaseUrl is empty by default because setting it registers a
+      # source that reaches a third party over the network. That source serves
+      # prices ALREADY ADJUSTED for corporate actions; it declares so, and the
+      # read path returns such a series unrescaled. See ADR-015.
       #
       # The fixture corporate actions are invented and concern only DEMO, the
       # security the fixture bar series describes. They exist so the adjustment
@@ -128,6 +132,8 @@ services:
       MarketData__ImportReferenceDataOnStartup: ${MARKET_DATA_IMPORT_ON_STARTUP:-false}
       MarketData__IngestOnSchedule: ${MARKET_DATA_INGEST_ON_SCHEDULE:-false}
       MarketData__IngestionPeriodMinutes: ${MARKET_DATA_INGESTION_PERIOD_MINUTES:-60}
+      MarketData__InitialBackfillDays: ${MARKET_DATA_BACKFILL_DAYS:-365}
+      MarketData__IngestionUniverseLimit: ${MARKET_DATA_UNIVERSE_LIMIT:-250}
 
       Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     volumes:
