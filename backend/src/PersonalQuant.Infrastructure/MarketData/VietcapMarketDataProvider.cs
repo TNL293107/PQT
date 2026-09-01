@@ -41,11 +41,14 @@ namespace PersonalQuant.Infrastructure.MarketData;
 /// and the permanent file source exist to survive.
 /// </para>
 /// </remarks>
-/// <param name="httpClient">The client this provider calls through.</param>
-internal sealed class VietcapMarketDataProvider(HttpClient httpClient) : IMarketDataProvider
+/// <param name="clients">Supplies a client per call, so handlers rotate.</param>
+internal sealed class VietcapMarketDataProvider(IHttpClientFactory clients) : IMarketDataProvider
 {
     /// <summary>The code every bar this source produces is recorded under.</summary>
     public const string ProviderCode = "VCI";
+
+    /// <summary>The name the configured client is registered under.</summary>
+    public const string ClientName = "vietcap";
 
     /// <summary>The path the chart data is served from.</summary>
     public const string ChartPath = "chart/OHLCChart/gap-chart";
@@ -116,11 +119,18 @@ internal sealed class VietcapMarketDataProvider(HttpClient httpClient) : IMarket
 
         HttpResponseMessage response;
 
+        // A client per call, from the factory. This provider is a singleton —
+        // the registry that holds it is one — and a singleton that captured a
+        // client would hold its handler, and the DNS the handler resolved, for
+        // as long as the process ran. The factory rotates handlers; holding one
+        // is how that protection is quietly lost.
+        using var client = clients.CreateClient(ClientName);
+
         try
         {
             using var content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-            response = await httpClient
+            response = await client
                 .PostAsync(new Uri(ChartPath, UriKind.Relative), content, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -271,6 +281,11 @@ internal sealed class VietcapMarketDataProvider(HttpClient httpClient) : IMarket
                     ReadPrice(highs[index], "high"),
                     ReadPrice(lows[index], "low"),
                     ReadPrice(closes[index], "close"),
+                    // Matched-order volume. The source reports put-through
+                    // trades separately and this column excludes them, so it is
+                    // not total traded volume — a distinction that matters to
+                    // anything measuring liquidity and is invisible in the
+                    // number itself.
                     ReadVolume(volumes[index]),
 
                     // Deliberately absent. See ReportedFields.Turnover.

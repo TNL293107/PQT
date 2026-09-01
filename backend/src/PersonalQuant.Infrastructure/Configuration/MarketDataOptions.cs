@@ -234,6 +234,39 @@ public sealed class MarketDataOptions
     /// <exception cref="DomainValidationException">
     /// The configured value is not a resolution this system records.
     /// </exception>
+    /// <summary>
+    /// Reads the source the scheduled pass should name.
+    /// </summary>
+    /// <remarks>
+    /// Returns false with a reason rather than throwing. The setting matters
+    /// only while the schedule runs, and a stale or mistyped value must not be
+    /// able to stop a deployment that had no intention of ingesting anything.
+    /// </remarks>
+    /// <param name="source">The parsed code, or null when none is configured.</param>
+    /// <param name="problem">Why the configured value is unusable.</param>
+    /// <returns><see langword="true"/> when the setting is usable or absent.</returns>
+    public bool TryBuildIngestionSource(out SourceCode? source, out string? problem)
+    {
+        source = null;
+        problem = null;
+
+        if (string.IsNullOrWhiteSpace(IngestionSource))
+        {
+            // Naming none is correct while exactly one registered source can
+            // serve the request.
+            return true;
+        }
+
+        if (SourceCode.TryCreate(IngestionSource, out var parsed))
+        {
+            source = parsed;
+            return true;
+        }
+
+        problem = $"'{IngestionSource}' is not a usable market data source code.";
+        return false;
+    }
+
     public BarInterval BuildIngestionInterval()
     {
         var interval = (BarInterval)IngestionBarIntervalMinutes;

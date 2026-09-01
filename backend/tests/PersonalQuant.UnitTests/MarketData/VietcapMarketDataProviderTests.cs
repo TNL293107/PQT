@@ -228,10 +228,27 @@ public sealed class VietcapMarketDataProviderTests
     }
 
     [Fact]
+    public async Task A_client_is_taken_from_the_factory_for_every_call()
+    {
+        // The provider is a singleton, because the registry that holds it is
+        // one. Holding a client would hold its handler — and the DNS that
+        // handler resolved — for the life of the process, which is exactly the
+        // protection the factory exists to provide.
+        var factory = new StubClientFactory(new StubHandler("[]", HttpStatusCode.OK));
+        var provider = new VietcapMarketDataProvider(factory);
+
+        await provider.FetchBarsAsync(Request(), TestContext.Current.CancellationToken);
+        await provider.FetchBarsAsync(Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, factory.CreatedCount);
+        Assert.Equal(VietcapMarketDataProvider.ClientName, factory.LastName);
+    }
+
+    [Fact]
     public async Task The_request_names_the_ticker_and_the_end_of_the_window()
     {
         var handler = new StubHandler("[]", HttpStatusCode.OK);
-        var provider = new VietcapMarketDataProvider(Client(handler));
+        var provider = new VietcapMarketDataProvider(new StubClientFactory(handler));
 
         await provider.FetchBarsAsync(Request(), TestContext.Current.CancellationToken);
 
@@ -246,10 +263,7 @@ public sealed class VietcapMarketDataProviderTests
     private static VietcapMarketDataProvider Provider(
         string body,
         HttpStatusCode status = HttpStatusCode.OK) =>
-        new(Client(new StubHandler(body, status)));
-
-    private static HttpClient Client(StubHandler handler) =>
-        new(handler) { BaseAddress = new Uri("https://example.invalid/api/") };
+        new(new StubClientFactory(new StubHandler(body, status)));
 
     private static MarketDataRequest Request()
     {
@@ -264,6 +278,27 @@ public sealed class VietcapMarketDataProviderTests
             out var problem), problem);
 
         return request;
+    }
+
+    /// <summary>Hands out clients over one handler, and counts the handing.</summary>
+    private sealed class StubClientFactory(StubHandler handler) : IHttpClientFactory
+    {
+        public int CreatedCount { get; private set; }
+
+        public string? LastName { get; private set; }
+
+        public HttpClient CreateClient(string name)
+        {
+            CreatedCount++;
+            LastName = name;
+
+            // disposeHandler: false, matching the real factory — a client is
+            // disposable, the handler behind it is pooled and outlives it.
+            return new HttpClient(handler, disposeHandler: false)
+            {
+                BaseAddress = new Uri("https://example.invalid/api/"),
+            };
+        }
     }
 
     /// <summary>Answers with a fixed body, and records what it was asked.</summary>

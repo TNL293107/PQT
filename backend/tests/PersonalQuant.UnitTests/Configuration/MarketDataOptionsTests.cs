@@ -73,6 +73,41 @@ public sealed class MarketDataOptionsTests
     }
 
     [Fact]
+    public void No_configured_ingestion_source_is_not_a_misconfiguration()
+    {
+        // Naming none is correct while exactly one registered source can serve
+        // the request, which is every deployment until a second provider is
+        // added.
+        var options = new MarketDataOptions();
+
+        Assert.True(options.TryBuildIngestionSource(out var source, out var problem));
+        Assert.Null(source);
+        Assert.Null(problem);
+    }
+
+    [Fact]
+    public void A_configured_ingestion_source_is_parsed()
+    {
+        var options = new MarketDataOptions { IngestionSource = "VCI" };
+
+        Assert.True(options.TryBuildIngestionSource(out var source, out _));
+        Assert.Equal("VCI", source?.Value);
+    }
+
+    [Fact]
+    public void An_unusable_ingestion_source_is_reported_rather_than_thrown()
+    {
+        // It is read when the schedule runs, not when the host starts. Parsing
+        // it eagerly let a stale value stop a deployment that had no intention
+        // of ingesting anything — the setting is inert until the pass runs.
+        var options = new MarketDataOptions { IngestionSource = "V" };
+
+        Assert.False(options.TryBuildIngestionSource(out var source, out var problem));
+        Assert.Null(source);
+        Assert.Contains("V", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void An_unusable_retry_policy_is_refused()
     {
         var options = new MarketDataOptions

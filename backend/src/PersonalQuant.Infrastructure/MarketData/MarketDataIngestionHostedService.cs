@@ -51,10 +51,7 @@ public sealed class MarketDataIngestionHostedService(
     /// reports the ambiguity rather than picking by registration order, and
     /// every run is skipped with both candidates named in its reason.
     /// </remarks>
-    private readonly SourceCode? _scheduledSource =
-        string.IsNullOrWhiteSpace(options.Value.IngestionSource)
-            ? null
-            : SourceCode.Create(options.Value.IngestionSource);
+    private SourceCode? _scheduledSource;
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -63,6 +60,16 @@ public sealed class MarketDataIngestionHostedService(
 
         if (!settings.IngestOnSchedule)
         {
+            return;
+        }
+
+        // Read here rather than at construction. The setting matters only once
+        // the schedule is actually running, and parsing it in a field
+        // initialiser let a stale value stop a host that had no intention of
+        // ingesting anything.
+        if (!settings.TryBuildIngestionSource(out _scheduledSource, out var sourceProblem))
+        {
+            InfrastructureLog.IngestionScheduleMisconfigured(logger, sourceProblem!);
             return;
         }
 
