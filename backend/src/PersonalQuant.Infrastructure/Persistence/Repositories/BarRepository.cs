@@ -161,6 +161,27 @@ internal sealed class BarRepository(PersonalQuantDbContext dbContext) : IBarRepo
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<SourceCode>> ListSourcesAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        CancellationToken cancellationToken = default)
+    {
+        // Distinct in the database rather than in memory. The alternative is
+        // reading every bar of a fifteen-year series to learn one fact about
+        // it, and this runs before every ingestion.
+        var codes = await dbContext.Bars
+            .AsNoTracking()
+            .Where(bar => bar.InstrumentId == instrumentId && bar.Interval == interval)
+            .Select(bar => bar.Source.Value)
+            .Distinct()
+            .OrderBy(code => code)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. codes.Select(SourceCode.Create)];
+    }
+
+    /// <inheritdoc />
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
         ArgumentNullException.ThrowIfNull(bars);

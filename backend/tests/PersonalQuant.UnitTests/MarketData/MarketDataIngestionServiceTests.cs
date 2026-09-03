@@ -587,6 +587,144 @@ public sealed class MarketDataIngestionServiceTests
         }
     }
 
+    [Fact]
+    public async Task A_source_adjusted_provider_is_refused_into_a_raw_series()
+    {
+        // V9. The two are different datasets that happen to share a shape:
+        // appending one to the other produces a series wrong by the product of
+        // every factor since, and every individual bar in it stays plausible,
+        // so no quality rule downstream can find it.
+        var adjusted = AdjustedProvider();
+        var harness = new Harness(second: adjusted);
+
+        harness.Returns(Bar(Yesterday.AddDays(-1)), Bar(Yesterday));
+
+        // Named on both runs. With two sources able to serve a daily request
+        // an unnamed one is ambiguous, and a skip for that reason would prove
+        // nothing about this one.
+        await harness.IngestAsync(source: Source);
+
+        // Act
+        var run = await harness.IngestAsync(source: AdjustedSource);
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Contains("ADJ", run.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("STUB", run.FailureReason, StringComparison.Ordinal);
+
+        // Refused before the fetch, not after it. A provider called and then
+        // discarded has still been read, and against a metered third party
+        // that is the part that costs.
+        Assert.Equal(0, adjusted.CallCount);
+        Assert.Equal(2, harness.Bars.All.Count);
+    }
+
+    [Fact]
+    public async Task A_raw_provider_is_refused_into_a_source_adjusted_series()
+    {
+        // The same rule the other way round. The specification states one
+        // direction; enforcing only that one would leave the mixture reachable
+        // by running the two sources in the opposite order.
+        var adjusted = AdjustedProvider();
+        var harness = new Harness(second: adjusted);
+
+        await harness.IngestAsync(source: AdjustedSource);
+        Assert.Equal(2, harness.Bars.All.Count);
+
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        var run = await harness.IngestAsync(source: Source);
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Contains("ADJ", run.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("STUB", run.FailureReason, StringComparison.Ordinal);
+        Assert.Equal(0, harness.Provider.CallCount);
+    }
+
+    [Fact]
+    public async Task A_second_source_sharing_the_convention_is_not_refused()
+    {
+        // The rule is about the adjustment convention, not about a series
+        // having two sources. Two raw sources disagreeing over a value is a
+        // restatement and a SourceConflict finding, which is a different
+        // mechanism and stays reachable.
+        var other = ScriptedSource(SourceCode.Create("OTHER"), adjustsPricesAtSource: false);
+        var harness = new Harness(second: other);
+
+        harness.Returns(Bar(Yesterday));
+        await harness.IngestAsync(source: Source);
+
+        // Act
+        var run = await harness.IngestAsync(source: SourceCode.Create("OTHER"));
+
+        // Assert
+        Assert.NotEqual(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Equal(1, other.CallCount);
+    }
+
+    [Fact]
+    public async Task A_source_adjusted_provider_may_open_a_series_of_its_own()
+    {
+        // Nothing is refused about an adjusted source as such. What is refused
+        // is mixing, and an empty series has nothing to mix with.
+        var adjusted = AdjustedProvider();
+        var harness = new Harness(second: adjusted);
+
+        // Act
+        var run = await harness.IngestAsync(source: AdjustedSource);
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Succeeded, run.Outcome);
+        Assert.Equal(2, harness.Bars.All.Count);
+        Assert.All(harness.Bars.All, bar => Assert.Equal(AdjustedSource, bar.Source));
+    }
+
+    [Fact]
+    public async Task A_refused_run_is_recorded_rather_than_returned_silently()
+    {
+        // The audit table exists to explain gaps. A refusal that left no row
+        // would make the series look like one nobody had tried to extend.
+        var adjusted = AdjustedProvider();
+        var harness = new Harness(second: adjusted);
+
+        harness.Returns(Bar(Yesterday));
+        await harness.IngestAsync(source: Source);
+
+        // Act
+        await harness.IngestAsync(source: AdjustedSource);
+
+        // Assert
+        var refusal = harness.Journal.Runs.Last();
+
+        Assert.Equal(IngestionOutcome.Skipped, refusal.Outcome);
+        Assert.Equal(AdjustedSource, refusal.Source);
+    }
+
+    private static readonly SourceCode AdjustedSource = SourceCode.Create("ADJ");
+
+    private static ScriptedProvider AdjustedProvider() =>
+        ScriptedSource(AdjustedSource, adjustsPricesAtSource: true);
+
+    /// <summary>
+    /// A second registered source that answers with two ordinary sessions.
+    /// </summary>
+    private static ScriptedProvider ScriptedSource(
+        SourceCode code,
+        bool adjustsPricesAtSource) =>
+        new(
+            code,
+            _ => Task.FromResult(new MarketDataFetchResult(
+                "payload",
+                "text/csv",
+                [Bar(Yesterday.AddDays(-1)), Bar(Yesterday)])))
+        {
+            Capability = TestCapability.For(
+                code,
+                adjustsPricesAtSource: adjustsPricesAtSource),
+        };
+
     private static ProviderBar Bar(DateTimeOffset openedAtUtc, decimal close = 105m) =>
         new(openedAtUtc, 100m, 110m, 95m, close, 1_000, null);
 
