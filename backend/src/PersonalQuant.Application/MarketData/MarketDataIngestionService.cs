@@ -106,6 +106,27 @@ internal sealed class MarketDataIngestionService(
                 cancellationToken).ConfigureAwait(false);
         }
 
+        // V9, and refused before anything is fetched. A source that adjusts
+        // prices for corporate actions and one that does not are two different
+        // datasets that happen to share a shape: merging them produces a series
+        // wrong by the product of every factor since, and no quality rule can
+        // see it because every individual bar is plausible. The refusal names
+        // both sources, because the next question an operator asks is which two.
+        if (await FindAdjustmentConflictAsync(provider, instruction, cancellationToken)
+                .ConfigureAwait(false) is { } conflict)
+        {
+            return await CloseAsync(
+                IngestionRun.Start(
+                    provider.Code,
+                    instruction.InstrumentId,
+                    instruction.Interval,
+                    startedAtUtc,
+                    startedAtUtc.AddTicks(instruction.Interval.ToDuration().Ticks),
+                    startedAtUtc),
+                run => run.Skip(conflict, clock.UtcNow),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var checkpoint = await journal
             .FindCheckpointAsync(
                 instruction.InstrumentId, instruction.Interval, provider.Code, cancellationToken)
@@ -441,6 +462,74 @@ internal sealed class MarketDataIngestionService(
             checkpoint.RecordSuccessWithoutProgress(succeededAtUtc);
         }
     }
+
+    /// <summary>
+    /// Reports why the chosen source may not write into this series, or
+    /// <see langword="null"/> when it may.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rule is symmetric, although the specification states it one way
+    /// round. Appending raw prices to a source-adjusted history and appending
+    /// source-adjusted prices to a raw one produce the same mixture, and a rule
+    /// that refused only one direction would be defeated by the order the two
+    /// runs happened to execute in.
+    /// </para>
+    /// <para>
+    /// The whole series is read, not the range being fetched. A raw range
+    /// appended after a source-adjusted history is the same wrong dataset as
+    /// one written into the middle of it.
+    /// </para>
+    /// <para>
+    /// A source that is no longer registered cannot be asked what it did, and
+    /// is read as raw — what every source was before one declared otherwise,
+    /// and the same assumption the adjusted read makes, so the two can never
+    /// disagree about one series.
+    /// </para>
+    /// </remarks>
+    private async Task<string?> FindAdjustmentConflictAsync(
+        IMarketDataProvider provider,
+        IngestionInstruction instruction,
+        CancellationToken cancellationToken)
+    {
+        var held = await bars
+            .ListSourcesAsync(instruction.InstrumentId, instruction.Interval, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held.Count == 0)
+        {
+            return null;
+        }
+
+        var writerAdjusts = provider.Capability.Limitations.AdjustsPricesAtSource;
+
+        foreach (var holder in held)
+        {
+            if (holder == provider.Code || AdjustsAtSource(holder) == writerAdjusts)
+            {
+                continue;
+            }
+
+            return $"'{provider.Code}' {Describe(writerAdjusts)}, and the {instruction.Interval} "
+                + $"series already holds bars from '{holder}', which {Describe(!writerAdjusts)}. "
+                + "They are different datasets and must not be merged.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reports whether the source that produced held bars had already adjusted
+    /// them.
+    /// </summary>
+    private bool AdjustsAtSource(SourceCode source) =>
+        registry.TryResolve(source, out var provider)
+        && provider.Capability.Limitations.AdjustsPricesAtSource;
+
+    private static string Describe(bool adjustsAtSource) =>
+        adjustsAtSource
+            ? "serves prices already adjusted for corporate actions"
+            : "serves raw prices";
 
     private async Task<IngestionRun> RecordUnattemptableAsync(
         IngestionInstruction instruction,

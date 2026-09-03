@@ -121,6 +121,33 @@ public interface IBarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists the distinct sources that hold bars in a series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Read before a fetch rather than after it, because the answer decides
+    /// whether the fetch may happen at all. A source that adjusts prices for
+    /// corporate actions and one that does not produce different datasets that
+    /// share a shape, and the ingestion pipeline refuses to write one into the
+    /// other.
+    /// </para>
+    /// <para>
+    /// The whole series, not the requested range. A raw range appended to the
+    /// end of a source-adjusted history is the same mixture as one written into
+    /// the middle of it, and bounding the question to the range being fetched
+    /// would miss it.
+    /// </para>
+    /// </remarks>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="interval">The resolution.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The codes, ordered, and empty when the series holds nothing.</returns>
+    Task<IReadOnlyList<SourceCode>> ListSourcesAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages new bars. Call
     /// <see cref="Abstractions.IUnitOfWork.SaveChangesAsync"/> to persist them.
     /// </summary>

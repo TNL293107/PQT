@@ -210,6 +210,17 @@ internal sealed class FakeBarRepository : IBarRepository
                     && revision.IsCurrent)
                 .OrderBy(revision => revision.OpenedAtUtc)]);
 
+    public Task<IReadOnlyList<SourceCode>> ListSourcesAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SourceCode>>(
+            [.. _bars.Values
+                .Where(bar => bar.InstrumentId == instrumentId && bar.Interval == interval)
+                .Select(bar => bar.Source)
+                .Distinct()
+                .OrderBy(source => source.Value, StringComparer.Ordinal)]);
+
     public void AddRange(IReadOnlyList<OhlcvBar> bars)
     {
         foreach (var bar in bars)
