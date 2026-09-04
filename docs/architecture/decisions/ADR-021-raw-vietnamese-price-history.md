@@ -167,9 +167,19 @@ and `ProviderCapability` exists to record exactly that.
 
 ## Consequences
 
-- Gate A's corporate-action test is reachable. It is not yet passed: the adapter
-  does not exist, the action for 27 May 2016 is not recorded, and nothing has
-  been run through the engine.
+- Gate A's corporate-action test is reachable. It is not yet passed: the action
+  for 27 May 2016 is not recorded and nothing has been run through the engine.
+  The adapter exists as of this record's commit, declaring
+  `AdjustsPricesAtSource = false`, `VolumeBasis = MatchedAndNegotiated`,
+  `Turnover = false` and `MaxPeriodsPerCall = 65`.
+- **The declared call bound had to start being enforced.** Every source before
+  this one declared none, so V10 was written down, rendered and applied by
+  nothing. Against a source that truncates a long response rather than refusing
+  it, that gap loses bars from the middle of a range the run records as covered.
+- **The adapter refuses a row outside the window it asked for.** Dropping such
+  rows would turn the silent-fallback bug into an empty range recorded as
+  covered — the same failure one layer down. The date format is written once, in
+  the adapter, and checked against every row that comes back.
 - ADR-015 stays as written. Its landscape table is superseded by this record and
   a reader who finds it first must be able to get here — the index and the
   roadmap carry the pointer.

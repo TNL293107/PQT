@@ -135,6 +135,24 @@ public sealed class MarketDataOptions
     public string VietcapBaseUrl { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the base address of the CafeF public price-history
+    /// endpoint, or an empty string to leave that source unregistered.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Empty by default, like every other source. A deployment that has not
+    /// been pointed at a provider calls nothing, which is the only safe default
+    /// for a source that reaches a third party over the network.
+    /// </para>
+    /// <para>
+    /// <strong>This source serves raw prices.</strong> It is the one the schema
+    /// was designed for, and it cannot share a series with the adjusted source
+    /// above — ingestion refuses that, in both directions. See ADR-021.
+    /// </para>
+    /// </remarks>
+    public string CafefBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the source code the scheduled ingestion pass reads from,
     /// or an empty string to let selection decide.
     /// </summary>
