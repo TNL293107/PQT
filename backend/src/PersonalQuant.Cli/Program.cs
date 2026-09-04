@@ -69,6 +69,11 @@ builder.Services.AddInfrastructure(builder.Configuration);
 using var host = builder.Build();
 using var scope = host.Services.CreateScope();
 
+// Resolved before the attempt, not inside the failure path. The trace is
+// logged at debug and is normally disabled, and building a logger only to
+// discover that is work done for nothing.
+var log = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("pqt");
+
 try
 {
     return await Dispatcher
@@ -103,16 +108,14 @@ catch (OptionsValidationException exception)
 }
 catch (Exception exception)
 {
-    // The message rather than the stack, because the reader is an operator and
-    // the stack is already on standard error through the logger. A connection
-    // this deployment cannot open is the common case and it needs one line.
-    CliLog.CommandFailed(
-        scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("pqt"),
-        exception,
-        command.Group,
-        command.Verb);
+    // The message, and only the message. A database this deployment cannot
+    // reach is the common case and its stack is thirty frames of connection
+    // pool and query pipeline that say nothing the first line does not. The
+    // trace is logged at debug and stays one environment variable away.
+    CliLog.CommandFailed(log, exception, command.Group, command.Verb);
 
     output.Problem($"{exception.GetType().Name}: {exception.Message}");
+    output.Problem("Run again with Logging__LogLevel__Default=Debug for the stack.");
 
     return ExitCode.Refused;
 }

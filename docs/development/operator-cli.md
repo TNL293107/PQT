@@ -206,6 +206,16 @@ success, and the audit trail it leaves is indistinguishable from a correct run.
 Every log line goes to standard error whatever its level, so a pipe reads the
 command's answer alone.
 
+A command that fails answers with the failure and not with its stack. An
+unreachable database produces thirty frames through the connection pool, EF Core
+and the query pipeline, none of which say anything the first line does not, and
+a surface that prints them by default is one an operator stops reading. The
+trace is logged at debug and stays one variable away:
+
+```bash
+Logging__LogLevel__Default=Debug pqt schema status
+```
+
 ---
 
 ## Worked example — a first real backfill
