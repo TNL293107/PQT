@@ -108,7 +108,19 @@ permitting re-entry, and coverage findings raised by the import. The history is
 not: nothing here states a real index's constituents, and seeding today's VN30
 to stand in for earlier years is exactly the bias the workstream removes. See
 [ADR-020](docs/architecture/decisions/ADR-020-universe-membership-and-coverage.md).
-U3–U10 have no code.
+
+**Where U3 stands.** Real Vietnamese prices now go through the pipeline: 1,164
+daily FPT bars from a native Vietcap adapter, the real exchange calendar for
+2022–2026, capability declared per source with explicit selection and no
+automatic fallback, and an
+[operator CLI](docs/development/operator-cli.md) that makes ingestion, backfill
+and finding resolution instructions rather than configuration plus a restart.
+What it still cannot do is the thing Gate A asks for. The criterion is one known
+bonus, rights issue or split reproduced through the corporate action engine, and
+every free Vietnamese source serves prices **already adjusted** — there is no
+discontinuity left in them for the engine to explain. That needs a raw
+long-history feed and none has been found, so U3 is not complete and Gate A does
+not pass. U4–U10 have no code.
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A.
@@ -189,6 +201,7 @@ Phase 0.
 │   ├── src/
 │   │   ├── PersonalQuant.Api/              HTTP, middleware, health, OpenAPI
 │   │   ├── PersonalQuant.Application/      use cases, ports
+│   │   ├── PersonalQuant.Cli/              operator commands over the same ports
 │   │   ├── PersonalQuant.Domain/           financial model
 │   │   └── PersonalQuant.Infrastructure/   PostgreSQL, Redis, migrations
 │   └── tests/               unit + integration
@@ -198,7 +211,7 @@ Phase 0.
 ├── data/                    schemas and fixtures (bulk data git-ignored)
 ├── docs/
 │   ├── architecture/        overview, context, data policy, ADRs
-│   ├── development/         local setup, backups, git workflow
+│   ├── development/         local setup, operator CLI, backups, git workflow
 │   └── roadmap/             canonical roadmap (v2)
 ├── docker-compose.yml
 └── .env.example
@@ -357,6 +370,9 @@ cd quant && pytest && ruff check . && mypy
 ```bash
 cd cpp-engine && cmake --preset ci && cmake --build --preset ci && ctest --preset ci
 ```
+
+719 unit tests and 123 integration tests. The unit tests need nothing but the
+SDK; the rest need a Docker daemon.
 
 The backend integration tests start real PostgreSQL and Redis containers via
 Testcontainers. Without Docker they **skip with an explicit reason** rather
@@ -542,8 +558,9 @@ Recorded now because they are expensive to retrofit:
 | [System context](docs/architecture/system-context.md)                          | Actors and external systems     |
 | [Data policy](docs/architecture/data-policy.md)                                | Market data licensing, source tiers |
 | [Instrument search](docs/architecture/instrument-search.md)                    | Search, resolution, current security |
-| [ADRs](docs/architecture/decisions/)                                           | Nineteen recorded decisions     |
+| [ADRs](docs/architecture/decisions/)                                           | Twenty recorded decisions       |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
+| [Operator CLI](docs/development/operator-cli.md)                              | Provider, ingest and quality commands; exit codes |
 | [Database backup](docs/development/database-backup.md)                         | Backup and restore drill, before real data |
 | [Git workflow](docs/development/git-workflow.md)                               | Branching and commit standards  |
 
