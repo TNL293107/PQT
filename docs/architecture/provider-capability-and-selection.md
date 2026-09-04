@@ -497,6 +497,7 @@ recommended order.
 | **T7** | **Landed** — V9 enforced at ingest, refused before fetch, both sources named |
 | **T8 · T9** | **Landed** — `PersonalQuant.Cli`, six commands; see [`../development/operator-cli.md`](../development/operator-cli.md) |
 | T10 | Landed — ADR-015 records the selection model and the rejection of fallback |
+| **V10** | **Landed** — a declared `MaxPeriodsPerCall` now bounds the range. It was declared, rendered and enforced by nothing until a source needed it |
 
 `ProviderReportedFields` also carries `VolumeBasis` now. Vietnamese venues run
 a matched book and a negotiated one, a feed may publish either or their sum, and
