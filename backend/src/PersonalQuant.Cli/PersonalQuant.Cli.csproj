@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The operator CLI. It owns argument parsing and rendering only: every
+    command calls one application service and prints what it returned.
+
+    Its reason to exist is that ingestion and backfill were otherwise reachable
+    only from a scheduled pass inside the API host, which meant a first real
+    backfill had to be expressed as configuration — an allow-list of tickers
+    and a restart — rather than as an instruction.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PersonalQuant.Cli</RootNamespace>
+    <UserSecretsId>personal-quant-terminal-cli</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Not a web SDK project, so the settings file has to be copied explicitly.
+      It holds no credential and points at no source: everything that varies
+      between deployments arrives from the environment, which is what lets one
+      set of variables configure both hosts.
+    -->
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalQuant.Application\PersonalQuant.Application.csproj" />
+    <ProjectReference Include="..\PersonalQuant.Infrastructure\PersonalQuant.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PersonalQuant.UnitTests" />
+    <InternalsVisibleTo Include="PersonalQuant.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,4 @@
-using PersonalQuant.Api.Contracts;
+using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.UnitTests.MarketData;
