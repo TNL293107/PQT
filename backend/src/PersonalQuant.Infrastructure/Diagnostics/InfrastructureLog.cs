@@ -38,6 +38,15 @@ internal static partial class InfrastructureLog
     public static partial void SchemaUpToDate(ILogger logger);
 
     [LoggerMessage(
+        EventId = 1106,
+        Level = LogLevel.Warning,
+        Message = "The database is {PendingCount} migration(s) behind this build and automatic "
+            + "migration is disabled, so it will stay behind: {Migrations}. Every read and write "
+            + "runs against a schema this build was not compiled for. Apply them, or run "
+            + "'pqt schema status' to see where the deployment stands.")]
+    public static partial void SchemaBehindBuild(ILogger logger, int pendingCount, string migrations);
+
+    [LoggerMessage(
         EventId = 1102,
         Level = LogLevel.Information,
         Message = "Applying {PendingCount} pending migration(s): {Migrations}")]

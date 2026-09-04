@@ -91,6 +91,11 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<IUnitOfWork>(provider =>
             provider.GetRequiredService<PersonalQuantDbContext>());
+
+        // Reads whether the schema this process talks to is the schema this
+        // build expects. Registered beside the unit of work because it is the
+        // same context read a different way, and never a write.
+        services.AddScoped<ISchemaState, SchemaState>();
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
         services.AddScoped<IClassificationRepository, ClassificationRepository>();

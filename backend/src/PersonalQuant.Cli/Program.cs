@@ -97,7 +97,7 @@ catch (OptionsValidationException exception)
     output.Problem(
         "Every setting comes from the environment, as it does for the API host. See "
             + ".env.example, or run the command inside the deployment: "
-            + "docker compose exec backend dotnet PersonalQuant.Cli.dll ...");
+            + "docker compose exec backend dotnet cli/PersonalQuant.Cli.dll ...");
 
     return ExitCode.Refused;
 }

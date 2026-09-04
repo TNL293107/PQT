@@ -84,6 +84,12 @@ internal sealed class VietcapMarketDataProvider(IHttpClientFactory clients) : IM
             // wrong, which is worse than an absent one, so it is not mapped.
             Turnover = false,
 
+            // Order matching only. The endpoint serves the continuous book and
+            // not the negotiated one, so a day's block trades are absent from
+            // this volume — which matters most to exactly the calculations that
+            // would use it, a liquidity screen or a participation-rate cap.
+            VolumeBasis = VolumeBasis.MatchedOrders,
+
             // No corporate action feed, and therefore no announcement dates.
             // This is what gates U4's strict mode against this source.
             AnnouncementDates = false,

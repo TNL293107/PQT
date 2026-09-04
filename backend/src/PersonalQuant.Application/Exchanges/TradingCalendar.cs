@@ -33,6 +33,71 @@ public interface ITradingCalendar
         DateOnly fromDate,
         DateOnly toDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports how far each venue's recorded calendar reaches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The question <see cref="TradingCalendarWindow.IsComplete"/> answers for
+    /// one range, asked ahead of time for every venue. Coverage running out is
+    /// not a failure and produces no error: completeness simply stops being
+    /// measurable, every figure computed over the uncovered period is reported
+    /// as unknown, and the system carries on being correct about knowing less.
+    /// </para>
+    /// <para>
+    /// Which is exactly why it needs asking for. A degradation that announces
+    /// itself by being quietly right is one nobody notices, and Vietnam's
+    /// calendar cannot be extended by inference — Tet is lunar and substitute
+    /// days are set by annual decree, so the next year's coverage exists only
+    /// once somebody transcribes a notice that is published late in the year
+    /// before.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Every venue, ordered by code, with the date its calendar ends.</returns>
+    Task<IReadOnlyList<CalendarCoverage>> ListCoverageAsync(
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// How far one venue's recorded trading calendar reaches.
+/// </summary>
+/// <param name="ExchangeId">The venue.</param>
+/// <param name="Code">The venue's operating code.</param>
+/// <param name="Through">
+/// The last date the calendar covers, or <see langword="null"/> when no
+/// calendar has been recorded for this venue at all.
+/// </param>
+public sealed record CalendarCoverage(ExchangeId ExchangeId, ExchangeCode Code, DateOnly? Through)
+{
+    /// <summary>
+    /// Gets a value indicating whether any calendar has been recorded.
+    /// </summary>
+    /// <remarks>
+    /// Never recorded and run out are different states with different remedies,
+    /// and neither is an empty calendar. A venue with no calendar has had no
+    /// claim made about it; a venue whose calendar ended had one that expired.
+    /// </remarks>
+    public bool IsRecorded => Through is not null;
+
+    /// <summary>
+    /// Reports whether the calendar still covers a date.
+    /// </summary>
+    /// <param name="date">The date to test, normally today.</param>
+    /// <returns><see langword="true"/> when coverage reaches that far.</returns>
+    public bool Covers(DateOnly date) => Through is { } through && through >= date;
+
+    /// <summary>
+    /// Returns how many days of coverage remain after a date.
+    /// </summary>
+    /// <param name="date">The date to measure from, normally today.</param>
+    /// <returns>
+    /// The count, negative once coverage has lapsed, and null when no calendar
+    /// has been recorded — which is not zero days of coverage.
+    /// </returns>
+    public int? DaysRemaining(DateOnly date) =>
+        Through is { } through ? through.DayNumber - date.DayNumber : null;
 }
 
 /// <summary>
@@ -128,5 +193,28 @@ internal sealed class TradingCalendar(IExchangeRepository exchanges) : ITradingC
             toDate,
             holidays.Select(holiday => holiday.Date).ToHashSet(),
             horizon is { } furthest && furthest >= toDate);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CalendarCoverage>> ListCoverageAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var venues = await exchanges.ListAsync(cancellationToken).ConfigureAwait(false);
+        var coverage = new List<CalendarCoverage>(venues.Count);
+
+        foreach (var venue in venues)
+        {
+            var horizon = await exchanges
+                .FindCalendarHorizonAsync(venue.Id, cancellationToken)
+                .ConfigureAwait(false);
+
+            coverage.Add(new CalendarCoverage(venue.Id, venue.Code, horizon));
+        }
+
+        // One query per venue, over a table with a handful of rows. Folding it
+        // into a single grouped read would be faster and would put a second
+        // definition of "how far the calendar reaches" beside the one the
+        // window already uses.
+        return [.. coverage.OrderBy(entry => entry.Code.Value, StringComparer.Ordinal)];
     }
 }

@@ -28,6 +28,9 @@ internal static class Usage
         output.WriteLine("  pqt quality list    --instrument <TICKER> [--interval 1d] [--limit 50] [--status open]");
         output.WriteLine("  pqt quality resolve <ID> --explained|--dismissed --reason \"<text>\"");
         output.WriteLine();
+        output.WriteLine("  pqt schema status");
+        output.WriteLine("  pqt calendar status");
+        output.WriteLine();
         output.WriteLine("Exit codes: 0 done, 1 refused or failed, 2 the command line was wrong.");
         output.WriteLine();
         output.WriteLine("Configuration is read exactly as the API host reads it — appsettings.json");

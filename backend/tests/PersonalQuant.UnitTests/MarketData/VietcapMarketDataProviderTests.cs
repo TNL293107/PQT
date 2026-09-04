@@ -209,6 +209,11 @@ public sealed class VietcapMarketDataProviderTests
         var capability = Provider("[]").Capability;
 
         Assert.True(capability.Limitations.AdjustsPricesAtSource);
+
+        // Order matching only. A volume that excludes negotiated blocks
+        // understates traded size, and worst on the days a liquidity filter is
+        // deciding something — so the basis is declared rather than assumed.
+        Assert.Equal(VolumeBasis.MatchedOrders, capability.ReportedFields.VolumeBasis);
         Assert.False(capability.ReportedFields.Restatements);
         Assert.False(capability.ReportedFields.AnnouncementDates);
     }

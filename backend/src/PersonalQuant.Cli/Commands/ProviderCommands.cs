@@ -123,6 +123,7 @@ internal sealed class ProviderCommands(
         output.Field("Earliest available", DescribeEarliest(capability), Width);
         output.Blank();
         output.Field("Turnover", YesNo(capability.ReportedFields.Turnover), Width);
+        output.Field("Volume counts", DescribeVolumeBasis(capability), Width);
         output.Field("Announcement dates", YesNo(capability.ReportedFields.AnnouncementDates), Width);
         output.Field("Restatements", YesNo(capability.ReportedFields.Restatements), Width);
         output.Blank();
@@ -341,6 +342,18 @@ internal sealed class ProviderCommands(
         capability.Limitations.MinimumCallSpacing is { } spacing
             ? string.Create(CultureInfo.InvariantCulture, $"{spacing.TotalMilliseconds:0}ms")
             : Output.Unknown;
+
+    /// <summary>
+    /// Renders what the source's volume counts, and never renders silence as a
+    /// claim.
+    /// </summary>
+    private static string DescribeVolumeBasis(ProviderCapability capability) =>
+        capability.ReportedFields.VolumeBasis switch
+        {
+            VolumeBasis.MatchedOrders => "matched orders only (excludes negotiated blocks)",
+            VolumeBasis.MatchedAndNegotiated => "matched orders and negotiated blocks",
+            _ => Output.Unknown,
+        };
 
     private static string YesNo(bool value) => value ? "yes" : "no";
 }

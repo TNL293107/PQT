@@ -172,7 +172,8 @@ public sealed class ProviderCommandsTests
     private static ScriptedProvider Provider(
         SourceCode code,
         bool adjustsAtSource,
-        IReadOnlySet<BarInterval>? intervals = null) =>
+        IReadOnlySet<BarInterval>? intervals = null,
+        VolumeBasis volumeBasis = VolumeBasis.Unspecified) =>
         new(code, _ => throw new NotSupportedException("The provider group calls no source."))
         {
             Capability = TestCapability.For(
@@ -181,8 +182,41 @@ public sealed class ProviderCommandsTests
                 exchanges: code == SourceCode.Create("VCI")
                     ? new HashSet<ExchangeCode> { ExchangeCode.Create("HOSE") }
                     : null,
-                adjustsPricesAtSource: adjustsAtSource),
+                adjustsPricesAtSource: adjustsAtSource,
+                volumeBasis: volumeBasis),
         };
+
+    [Fact]
+    public async Task Showing_a_source_states_which_trades_its_volume_counts()
+    {
+        // Vietnamese venues run two books. A volume that counts only continuous
+        // matching understates traded size by however much went through as a
+        // negotiated block, and the number looks identical either way — so a
+        // liquidity screen built on it means something different depending on a
+        // fact nothing was previously recording.
+        var harness = new Harness(
+            Provider(Vendor, adjustsAtSource: true, volumeBasis: VolumeBasis.MatchedOrders));
+
+        var code = await harness.RunAsync("provider", "show", "VCI");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Contains("matched orders only", harness.Result, StringComparison.Ordinal);
+        Assert.Contains("excludes negotiated blocks", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_source_that_never_stated_a_volume_basis_renders_as_unknown()
+    {
+        // Silence is not a claim that everything is counted. A directory of CSV
+        // files exported by somebody else genuinely does not know, and reading
+        // that as "all trades" is how an unstated basis becomes an assumed one.
+        var harness = new Harness(Provider(File, adjustsAtSource: false));
+
+        await harness.RunAsync("provider", "show", "FILE");
+
+        Assert.Contains("Volume counts", harness.Result, StringComparison.Ordinal);
+        Assert.Contains("unknown", harness.Result, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Wires the real registry and command class over a fake resolver.
