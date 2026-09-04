@@ -364,6 +364,27 @@ small:
 | Nothing notices a series assembled from two providers | A mixed-source series raises a Phase 3 data-quality finding, reusing the existing findings machinery |
 | Ingestion and backfill are host-driven with no operator surface | An operator CLI over the existing application layer — the surface the bulk-load path above already needs |
 
+**Where U3 stands.** Everything above is implemented except the evidence.
+`ProviderCapability` is declared per source and selection is explicit, with
+automatic fallback rejected and a test proving a failing source is never
+followed by a second. The Vietcap adapter is native, parses decimals without
+passing through `double`, and produced 1,164 real daily FPT bars — the first
+real Vietnamese prices through the Phase 2–4 pipeline, on which point-in-time
+reads are now demonstrated against real data rather than a fixture. The real
+exchange calendar is transcribed for 2022–2026 from the annual holiday notices.
+Mixing a raw series with a source-adjusted one is refused at ingest as well as
+on read, and an operator CLI now triggers ingestion, backfill and finding
+resolution as instructions rather than as configuration plus a restart —
+[`../development/operator-cli.md`](../development/operator-cli.md).
+
+**What U3 still cannot do is the part Gate A actually asks for.** The criterion
+is one known bonus, rights issue or split reproduced through the corporate
+action engine, and every free Vietnamese source serves prices **already
+adjusted**. There is no discontinuity left in them for the engine to explain, so
+the criterion is not merely unmet — it is unreachable from these sources. It
+needs a raw long-history feed, and none has been found. U3 is not complete and
+Gate A does not pass.
+
 **Automatic provider fallback is rejected, not merely unimplemented.** Falling
 through to a second provider when the first is unavailable would silently
 assemble one series from two symbologies, two adjustment conventions and two

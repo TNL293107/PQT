@@ -450,10 +450,16 @@ Gate-A-relevant, and each one falsifiable.
 
 **CLI**
 
-- [ ] `pqt provider list` and `pqt provider show` render declared capability, including the unknowns as unknown.
-- [ ] `pqt ingest run` produces an `IngestionRun` indistinguishable from one the scheduled host produces.
-- [ ] `pqt ingest backfill` over a range longer than `MaxPeriods` completes across several runs and leaves the checkpoint where the last stored bar is.
-- [ ] No CLI command contains a branch that is not reachable through the application layer by another caller.
+- [x] `pqt provider list` and `pqt provider show` render declared capability, including the unknowns as unknown.
+- [x] `pqt ingest run` produces an `IngestionRun` indistinguishable from one the scheduled host produces.
+- [x] `pqt ingest backfill` over a range longer than `MaxPeriods` completes across several runs and leaves the checkpoint where the last stored bar is.
+- [x] No CLI command contains a branch that is not reachable through the application layer by another caller.
+
+Two criteria were added while building it, because the first smoke test found
+what they describe.
+
+- [x] A command line the operator got wrong is answered before anything reaches the deployment. Asserted by a harness whose every service throws when constructed.
+- [x] `provider list` and `provider show` run on a host with no database configured. They read declarations that live in the composition root, and that is the state in which the question is most worth asking.
 
 **Regression**
 
@@ -481,6 +487,27 @@ Ordered by dependency. Each task lands on its own and leaves the build green.
 **T5 is independently valuable and has no dependencies.** It is a live defect in
 committed code and can land first, before any capability work, which is the
 recommended order.
+
+### Where the tasks stand
+
+| # | Status |
+| --- | --- |
+| T1 · T2 · T3 · T4 | Landed — capability declared, selection explicit, skip reasons specific |
+| T5 · T6 | Landed — source excluded from the unchanged check; `SourceConflict` raised from `MergeAsync` |
+| **T7** | **Landed** — V9 enforced at ingest, refused before fetch, both sources named |
+| **T8 · T9** | **Landed** — `PersonalQuant.Cli`, six commands; see [`../development/operator-cli.md`](../development/operator-cli.md) |
+| T10 | Landed — ADR-015 records the selection model and the rejection of fallback |
+
+V9 was the last rule still enforced on the read path alone. The adjusted read
+already declined to rescale a series whose source had rescaled it, which keeps
+one answer correct and lets the wrong data into the table underneath it. It is
+now refused at ingest, before the fetch, and **symmetrically** — the table above
+states the rule one way round, and refusing only that direction would leave the
+mixture reachable by running the two sources in the other order.
+
+Two sources sharing an adjustment convention are still allowed to meet. That is
+a restatement and a `SourceConflict` finding, and folding it into this refusal
+would remove the machinery that makes a real disagreement visible.
 
 ---
 
