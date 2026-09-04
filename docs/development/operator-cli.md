@@ -162,10 +162,10 @@ many days remain, and its state:
 
 | State | Meaning |
 | --- | --- |
-| `covered` | Coverage reaches past today with more than a quarter to spare |
-| `expiring` | Coverage ends within 90 days |
-| `lapsed` | Coverage ended before today |
-| `not recorded` | No calendar has ever been recorded for this venue |
+| `covered` | The declared claim reaches past today with more than a quarter to spare |
+| `expiring` | The claim ends within 90 days |
+| `lapsed` | The claim ended before today |
+| `not declared` | Nobody has said how far this venue's calendar was transcribed |
 
 Completeness is measured against this calendar. Past the date a venue is
 covered through, a real holiday and a missing session become
@@ -176,10 +176,21 @@ year cannot be derived: Tet is lunar and substitute days are set by annual
 decree, so coverage exists only once somebody transcribes a notice published
 late in the year before. Ninety days is roughly when that notice exists.
 
-`not recorded` does not by itself fail the command. No claim was ever made about
+`not declared` does not by itself fail the command. No claim was ever made about
 that venue, which is a different state from a claim that expired — the same
 distinction the capability record draws between an unstated coverage floor and
-an unbounded one.
+an unbounded one. The closures may well be transcribed; what is missing is
+anybody saying how far.
+
+**Coverage is declared, never inferred.** It used to be read off the furthest
+recorded closure, and that was wrong in both directions at once. A calendar
+transcribed through 2026 reported its reach as 2 September — the year's last
+public holiday — so the final quarter read as uncovered while its transcription
+sat in the table. And every date *before* that closure read as covered,
+including years holding no rows at all: a 2016 series was checked against a
+calendar with no 2016 closures in it, and three real Vietnamese public holidays
+were raised as missing sessions. The claim now lives on the venue and comes from
+`MarketData__TradingCalendarCoveragePath`.
 
 ---
 

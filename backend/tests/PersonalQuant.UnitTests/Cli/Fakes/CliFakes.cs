@@ -77,11 +77,19 @@ internal sealed class FakeSchemaState : ISchemaState
 /// <summary>Answers with whatever calendar coverage a test declared.</summary>
 internal sealed class FakeTradingCalendar : ITradingCalendar
 {
-    private readonly List<CalendarCoverage> _coverage = [];
+    private readonly List<VenueCalendarCoverage> _coverage = [];
 
-    /// <summary>Declares a venue whose calendar reaches a date, or none at all.</summary>
+    /// <summary>
+    /// Declares a venue whose calendar was transcribed through a date, or one
+    /// that declares nothing at all.
+    /// </summary>
     public void Covers(string code, DateOnly? through) =>
-        _coverage.Add(new CalendarCoverage(ExchangeId.New(), ExchangeCode.Create(code), through));
+        _coverage.Add(new VenueCalendarCoverage(
+            ExchangeId.New(),
+            ExchangeCode.Create(code),
+            through is { } end
+                ? CalendarCoverage.Create(new DateOnly(2022, 1, 1), end.AddDays(1))
+                : null));
 
     public Task<TradingCalendarWindow> LoadAsync(
         ExchangeId exchangeId,
@@ -90,9 +98,9 @@ internal sealed class FakeTradingCalendar : ITradingCalendar
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("The deployment commands do not load a window.");
 
-    public Task<IReadOnlyList<CalendarCoverage>> ListCoverageAsync(
+    public Task<IReadOnlyList<VenueCalendarCoverage>> ListCoverageAsync(
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<CalendarCoverage>>([.. _coverage]);
+        Task.FromResult<IReadOnlyList<VenueCalendarCoverage>>([.. _coverage]);
 }
 
 /// <summary>A clock frozen wherever a test put it.</summary>

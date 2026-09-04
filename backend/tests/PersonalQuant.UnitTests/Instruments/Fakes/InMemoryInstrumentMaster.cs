@@ -182,16 +182,15 @@ internal sealed class InMemoryExchanges : IExchangeRepository
                     && holiday.Date <= toDate)
                 .OrderBy(holiday => holiday.Date)]);
 
-    public Task<DateOnly?> FindCalendarHorizonAsync(
-        ExchangeId exchangeId,
-        CancellationToken cancellationToken = default)
+    /// <summary>Declares how far a venue's calendar was transcribed.</summary>
+    public void DeclareCoverage(ExchangeId exchangeId, DateOnly from, DateOnly? until)
     {
-        var dates = _holidays
-            .Where(holiday => holiday.ExchangeId == exchangeId)
-            .Select(holiday => holiday.Date)
-            .ToList();
+        var venue = _exchanges.Find(exchange => exchange.Id == exchangeId)
+            ?? throw new InvalidOperationException("No such venue.");
 
-        return Task.FromResult(dates.Count == 0 ? (DateOnly?)null : dates.Max());
+        // The venue's own last-touched instant, because an audit stamp that
+        // predates creation is refused — and the fake has no clock of its own.
+        venue.DeclareCalendarCoverage(CalendarCoverage.Create(from, until), venue.UpdatedAtUtc);
     }
 
     public Task<bool> HasHolidayAsync(

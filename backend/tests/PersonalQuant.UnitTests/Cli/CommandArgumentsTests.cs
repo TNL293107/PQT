@@ -224,6 +224,19 @@ public sealed class CommandArgumentsTests
         Assert.Contains("without a value", problem, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(1, "pass", "1 pass")]
+    [InlineData(4, "pass", "4 passes")]
+    [InlineData(2, "bar", "2 bars")]
+    [InlineData(1, "bar", "1 bar")]
+    [InlineData(0, "migration", "0 migrations")]
+    [InlineData(3, "match", "3 matches")]
+    public void A_count_takes_the_plural_its_noun_actually_has(int count, string noun, string expected)
+    {
+        // "4 passs" reached real operator output before this existed.
+        Assert.Equal(expected, Output.Plural(count, noun));
+    }
+
     private static CommandArguments Parse(string[] args)
     {
         Assert.True(CommandArguments.TryParse(args, out var command, out var problem), problem);

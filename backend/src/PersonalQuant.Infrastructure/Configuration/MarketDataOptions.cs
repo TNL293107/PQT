@@ -92,6 +92,26 @@ public sealed class MarketDataOptions
     public string TradingCalendarPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the CSV declaring how far the trading calendar was
+    /// transcribed, per venue, or an empty string to declare nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Separate from the calendar itself because it answers a different
+    /// question. The closures say which days a venue was shut; this says which
+    /// span somebody actually went through and transcribed, and only the second
+    /// can tell a year with no holidays from a year nobody has read.
+    /// </para>
+    /// <para>
+    /// Empty means no claim, and every completeness figure then reports
+    /// unmeasurable. That is the honest state — and better than the guess it
+    /// replaces, which read the furthest recorded closure as the calendar's
+    /// reach and was wrong in both directions.
+    /// </para>
+    /// </remarks>
+    public string TradingCalendarCoveragePath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the CSV corporate action file to read, or an empty string
     /// to leave it unregistered.
     /// </summary>

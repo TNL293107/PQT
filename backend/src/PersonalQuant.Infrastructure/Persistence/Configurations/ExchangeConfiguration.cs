@@ -64,6 +64,26 @@ internal sealed class ExchangeConfiguration : IEntityTypeConfiguration<Exchange>
                     value => PriceLimit.FromPercent(value * 100m)))
             .HasPrecision(6, PriceLimit.MaxScale);
 
+        // Optional by design, and the absence is the meaningful state: a venue
+        // that claims nothing has had no calendar transcribed, and every
+        // completeness figure over it reports unmeasurable rather than being
+        // computed against rows of unknown extent. The lower bound is not
+        // nullable, so the two columns cannot express a half-made claim.
+        builder.OwnsOne(exchange => exchange.CalendarCoverage, coverage =>
+        {
+            coverage.Property(span => span.From)
+                .HasColumnName("calendar_coverage_from")
+                .IsRequired();
+
+            // Null means the claim runs on, not that its end is unknown — which
+            // for a Vietnamese venue is a claim nobody can make, since the
+            // schedule exists only once an annual notice is published.
+            coverage.Property(span => span.Until)
+                .HasColumnName("calendar_coverage_until");
+        });
+
+        builder.Navigation(exchange => exchange.CalendarCoverage).IsRequired(false);
+
         builder.Property(exchange => exchange.CreatedAtUtc)
             .HasColumnName("created_at_utc")
             .IsRequired();

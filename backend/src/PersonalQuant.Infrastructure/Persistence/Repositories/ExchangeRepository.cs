@@ -55,25 +55,6 @@ internal sealed class ExchangeRepository(PersonalQuantDbContext dbContext) : IEx
             .ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<DateOnly?> FindCalendarHorizonAsync(
-        ExchangeId exchangeId,
-        CancellationToken cancellationToken = default)
-    {
-        // An ordered read of one row rather than an aggregate: it uses the
-        // same index the window scan does, and returns null for a venue with
-        // no calendar at all without a special case.
-        var furthest = await dbContext.TradingHolidays
-            .AsNoTracking()
-            .Where(holiday => holiday.ExchangeId == exchangeId)
-            .OrderByDescending(holiday => holiday.Date)
-            .Select(holiday => (DateOnly?)holiday.Date)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return furthest;
-    }
-
-    /// <inheritdoc />
     public Task<bool> HasHolidayAsync(
         ExchangeId exchangeId,
         DateOnly onDate,

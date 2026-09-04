@@ -190,9 +190,10 @@ public static class InfrastructureServiceCollectionExtensions
         if (!string.IsNullOrWhiteSpace(options.TradingCalendarPath))
         {
             var path = options.TradingCalendarPath;
+            var coveragePath = options.TradingCalendarCoveragePath;
 
             services.AddSingleton<ITradingCalendarProvider>(
-                _ => new FileTradingCalendarProvider(path));
+                _ => new FileTradingCalendarProvider(path, coveragePath));
         }
 
         if (!string.IsNullOrWhiteSpace(options.CorporateActionPath))

@@ -154,11 +154,11 @@ internal sealed class DeploymentCommands(
                 Describe(entry, today),
             ])]);
 
-        var lapsed = coverage.Where(entry => entry.IsRecorded && !entry.Covers(today)).ToList();
+        var lapsed = coverage.Where(entry => entry.IsDeclared && !entry.Covers(today)).ToList();
         var expiring = coverage
             .Where(entry => entry.Covers(today) && entry.DaysRemaining(today) <= NoticeDays)
             .ToList();
-        var unrecorded = coverage.Where(entry => !entry.IsRecorded).ToList();
+        var undeclared = coverage.Where(entry => !entry.IsDeclared).ToList();
 
         output.Blank();
         output.Line(
@@ -166,15 +166,16 @@ internal sealed class DeploymentCommands(
                 + "through, a real holiday and a missing session become indistinguishable, so "
                 + "completeness is reported as unknown rather than computed wrongly.");
 
-        if (unrecorded.Count > 0)
+        if (undeclared.Count > 0)
         {
             // Not a failure on its own. No claim was ever made about these
             // venues, which is a different state from a claim that expired, and
             // the two must not be collapsed.
             output.Blank();
             output.Line(
-                $"No calendar is recorded for {Names(unrecorded)}. Completeness has never been "
-                    + "measurable for them, which is the honest state and not a regression.");
+                $"No calendar coverage is declared for {Names(undeclared)}. Completeness has "
+                    + "never been measurable for them, which is the honest state and not a "
+                    + "regression — the closures may be transcribed; nobody has said how far.");
         }
 
         foreach (var entry in expiring)
@@ -198,11 +199,11 @@ internal sealed class DeploymentCommands(
         return ExitCode.Refused;
     }
 
-    private static string Describe(CalendarCoverage entry, DateOnly today)
+    private static string Describe(VenueCalendarCoverage entry, DateOnly today)
     {
-        if (!entry.IsRecorded)
+        if (!entry.IsDeclared)
         {
-            return "not recorded";
+            return "not declared";
         }
 
         if (!entry.Covers(today))
@@ -213,7 +214,7 @@ internal sealed class DeploymentCommands(
         return entry.DaysRemaining(today) <= NoticeDays ? "expiring" : "covered";
     }
 
-    private static string Names(IEnumerable<CalendarCoverage> entries) =>
+    private static string Names(IEnumerable<VenueCalendarCoverage> entries) =>
         string.Join(", ", entries.Select(entry => entry.Code.Value));
 
     /// <summary>
