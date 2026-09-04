@@ -169,16 +169,24 @@ internal sealed class BarRepository(PersonalQuantDbContext dbContext) : IBarRepo
         // Distinct in the database rather than in memory. The alternative is
         // reading every bar of a fifteen-year series to learn one fact about
         // it, and this runs before every ingestion.
+        //
+        // The converted property itself, never its .Value. SourceCode reaches
+        // the column through a value converter, so EF can project the property
+        // and cannot project a member of it — asking for .Value produces a
+        // query that compiles, passes every test written against an in-memory
+        // repository, and throws the first time it meets PostgreSQL.
         var codes = await dbContext.Bars
             .AsNoTracking()
             .Where(bar => bar.InstrumentId == instrumentId && bar.Interval == interval)
-            .Select(bar => bar.Source.Value)
+            .Select(bar => bar.Source)
             .Distinct()
-            .OrderBy(code => code)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. codes.Select(SourceCode.Create)];
+        // Ordered here rather than in SQL, for the same reason: the ordering
+        // key would have to be a member of the converted type. A series has a
+        // handful of sources at most.
+        return [.. codes.OrderBy(code => code.Value, StringComparer.Ordinal)];
     }
 
     /// <inheritdoc />
