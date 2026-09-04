@@ -377,13 +377,21 @@ on read, and an operator CLI now triggers ingestion, backfill and finding
 resolution as instructions rather than as configuration plus a restart —
 [`../development/operator-cli.md`](../development/operator-cli.md).
 
-**What U3 still cannot do is the part Gate A actually asks for.** The criterion
-is one known bonus, rights issue or split reproduced through the corporate
-action engine, and every free Vietnamese source serves prices **already
-adjusted**. There is no discontinuity left in them for the engine to explain, so
-the criterion is not merely unmet — it is unreachable from these sources. It
-needs a raw long-history feed, and none has been found. U3 is not complete and
-Gate A does not pass.
+**What U3 has not done is the part Gate A actually asks for**, though it is no
+longer blocked. The criterion is one known bonus, rights issue or split
+reproduced through the corporate action engine, and the source that was ingested
+serves prices **already adjusted** — leaving no discontinuity for the engine to
+explain. That was recorded as unreachable from free sources; it is not. CafeF
+serves raw closes back to listing, its date parameters work in `MM/dd/yyyy` and
+are ignored in silence in any other format, and `FPT` on 27 May 2016 carries a
+−13.68% gap in the raw series against +1.41% in the adjusted one — a move the
+±7% band makes impossible, which is exactly the entitlement the engine has to
+account for. See
+[ADR-021](../architecture/decisions/ADR-021-raw-vietnamese-price-history.md).
+
+The adapter does not exist, the action is not recorded, and nothing has been run
+through the engine. **U3 is not complete and Gate A does not pass** — but what
+remains is work rather than a search.
 
 **Automatic provider fallback is rejected, not merely unimplemented.** Falling
 through to a second provider when the first is unavailable would silently

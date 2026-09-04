@@ -115,12 +115,15 @@ daily FPT bars from a native Vietcap adapter, the real exchange calendar for
 automatic fallback, and an
 [operator CLI](docs/development/operator-cli.md) that makes ingestion, backfill
 and finding resolution instructions rather than configuration plus a restart.
-What it still cannot do is the thing Gate A asks for. The criterion is one known
-bonus, rights issue or split reproduced through the corporate action engine, and
-every free Vietnamese source serves prices **already adjusted** — there is no
-discontinuity left in them for the engine to explain. That needs a raw
-long-history feed and none has been found, so U3 is not complete and Gate A does
-not pass. U4–U10 have no code.
+What it has not done is the thing Gate A asks for: one known bonus, rights issue
+or split reproduced through the corporate action engine. The source ingested so
+far serves prices **already adjusted**, leaving no discontinuity for the engine
+to explain, and that was recorded as unreachable from free sources. It is not —
+CafeF serves raw closes back to listing, and `FPT` on 27 May 2016 carries the
+gap the engine has to account for
+([ADR-021](docs/architecture/decisions/ADR-021-raw-vietnamese-price-history.md)).
+The adapter does not exist yet, so U3 is not complete and Gate A does not pass,
+but what remains is work rather than a search. U4–U10 have no code.
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A.
@@ -558,7 +561,7 @@ Recorded now because they are expensive to retrofit:
 | [System context](docs/architecture/system-context.md)                          | Actors and external systems     |
 | [Data policy](docs/architecture/data-policy.md)                                | Market data licensing, source tiers |
 | [Instrument search](docs/architecture/instrument-search.md)                    | Search, resolution, current security |
-| [ADRs](docs/architecture/decisions/)                                           | Twenty recorded decisions       |
+| [ADRs](docs/architecture/decisions/)                                           | Twenty-one recorded decisions   |
 | [Local setup](docs/development/local-setup.md)                                 | Build, run, test, troubleshoot  |
 | [Operator CLI](docs/development/operator-cli.md)                              | Provider, ingest and quality commands; exit codes |
 | [Database backup](docs/development/database-backup.md)                         | Backup and restore drill, before real data |

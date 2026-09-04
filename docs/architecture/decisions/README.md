@@ -29,6 +29,7 @@ reasoning at the time is preserved.
 | [018](ADR-018-point-in-time-market-bars.md)                  | Point-in-time market bars       | Accepted |
 | [019](ADR-019-openbb-boundary.md)                            | OpenBB as a deferred, out-of-process data option | Accepted |
 | [020](ADR-020-universe-membership-and-coverage.md)           | Universe membership and the coverage claim | Accepted |
+| [021](ADR-021-raw-vietnamese-price-history.md)               | Raw Vietnamese price history, superseding ADR-015's source landscape | Accepted |
 
 ## Format
 
