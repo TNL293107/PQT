@@ -237,7 +237,44 @@ back-adjusted number, and the agreement between three sources is agreement
 about a derivation, not corroboration of a fact.
 
 `accumulatedValue` is also `null` on those older bars, so turnover is not
-available for history from VCI even where prices are.
+available for history from VCI even where prices are. Where it is present its
+unit is undocumented and appears to be millions of dong; an inferred unit gives
+a turnover wrong by a factor of a million if the inference is wrong, which is
+worse than an absent one, so the field is not mapped and the capability declares
+`Turnover = false`.
+
+### The volume is one book, not two
+
+Vietnamese venues run two of them. Continuous order matching — *khớp lệnh* — is
+one; negotiated block trades — *thỏa thuận* — are agreed off the book and
+reported separately. **VCI's `volume` is the matched book only.**
+
+This is recorded rather than merely noted, as
+`ProviderReportedFields.VolumeBasis`, for the same reason
+`AdjustsPricesAtSource` is: the two numbers are indistinguishable once stored.
+A series carrying matched-only volume and one carrying the sum have the same
+shape, the same column and the same plausible magnitudes, and nothing
+downstream can tell them apart by inspection.
+
+The consequence is not cosmetic. Block trades are where institutional size
+actually moves, so a matched-only volume understates traded size by whatever
+proportion of the day went through negotiated — and understates it worst on
+exactly the days a liquidity filter is deciding something. A universe screened
+on average daily volume, a participation-rate cap, an execution-cost model: each
+means something different depending on this value, and none of them can detect
+which it was given.
+
+`VolumeBasis.Unspecified` is the default and is not a synonym for *everything*.
+A directory of CSV files exported by somebody else genuinely does not know what
+its volume counts, and reading that silence as a claim is how an unstated basis
+becomes an assumed one.
+
+**Mixing bases is not yet refused, and that is deliberate.** Ingestion refuses
+to mix a raw series with a source-adjusted one because two registered sources
+declare opposing adjustment conventions and the mixture is reachable today. Only
+one source states a volume basis at all, so a rule against mixing would guard a
+case that cannot occur. When a second source states a different basis, the
+refusal belongs beside V9 in the ingestion service, built the same way.
 
 ### Why this blocks storing them as bars
 

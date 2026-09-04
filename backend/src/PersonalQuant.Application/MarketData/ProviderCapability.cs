@@ -166,6 +166,35 @@ public sealed record ProviderReportedFields
     public bool Turnover { get; init; }
 
     /// <summary>
+    /// Gets which trades the reported volume counts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Vietnamese venues run two books. Continuous order matching —
+    /// <em>khớp lệnh</em> — is one; negotiated block trades —
+    /// <em>thỏa thuận</em> — are the other, and they are agreed off the book and
+    /// reported separately. A feed may publish either, or their sum, and the
+    /// number looks identical whichever it is.
+    /// </para>
+    /// <para>
+    /// The difference is not a rounding error. Block trades are where
+    /// institutional size actually moves, so a volume that excludes them
+    /// understates liquidity by whatever proportion of the day's turnover was
+    /// negotiated — and understates it worst on exactly the days a liquidity
+    /// filter is deciding something. A universe screened on average daily
+    /// volume, a participation-rate cap, an execution-cost model: each of them
+    /// silently means something different depending on this value, and none of
+    /// them can detect which.
+    /// </para>
+    /// <para>
+    /// So it is declared rather than inferred, and
+    /// <see cref="MarketData.VolumeBasis.Unspecified"/> is the honest default.
+    /// A source that has not said must not be read as having said "everything".
+    /// </para>
+    /// </remarks>
+    public VolumeBasis VolumeBasis { get; init; } = VolumeBasis.Unspecified;
+
+    /// <summary>
     /// Gets a value indicating whether corporate actions carry an announcement
     /// date.
     /// </summary>
@@ -186,6 +215,46 @@ public sealed record ProviderReportedFields
     /// reproduced this month, and nothing says why.
     /// </remarks>
     public bool Restatements { get; init; }
+}
+
+/// <summary>
+/// Which trades a source's reported volume counts.
+/// </summary>
+/// <remarks>
+/// Not enforced, and deliberately so for now. The ingestion pipeline refuses to
+/// mix a raw series with a source-adjusted one because two sources declare
+/// opposing adjustment conventions and a mixture is reachable today. Only one
+/// registered source states a volume basis at all, so a rule refusing a mixture
+/// would be guarding against a case that cannot yet occur. When a second source
+/// states a different basis, the refusal belongs beside V9 in the ingestion
+/// service, built the same way and for the same reason.
+/// </remarks>
+public enum VolumeBasis
+{
+    /// <summary>
+    /// The source does not state what its volume counts.
+    /// </summary>
+    /// <remarks>
+    /// The default, and not a synonym for "everything". A directory of CSV
+    /// files exported by somebody else genuinely does not know, and reading
+    /// that silence as a claim is how an unstated basis becomes an assumed one.
+    /// </remarks>
+    Unspecified = 0,
+
+    /// <summary>
+    /// Continuous order-book matching only — <em>khớp lệnh</em>.
+    /// </summary>
+    /// <remarks>
+    /// Excludes negotiated block trades. Understates traded size, by a margin
+    /// that varies by security and by day.
+    /// </remarks>
+    MatchedOrders = 1,
+
+    /// <summary>
+    /// Order matching and negotiated block trades together — <em>khớp lệnh</em>
+    /// plus <em>thỏa thuận</em>.
+    /// </summary>
+    MatchedAndNegotiated = 2,
 }
 
 /// <summary>

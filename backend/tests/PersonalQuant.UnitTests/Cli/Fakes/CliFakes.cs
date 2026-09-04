@@ -1,4 +1,6 @@
 using System.Text;
+using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Universes;
@@ -58,6 +60,45 @@ internal static class Unreachable
         where TService : notnull =>
         new(() => throw new InvalidOperationException(
             $"{typeof(TService).Name} was constructed. The command should not have needed it."));
+}
+
+/// <summary>Answers with whatever schema comparison a test declared.</summary>
+internal sealed class FakeSchemaState : ISchemaState
+{
+    private SchemaComparison _comparison = new(0, null, []);
+
+    public void Holds(int appliedCount, string? lastApplied, params string[] pending) =>
+        _comparison = new SchemaComparison(appliedCount, lastApplied, pending);
+
+    public Task<SchemaComparison> ReadAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(_comparison);
+}
+
+/// <summary>Answers with whatever calendar coverage a test declared.</summary>
+internal sealed class FakeTradingCalendar : ITradingCalendar
+{
+    private readonly List<CalendarCoverage> _coverage = [];
+
+    /// <summary>Declares a venue whose calendar reaches a date, or none at all.</summary>
+    public void Covers(string code, DateOnly? through) =>
+        _coverage.Add(new CalendarCoverage(ExchangeId.New(), ExchangeCode.Create(code), through));
+
+    public Task<TradingCalendarWindow> LoadAsync(
+        ExchangeId exchangeId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("The deployment commands do not load a window.");
+
+    public Task<IReadOnlyList<CalendarCoverage>> ListCoverageAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CalendarCoverage>>([.. _coverage]);
+}
+
+/// <summary>A clock frozen wherever a test put it.</summary>
+internal sealed class FixedClock(DateTimeOffset now) : IClock
+{
+    public DateTimeOffset UtcNow { get; } = now;
 }
 
 /// <summary>Resolves whichever tickers a test declared.</summary>

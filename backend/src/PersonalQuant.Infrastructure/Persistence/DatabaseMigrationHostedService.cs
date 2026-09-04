@@ -46,31 +46,49 @@ public sealed class DatabaseMigrationHostedService(
     /// <summary>How many times migration is attempted before giving up.</summary>
     private const int MaxAttempts = 10;
 
+    /// <summary>
+    /// How many times the schema is merely inspected before giving up.
+    /// </summary>
+    /// <remarks>
+    /// Far fewer than <see cref="MaxAttempts"/>, because this path blocks host
+    /// start-up for a report rather than for work. A deployment that migrates
+    /// as a separate step must not wait a minute and a half at boot to be told
+    /// something readiness already reports.
+    /// </remarks>
+    private const int ReportAttempts = 3;
+
     /// <summary>Upper bound on the delay between attempts.</summary>
     private static readonly TimeSpan MaxDelay = TimeSpan.FromSeconds(15);
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!options.Value.ApplyMigrationsOnStartup)
+        var apply = options.Value.ApplyMigrationsOnStartup;
+
+        if (!apply)
         {
             InfrastructureLog.AutomaticMigrationDisabled(logger);
-            return;
         }
 
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        // The schema is inspected either way. Not applying migrations is a
+        // deployment policy; not knowing whether the database is behind is a
+        // defect, and it is the one that let an image run for two weeks against
+        // a database nine migrations behind it with nothing saying so.
+        var budget = apply ? MaxAttempts : ReportAttempts;
+
+        for (var attempt = 1; attempt <= budget; attempt++)
         {
             try
             {
-                await ApplyMigrationsAsync(cancellationToken).ConfigureAwait(false);
+                await InspectAsync(apply, cancellationToken).ConfigureAwait(false);
                 return;
             }
-            catch (Exception exception) when (IsTransient(exception) && attempt < MaxAttempts)
+            catch (Exception exception) when (IsTransient(exception) && attempt < budget)
             {
                 var delay = TimeSpan.FromSeconds(Math.Min(attempt * 2, MaxDelay.TotalSeconds));
 
                 InfrastructureLog.MigrationAttemptFailed(
-                    logger, exception, attempt, MaxAttempts, delay.TotalSeconds);
+                    logger, exception, attempt, budget, delay.TotalSeconds);
 
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
@@ -78,7 +96,7 @@ public sealed class DatabaseMigrationHostedService(
             {
                 // Attempts exhausted. The API still starts; readiness reports
                 // PostgreSQL as unhealthy until the schema catches up.
-                InfrastructureLog.MigrationAbandoned(logger, exception, MaxAttempts);
+                InfrastructureLog.MigrationAbandoned(logger, exception, budget);
                 return;
             }
         }
@@ -87,7 +105,13 @@ public sealed class DatabaseMigrationHostedService(
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private async Task ApplyMigrationsAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Compares the schema against this build, and applies the difference when
+    /// the deployment asked for that.
+    /// </summary>
+    /// <param name="apply">Whether pending migrations are to be applied.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    private async Task InspectAsync(bool apply, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PersonalQuantDbContext>();
@@ -105,6 +129,18 @@ public sealed class DatabaseMigrationHostedService(
         // Formatted once, at start-up, for a list that is a handful of entries
         // long — the cost is irrelevant and the record of what ran is not.
         var migrationNames = string.Join(", ", pending);
+
+        if (!apply)
+        {
+            // Said out loud, at warning, naming them. The process carries on:
+            // whether a schema behind the build is fatal is the deployment's
+            // call, not this service's, and refusing to start would contradict
+            // the liveness and readiness split the rest of the system keeps.
+            // What is not the deployment's call is being told.
+            InfrastructureLog.SchemaBehindBuild(logger, pending.Length, migrationNames);
+            return;
+        }
+
         InfrastructureLog.ApplyingMigrations(logger, pending.Length, migrationNames);
 
         await dbContext.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);

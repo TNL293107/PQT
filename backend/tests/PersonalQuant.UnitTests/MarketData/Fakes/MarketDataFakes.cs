@@ -314,7 +314,8 @@ internal static class TestCapability
         IReadOnlySet<BarInterval>? intervals = null,
         IReadOnlySet<ExchangeCode>? exchanges = null,
         IReadOnlySet<AssetType>? assetTypes = null,
-        bool adjustsPricesAtSource = false) =>
+        bool adjustsPricesAtSource = false,
+        VolumeBasis volumeBasis = VolumeBasis.Unspecified) =>
         new()
         {
             Code = code,
@@ -330,7 +331,11 @@ internal static class TestCapability
             },
             Exchanges = exchanges ?? new HashSet<ExchangeCode>(),
             AssetTypes = assetTypes ?? new HashSet<AssetType>(),
-            ReportedFields = new ProviderReportedFields { Turnover = true },
+            ReportedFields = new ProviderReportedFields
+            {
+                Turnover = true,
+                VolumeBasis = volumeBasis,
+            },
             Limitations = new ProviderLimitations
             {
                 AdjustsPricesAtSource = adjustsPricesAtSource,

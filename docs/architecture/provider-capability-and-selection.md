@@ -498,6 +498,16 @@ recommended order.
 | **T8 · T9** | **Landed** — `PersonalQuant.Cli`, six commands; see [`../development/operator-cli.md`](../development/operator-cli.md) |
 | T10 | Landed — ADR-015 records the selection model and the rejection of fallback |
 
+`ProviderReportedFields` also carries `VolumeBasis` now. Vietnamese venues run
+a matched book and a negotiated one, a feed may publish either or their sum, and
+the number is identical whichever it is — so a liquidity screen built on it
+means something different depending on a fact nothing was recording. It is
+declared, rendered by `provider show`, and `Unspecified` is not a synonym for
+*everything*. Mixing bases is not refused, because only one registered source
+states a basis and a rule would guard a case that cannot occur; when a second
+does, the refusal belongs beside V9. See
+[ADR-015](decisions/ADR-015-vietnam-market-data-provider.md).
+
 V9 was the last rule still enforced on the read path alone. The adjusted read
 already declined to rescale a series whose source had rescaled it, which keeps
 one answer correct and lets the wrong data into the table underneath it. It is

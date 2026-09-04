@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Universes;
@@ -68,6 +70,15 @@ internal static class Dispatcher
                         output)
                     .RunAsync(command, cancellationToken);
 
+            case "schema":
+            case "calendar":
+                return new DeploymentCommands(
+                        Defer<ISchemaState>(services),
+                        Defer<ITradingCalendar>(services),
+                        Defer<IClock>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             case "quality":
                 return new QualityCommands(
                         Defer<IDataQualityService>(services),
@@ -77,7 +88,8 @@ internal static class Dispatcher
 
             default:
                 output.Problem(
-                    $"'{command.Group}' is not a command group. Try provider, ingest or quality.");
+                    $"'{command.Group}' is not a command group. Try provider, ingest, quality, "
+                        + "schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

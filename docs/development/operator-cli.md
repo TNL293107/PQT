@@ -50,6 +50,16 @@ pqt provider show <CODE>
 pqt provider check <CODE> --instrument <TICKER> [--interval 1d] [--from yyyy-MM-dd]
 ```
 
+`show` renders every declared field, including two that decide what a series
+*is* rather than how convenient it is to fetch: whether the source already
+adjusted its prices for corporate actions, and which trades its volume counts.
+The second matters because Vietnamese venues run two books — continuous
+matching, and negotiated blocks agreed off it — and a volume that counts only
+the first understates traded size by a margin that varies day to day. A
+liquidity screen, a participation-rate cap and an execution-cost model each mean
+something different depending on that value, and none of them can detect which.
+A source that has not stated a basis renders as `unknown`, never as "all".
+
 `list` and `show` read what each registered source **declares** — no call is
 made to any third party, so they are safe to run against a metered source, and
 they work on a host that cannot reach PostgreSQL. That last part is deliberate:
@@ -123,6 +133,54 @@ of them and without a reason.
 A finding that is already closed cannot be closed again. Overwriting the first
 resolution would erase the audit trail the finding exists to leave.
 
+### `schema` and `calendar`
+
+```bash
+pqt schema status
+pqt calendar status
+```
+
+Both answer questions about degradations that are **correct and silent**, which
+is why they need asking rather than waiting to be told.
+
+`schema status` compares what the database has applied against what this build
+carries, and prints the build's own informational version beside it. A pending
+list says the database is behind the build; the version says whether the build
+is behind the source. Those drifted independently once — an image two weeks old
+against a database nine migrations older still, each internally consistent, the
+API answering every request and the health check green. It exits non-zero when
+the database is behind, and distinguishes a database that was never migrated
+from one that stopped being maintained, because the remedies differ.
+
+The API host now says the same thing at start-up. Not applying migrations is a
+deployment policy; not knowing whether the database is behind is a defect, so
+the schema is inspected either way and a gap is logged at warning naming every
+missing migration.
+
+`calendar status` prints how far each venue's recorded calendar reaches, how
+many days remain, and its state:
+
+| State | Meaning |
+| --- | --- |
+| `covered` | Coverage reaches past today with more than a quarter to spare |
+| `expiring` | Coverage ends within 90 days |
+| `lapsed` | Coverage ended before today |
+| `not recorded` | No calendar has ever been recorded for this venue |
+
+Completeness is measured against this calendar. Past the date a venue is
+covered through, a real holiday and a missing session become
+indistinguishable, so completeness is reported as unknown rather than computed
+wrongly — correct, and completely silent. The command exits non-zero once a
+calendar has lapsed and warns while it is still expiring, because Vietnam's next
+year cannot be derived: Tet is lunar and substitute days are set by annual
+decree, so coverage exists only once somebody transcribes a notice published
+late in the year before. Ninety days is roughly when that notice exists.
+
+`not recorded` does not by itself fail the command. No claim was ever made about
+that venue, which is a different state from a claim that expired — the same
+distinction the capability record draws between an unstated coverage floor and
+an unbounded one.
+
 ---
 
 ## Exit codes
@@ -153,6 +211,10 @@ command's answer alone.
 ## Worked example — a first real backfill
 
 ```bash
+# Is this deployment the one you think it is?
+docker compose exec backend dotnet cli/PersonalQuant.Cli.dll schema status
+docker compose exec backend dotnet cli/PersonalQuant.Cli.dll calendar status
+
 # What can this deployment read, and does it adjust prices itself?
 docker compose exec backend dotnet cli/PersonalQuant.Cli.dll provider list
 
