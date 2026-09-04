@@ -2,6 +2,20 @@
 
 **Status:** Accepted · **Date:** 2026-08-28 · **Phase:** Research Foundation Upgrade (U3)
 
+> **One finding in this record is superseded.** The source-landscape table below
+> concludes that free Vietnamese sources offer long-and-adjusted or
+> short-and-raw and never long-and-raw, and that Gate A's corporate-action test
+> is therefore unreachable. That is false. CafeF's date parameters work; they
+> are `MM/dd/yyyy` and any other format is ignored in silence, which is how the
+> endpoint appeared to cap at 65 sessions of history when it caps at 65 rows per
+> request. See
+> [ADR-021](ADR-021-raw-vietnamese-price-history.md).
+>
+> Everything else here stands: the layering, the licensing position, the
+> provider selection model and the Vietcap adapter. The reasoning below is left
+> exactly as it was written, per the convention in
+> [README](README.md) — an ADR is not edited when a decision changes.
+
 ## Context
 
 Phases 2, 3 and 4 built a market data pipeline: ingestion with provenance and
@@ -309,6 +323,15 @@ the engine to explain.
 
 **Decided by the operator:** take the adjusted series as a separate declared
 dataset, and keep looking for raw history in parallel.
+
+> **Superseded 2026-09-04.** The raw history was found, in the source this very
+> table rules out. CafeF's `StartDate` and `EndDate` are honoured in
+> `MM/dd/yyyy` and ignored without complaint in any other format; the 65-session
+> cap bounds one response, not the history behind it, and a quarter-sized window
+> paginates in full back to listing in 2006. `FPT` on 27 May 2016 shows a
+> −13.68% gap in the raw close against +1.41% in the adjusted one — a move the
+> ±7% band makes impossible, which is the discontinuity this paragraph says
+> cannot be obtained. See [ADR-021](ADR-021-raw-vietnamese-price-history.md).
 
 ---
 
