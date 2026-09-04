@@ -202,6 +202,20 @@ data/cache/
 data/tmp/
 data/interim/
 data/external/
+
+# Database dumps. A dump of this system holds every bar it has ingested, which
+# is a third party's data under the arrangement in docs/architecture/data-policy.md:
+# storing it rests on the absence of a prohibition, and redistributing it does
+# not. Committing one to a repository that is public to read would be exactly
+# that. The backup runbook writes here.
+backups/
+*.dump
+*.dump.gz
+
+# A local Compose override is one machine's workaround, not the deployment.
+# docker-compose.yml is what the project runs; anything here is a fault being
+# routed around on somebody's laptop and must not become everyone's.
+docker-compose.override.yml
 datasets/raw/
 datasets/cache/
 datasets/tmp/

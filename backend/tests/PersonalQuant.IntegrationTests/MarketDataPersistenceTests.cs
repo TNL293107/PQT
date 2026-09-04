@@ -287,12 +287,63 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
     /// default close this produces exactly the 100/110/95/105 bar it always
     /// did.
     /// </remarks>
+    [Fact]
+    public async Task The_sources_holding_a_series_are_read_back_from_the_database()
+    {
+        // This one has to run against PostgreSQL, and that is the whole point.
+        // The query projects a value-converted property, and the obvious way to
+        // write it — selecting .Value off the converted type — compiles, passes
+        // every unit test written against an in-memory repository, and throws
+        // the first time EF Core meets a real provider. Which is what it did:
+        // V9 shipped and every ingestion against the live database failed.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "MDS", "MDS");
+        var other = SourceCode.Create("OTHER");
+
+        scope.Bars.AddRange(
+        [
+            Bar(instrumentId, Period),
+            Bar(instrumentId, Period.AddDays(1)),
+            Bar(instrumentId, Period.AddDays(2), source: other),
+        ]);
+
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await using var reader = await CreateScopeAsync();
+
+        var sources = await reader.Bars.ListSourcesAsync(
+            instrumentId, BarInterval.OneDay, TestContext.Current.CancellationToken);
+
+        // Assert — distinct, and ordered, whatever order they were written in.
+        Assert.Equal(["OTHER", "TEST"], sources.Select(code => code.Value));
+    }
+
+    [Fact]
+    public async Task A_series_nothing_has_written_to_holds_no_sources()
+    {
+        // Empty rather than null, and it is what lets the adjustment-mixture
+        // refusal allow the first write into a new series.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "MDI", "MDI");
+
+        var sources = await scope.Bars.ListSourcesAsync(
+            instrumentId, BarInterval.OneDay, TestContext.Current.CancellationToken);
+
+        Assert.Empty(sources);
+    }
+
     private static OhlcvBar Bar(
         InstrumentId instrumentId,
         DateTimeOffset openedAtUtc,
         decimal close = 105m,
         decimal? turnover = null,
-        BarInterval interval = BarInterval.OneDay)
+        BarInterval interval = BarInterval.OneDay,
+        SourceCode? source = null)
     {
         const decimal open = 100m;
         const decimal margin = 5m;
@@ -307,7 +358,7 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
             Price.Create(close),
             1_000,
             turnover,
-            Source,
+            source ?? Source,
             Ingested);
     }
 
