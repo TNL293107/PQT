@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/PersonalQuant.Api/PersonalQuant.Api.csproj" />
     <Project Path="src/PersonalQuant.Application/PersonalQuant.Application.csproj" />
+    <Project Path="src/PersonalQuant.Cli/PersonalQuant.Cli.csproj" />
     <Project Path="src/PersonalQuant.Domain/PersonalQuant.Domain.csproj" />
     <Project Path="src/PersonalQuant.Infrastructure/PersonalQuant.Infrastructure.csproj" />
   </Folder>

@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PersonalQuant.Api\PersonalQuant.Api.csproj" />
+    <ProjectReference Include="..\..\src\PersonalQuant.Cli\PersonalQuant.Cli.csproj" />
     <ProjectReference Include="..\..\src\PersonalQuant.Infrastructure\PersonalQuant.Infrastructure.csproj" />
   </ItemGroup>
 
