@@ -132,7 +132,7 @@ internal sealed class MarketDataIngestionService(
                 instruction.InstrumentId, instruction.Interval, provider.Code, cancellationToken)
             .ConfigureAwait(false);
 
-        var range = ResolveRange(instruction, checkpoint, startedAtUtc);
+        var range = ResolveRange(instruction, provider, checkpoint, startedAtUtc);
 
         if (range is null)
         {
@@ -281,9 +281,18 @@ internal sealed class MarketDataIngestionService(
     /// refused. The checkpoint then resumes where this run stopped, so a large
     /// backfill completes over several runs instead of failing on the first.
     /// </para>
+    /// <para>
+    /// V10. The bound is the smaller of what this system permits and what the
+    /// source declares it can carry. A declared limit that nothing enforced
+    /// would be the worst of both: rendered on the operator surface as a
+    /// promise, and silently broken on every backfill — which against a source
+    /// that truncates a long response rather than refusing it means bars
+    /// quietly missing from a range the run records as covered.
+    /// </para>
     /// </remarks>
     private (DateTimeOffset FromUtc, DateTimeOffset ToUtc)? ResolveRange(
         IngestionInstruction instruction,
+        IMarketDataProvider provider,
         IngestionCheckpoint? checkpoint,
         DateTimeOffset nowUtc)
     {
@@ -312,7 +321,16 @@ internal sealed class MarketDataIngestionService(
             return null;
         }
 
-        var maxSpan = interval.ToDuration() * MarketDataRequest.MaxPeriods;
+        // Periods here are the interval's own length, so a source declaring 65
+        // for a daily series gets 65 calendar days — around forty-five trading
+        // sessions. That is deliberately under any cap the vendor expresses in
+        // sessions: sessions per calendar day is not a constant, and a bound
+        // that is occasionally exceeded is a bound that occasionally loses data.
+        var maxPeriods = Math.Min(
+            provider.Capability.Limitations.MaxPeriodsPerCall ?? MarketDataRequest.MaxPeriods,
+            MarketDataRequest.MaxPeriods);
+
+        var maxSpan = interval.ToDuration() * maxPeriods;
 
         if (toUtc - fromUtc > maxSpan)
         {

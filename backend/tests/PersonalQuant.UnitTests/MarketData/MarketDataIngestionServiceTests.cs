@@ -588,6 +588,58 @@ public sealed class MarketDataIngestionServiceTests
     }
 
     [Fact]
+    public async Task A_declared_call_bound_truncates_the_range_it_was_given()
+    {
+        // V10. A source that truncates a long response rather than refusing it
+        // loses bars from the middle of a range the run then records as
+        // covered, and nothing downstream can tell that from a market holiday.
+        var bounded = new ScriptedProvider(
+            SourceCode.Create("BOUND"),
+            _ => Task.FromResult(new MarketDataFetchResult("payload", "text/csv", [])))
+        {
+            Capability = TestCapability.For(SourceCode.Create("BOUND"), maxPeriodsPerCall: 10),
+        };
+
+        var harness = new Harness(second: bounded);
+
+        DateTimeOffset? from = null;
+        DateTimeOffset? to = null;
+        bounded.Intercept(request => (from, to) = (request.FromUtc, request.ToUtc));
+
+        // Act — ask for a year from a source that says it can carry ten days.
+        await harness.IngestAsync(
+            source: SourceCode.Create("BOUND"),
+            from: Yesterday.AddDays(-365),
+            to: Yesterday);
+
+        // Assert
+        Assert.Equal(TimeSpan.FromDays(10), to!.Value - from!.Value);
+    }
+
+    [Fact]
+    public async Task A_source_declaring_no_call_bound_keeps_the_range_it_was_given()
+    {
+        // The regression guard. Every existing source states no bound, and the
+        // behaviour for those must be byte-identical to before V10 existed.
+        var harness = new Harness();
+
+        DateTimeOffset? from = null;
+        DateTimeOffset? to = null;
+
+        harness.Intercept(request =>
+        {
+            (from, to) = (request.FromUtc, request.ToUtc);
+            return [];
+        });
+
+        // Act
+        await harness.IngestAsync(from: Yesterday.AddDays(-90), to: Yesterday);
+
+        // Assert
+        Assert.Equal(TimeSpan.FromDays(90), to!.Value - from!.Value);
+    }
+
+    [Fact]
     public async Task A_source_adjusted_provider_is_refused_into_a_raw_series()
     {
         // V9. The two are different datasets that happen to share a shape:

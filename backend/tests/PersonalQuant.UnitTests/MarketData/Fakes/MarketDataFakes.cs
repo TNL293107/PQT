@@ -315,7 +315,8 @@ internal static class TestCapability
         IReadOnlySet<ExchangeCode>? exchanges = null,
         IReadOnlySet<AssetType>? assetTypes = null,
         bool adjustsPricesAtSource = false,
-        VolumeBasis volumeBasis = VolumeBasis.Unspecified) =>
+        VolumeBasis volumeBasis = VolumeBasis.Unspecified,
+        int? maxPeriodsPerCall = null) =>
         new()
         {
             Code = code,
@@ -339,6 +340,7 @@ internal static class TestCapability
             Limitations = new ProviderLimitations
             {
                 AdjustsPricesAtSource = adjustsPricesAtSource,
+                MaxPeriodsPerCall = maxPeriodsPerCall,
             },
         };
 }
@@ -348,7 +350,12 @@ internal sealed class ScriptedProvider(
     SourceCode code,
     Func<MarketDataRequest, Task<MarketDataFetchResult>> behaviour) : IMarketDataProvider
 {
+    private Action<MarketDataRequest>? _observer;
+
     public int CallCount { get; private set; }
+
+    /// <summary>Records what the pipeline asked for, without changing it.</summary>
+    public void Intercept(Action<MarketDataRequest> observer) => _observer = observer;
 
     public SourceCode Code { get; } = code;
 
@@ -359,6 +366,7 @@ internal sealed class ScriptedProvider(
         CancellationToken cancellationToken = default)
     {
         CallCount++;
+        _observer?.Invoke(request);
 
         return behaviour(request);
     }
