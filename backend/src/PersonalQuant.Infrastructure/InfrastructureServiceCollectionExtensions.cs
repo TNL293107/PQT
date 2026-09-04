@@ -259,6 +259,42 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
 
+        if (!string.IsNullOrWhiteSpace(options.CafefBaseUrl))
+        {
+            var baseAddress = new Uri(
+                options.CafefBaseUrl.EndsWith('/')
+                    ? options.CafefBaseUrl
+                    : options.CafefBaseUrl + "/",
+                UriKind.Absolute);
+
+            var timeout = options.BuildPolicy().ProviderTimeout;
+
+            services.AddHttpClient(CafefMarketDataProvider.ClientName, client =>
+            {
+                client.BaseAddress = baseAddress;
+                client.Timeout = timeout;
+
+                // Stating what this is, rather than impersonating a browser.
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                    "PersonalQuantTerminal/0.1 (+research)");
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                // Configured for the same reason as the adjusted source: a
+                // large response arrives compressed whether or not the request
+                // asked, and without this the body is read as mojibake and the
+                // retained payload is stored as noise.
+                AutomaticDecompression = DecompressionMethods.GZip
+                    | DecompressionMethods.Deflate
+                    | DecompressionMethods.Brotli,
+            });
+
+            services.AddSingleton<IMarketDataProvider>(provider =>
+                new CafefMarketDataProvider(
+                    provider.GetRequiredService<IHttpClientFactory>()));
+        }
+
         // The hosts the pipelines were written for. Both check their own flag
         // and return immediately when it is off, so registering them
         // unconditionally costs a deployment that wants neither nothing at

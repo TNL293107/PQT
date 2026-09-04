@@ -128,6 +128,7 @@ services:
       MarketData__CorporateActionPath: ${MARKET_DATA_CORPORATE_ACTIONS:-/app/data/fixtures/corporate-actions.csv}
       MarketData__UniverseDirectory: ${MARKET_DATA_UNIVERSES:-/app/data/fixtures/universes}
       MarketData__VietcapBaseUrl: ${MARKET_DATA_VIETCAP_URL:-}
+      MarketData__CafefBaseUrl: ${MARKET_DATA_CAFEF_URL:-}
       MarketData__IngestionSource: ${MARKET_DATA_INGESTION_SOURCE:-}
       MarketData__ImportReferenceDataOnStartup: ${MARKET_DATA_IMPORT_ON_STARTUP:-false}
       MarketData__IngestOnSchedule: ${MARKET_DATA_INGEST_ON_SCHEDULE:-false}
