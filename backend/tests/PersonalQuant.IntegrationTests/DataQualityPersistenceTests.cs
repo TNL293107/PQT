@@ -121,30 +121,32 @@ public sealed class DataQualityPersistenceTests(DependencyContainerFixture conta
     }
 
     [Fact]
-    public async Task A_venue_reports_how_far_its_calendar_reaches()
+    public async Task A_venue_reports_the_calendar_coverage_it_was_given()
     {
-        // A window with no closures in range and one the calendar never
-        // covered are indistinguishable without this.
+        // A window with no closures in range and one the calendar never covered
+        // are indistinguishable without a recorded claim — and inferring one
+        // from the closures got it wrong in both directions, which is what this
+        // replaces.
         Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
 
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "DQCAL", dailyPriceLimitPercent: 7m);
 
-        var before = await scope.Exchanges.FindCalendarHorizonAsync(
-            venue, TestContext.Current.CancellationToken);
+        var fresh = await scope.Exchanges.FindByIdAsync(venue, TestContext.Current.CancellationToken);
 
-        Assert.Null(before);
+        Assert.NotNull(fresh);
+        Assert.Null(fresh.CalendarCoverage);
+
+        fresh.DeclareCalendarCoverage(
+            CalendarCoverage.Create(new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1)), Now);
 
         scope.Exchanges.AddHoliday(
             TradingHoliday.Record(venue, new DateOnly(2026, 9, 2), "National Day", Now));
-        scope.Exchanges.AddHoliday(
-            TradingHoliday.Record(venue, new DateOnly(2026, 12, 31), "Calendar horizon", Now));
         await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Act
         await using var reader = await CreateScopeAsync();
-        var horizon = await reader.Exchanges.FindCalendarHorizonAsync(
-            venue, TestContext.Current.CancellationToken);
+        var stored = await reader.Exchanges.FindByIdAsync(venue, TestContext.Current.CancellationToken);
 
         var window = await reader.Calendar.LoadAsync(
             venue,
@@ -152,11 +154,57 @@ public sealed class DataQualityPersistenceTests(DependencyContainerFixture conta
             new DateOnly(2026, 9, 4),
             TestContext.Current.CancellationToken);
 
-        // Assert
-        Assert.Equal(new DateOnly(2026, 12, 31), horizon);
+        // Assert — the claim round-trips, and the window it covers is complete
+        // even though the last closure in the calendar is 2 September.
+        Assert.NotNull(stored?.CalendarCoverage);
+        Assert.Equal(new DateOnly(2026, 1, 1), stored.CalendarCoverage.From);
+        Assert.Equal(new DateOnly(2027, 1, 1), stored.CalendarCoverage.Until);
         Assert.True(window.IsComplete);
         Assert.False(window.IsTradingDay(new DateOnly(2026, 9, 2)));
         Assert.Equal(4, window.TradingDays().Count());
+    }
+
+    [Fact]
+    public async Task A_window_past_the_declared_claim_is_not_complete()
+    {
+        // The under-claim half of the defect: a calendar transcribed through
+        // 2026 used to report its reach as the year's last public holiday, so
+        // the final quarter read as uncovered while its transcription sat in
+        // the table. Now the claim says where it ends, and only a window past
+        // that end is incomplete.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var venue = await AddExchangeAsync(scope, "DQCOV", dailyPriceLimitPercent: 7m);
+
+        var exchange = await scope.Exchanges.FindByIdAsync(venue, TestContext.Current.CancellationToken);
+
+        exchange!.DeclareCalendarCoverage(
+            CalendarCoverage.Create(new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1)), Now);
+
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using var reader = await CreateScopeAsync();
+
+        // Inside the claim, and holding no closures at all: complete.
+        var inside = await reader.Calendar.LoadAsync(
+            venue, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 6),
+            TestContext.Current.CancellationToken);
+
+        // Past it: not complete, whatever the closures say.
+        var beyond = await reader.Calendar.LoadAsync(
+            venue, new DateOnly(2027, 1, 4), new DateOnly(2027, 1, 8),
+            TestContext.Current.CancellationToken);
+
+        // Straddling the end: not complete either, because a figure over a
+        // partly-transcribed window is wrong for the part that is not.
+        var straddling = await reader.Calendar.LoadAsync(
+            venue, new DateOnly(2026, 12, 28), new DateOnly(2027, 1, 2),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(inside.IsComplete);
+        Assert.False(beyond.IsComplete);
+        Assert.False(straddling.IsComplete);
     }
 
     [Fact]
@@ -285,8 +333,13 @@ public sealed class DataQualityPersistenceTests(DependencyContainerFixture conta
         var venue = await AddExchangeAsync(scope, "DQSCO", dailyPriceLimitPercent: 7m);
         var instrumentId = await AddInstrumentAsync(scope, venue, "DQG");
 
-        scope.Exchanges.AddHoliday(
-            TradingHoliday.Record(venue, new DateOnly(2026, 12, 31), "Calendar horizon", Now));
+        // Declared, not planted. This used to add a closure on 31 December so
+        // the inferred horizon would reach past the window — which is the
+        // defect the claim replaces, written into a test.
+        var exchange = await scope.Exchanges.FindByIdAsync(venue, TestContext.Current.CancellationToken);
+
+        exchange!.DeclareCalendarCoverage(
+            CalendarCoverage.Create(new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1)), Now);
 
         // Four of the week's five sessions.
         scope.Bars.AddRange(

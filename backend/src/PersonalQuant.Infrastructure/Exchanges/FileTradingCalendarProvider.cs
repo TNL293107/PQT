@@ -23,7 +23,12 @@ namespace PersonalQuant.Infrastructure.Exchanges;
 /// </para>
 /// </remarks>
 /// <param name="filePath">The CSV calendar to read.</param>
-internal sealed class FileTradingCalendarProvider(string filePath) : ITradingCalendarProvider
+/// <param name="coveragePath">
+/// The CSV declaring how far the calendar was transcribed, or an empty string
+/// when nothing declares it.
+/// </param>
+internal sealed class FileTradingCalendarProvider(string filePath, string coveragePath = "")
+    : ITradingCalendarProvider
 {
     /// <summary>The code this source is known by.</summary>
     public const string ProviderCode = "FILE";
@@ -31,8 +36,12 @@ internal sealed class FileTradingCalendarProvider(string filePath) : ITradingCal
     private const string ExchangeColumn = "exchange";
     private const string DateColumn = "date";
     private const string NameColumn = "name";
+    private const string FromColumn = "coverage_from";
+    private const string UntilColumn = "coverage_until";
 
     private static readonly string[] RequiredColumns = [ExchangeColumn, DateColumn, NameColumn];
+
+    private static readonly string[] RequiredCoverageColumns = [ExchangeColumn, FromColumn, UntilColumn];
 
     /// <inheritdoc />
     public SourceCode Code { get; } = SourceCode.Create(ProviderCode);
@@ -68,6 +77,111 @@ internal sealed class FileTradingCalendarProvider(string filePath) : ITradingCal
         return Parse(lines);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ProviderCalendarCoverage>> ListCoverageAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // A separate file, and separately configured. The closures and the
+        // claim about them answer different questions, and a deployment that
+        // has transcribed a calendar without recording how far it got is a real
+        // state that has to be expressible — it reports unmeasurable rather
+        // than guessing, which is exactly what the guess used to get wrong.
+        if (string.IsNullOrWhiteSpace(coveragePath))
+        {
+            return [];
+        }
+
+        if (!File.Exists(coveragePath))
+        {
+            throw new MarketDataProviderException(
+                "No trading calendar coverage file exists at the configured path.");
+        }
+
+        string[] lines;
+
+        try
+        {
+            lines = await File.ReadAllLinesAsync(coveragePath, Encoding.UTF8, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (IOException exception)
+        {
+            throw new MarketDataProviderException(
+                "The trading calendar coverage file could not be read.", isTransient: true, exception);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            throw new MarketDataProviderException(
+                "The trading calendar coverage file is not readable.", isTransient: false, exception);
+        }
+
+        return ParseCoverage(lines);
+    }
+
+    /// <summary>
+    /// Reads the coverage declarations.
+    /// </summary>
+    /// <remarks>
+    /// An empty <c>coverage_until</c> means the claim runs on. For a Vietnamese
+    /// venue that is a claim nobody can make — Tet is lunar and substitute days
+    /// are set by annual decree, so the schedule exists only once a notice is
+    /// published — but the format does not enforce market structure, and a
+    /// venue whose calendar genuinely is open-ended may say so.
+    /// </remarks>
+    private static List<ProviderCalendarCoverage> ParseCoverage(string[] lines)
+    {
+        if (lines.Length == 0)
+        {
+            throw new MarketDataProviderException("The calendar coverage file is empty.");
+        }
+
+        var header = ReadHeader(lines[0], RequiredCoverageColumns, "calendar coverage file");
+        var rows = new List<ProviderCalendarCoverage>(lines.Length - 1);
+
+        for (var index = 1; index < lines.Length; index++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[index]))
+            {
+                continue;
+            }
+
+            var fields = lines[index].Split(',');
+            var lineNumber = index + 1;
+            var code = Read(header, fields, ExchangeColumn);
+            var from = Read(header, fields, FromColumn);
+
+            if (code is null || from is null || !TryDate(from, out var parsedFrom))
+            {
+                // Refused whole rather than skipped. A dropped row leaves a
+                // venue with no claim, which reads as "nothing was transcribed"
+                // — the opposite of what a file that mentions it is saying.
+                throw new MarketDataProviderException(
+                    $"Line {lineNumber} of the calendar coverage file does not state a venue and a start date.");
+            }
+
+            DateOnly? parsedUntil = null;
+
+            if (Read(header, fields, UntilColumn) is { } until)
+            {
+                if (!TryDate(until, out var end))
+                {
+                    throw new MarketDataProviderException(
+                        $"Line {lineNumber} of the calendar coverage file has an unreadable end date '{until}'.");
+                }
+
+                parsedUntil = end;
+            }
+
+            rows.Add(new ProviderCalendarCoverage(code.ToUpperInvariant(), parsedFrom, parsedUntil));
+        }
+
+        return rows;
+    }
+
+    private static bool TryDate(string value, out DateOnly date) =>
+        DateOnly.TryParseExact(
+            value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+
     private static List<ProviderTradingHoliday> Parse(string[] lines)
     {
         if (lines.Length == 0)
@@ -75,7 +189,7 @@ internal sealed class FileTradingCalendarProvider(string filePath) : ITradingCal
             throw new MarketDataProviderException("The trading calendar is empty.");
         }
 
-        var header = ReadHeader(lines[0]);
+        var header = ReadHeader(lines[0], RequiredColumns);
         var rows = new List<ProviderTradingHoliday>(lines.Length - 1);
 
         for (var index = 1; index < lines.Length; index++)
@@ -97,7 +211,10 @@ internal sealed class FileTradingCalendarProvider(string filePath) : ITradingCal
         return rows;
     }
 
-    private static Dictionary<string, int> ReadHeader(string line)
+    private static Dictionary<string, int> ReadHeader(
+        string line,
+        string[] required,
+        string what = "trading calendar")
     {
         var columns = line.Split(',');
         var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -107,12 +224,12 @@ internal sealed class FileTradingCalendarProvider(string filePath) : ITradingCal
             byName[columns[index].Trim()] = index;
         }
 
-        var missing = RequiredColumns.Where(column => !byName.ContainsKey(column)).ToList();
+        var missing = required.Where(column => !byName.ContainsKey(column)).ToList();
 
         return missing.Count == 0
             ? byName
             : throw new MarketDataProviderException(
-                $"The trading calendar is missing the column(s): {string.Join(", ", missing)}.");
+                $"The {what} is missing the column(s): {string.Join(", ", missing)}.");
     }
 
     private static string? Read(Dictionary<string, int> header, string[] fields, string column)

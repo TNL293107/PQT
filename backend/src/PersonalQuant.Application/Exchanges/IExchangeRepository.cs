@@ -50,22 +50,6 @@ public interface IExchangeRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Finds the furthest date a venue has a closure recorded for.
-    /// </summary>
-    /// <remarks>
-    /// How far the calendar has been populated, which is a different question
-    /// from what is in it. A window with no closures in range and no calendar
-    /// recorded that far are indistinguishable otherwise, and the second makes
-    /// every completeness figure over that window wrong.
-    /// </remarks>
-    /// <param name="exchangeId">The venue.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The furthest recorded closure, or <see langword="null"/> when there is none.</returns>
-    Task<DateOnly?> FindCalendarHorizonAsync(
-        ExchangeId exchangeId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Reports whether a venue already has a closure recorded for a date.
     /// </summary>
     /// <param name="exchangeId">The venue.</param>

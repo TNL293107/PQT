@@ -125,6 +125,7 @@ services:
       MarketData__InstrumentListPath: ${MARKET_DATA_INSTRUMENT_LIST:-/app/data/fixtures/instruments.csv}
       MarketData__FileProviderDirectory: ${MARKET_DATA_BAR_DIRECTORY:-/app/data/fixtures/market-data}
       MarketData__TradingCalendarPath: ${MARKET_DATA_CALENDAR:-/app/data/fixtures/trading-calendar.csv}
+      MarketData__TradingCalendarCoveragePath: ${MARKET_DATA_CALENDAR_COVERAGE:-/app/data/fixtures/trading-calendar-coverage.csv}
       MarketData__CorporateActionPath: ${MARKET_DATA_CORPORATE_ACTIONS:-/app/data/fixtures/corporate-actions.csv}
       MarketData__UniverseDirectory: ${MARKET_DATA_UNIVERSES:-/app/data/fixtures/universes}
       MarketData__VietcapBaseUrl: ${MARKET_DATA_VIETCAP_URL:-}

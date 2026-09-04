@@ -124,7 +124,7 @@ public sealed class DeploymentCommandsTests
     }
 
     [Fact]
-    public async Task A_venue_with_no_calendar_at_all_is_not_the_same_as_one_that_lapsed()
+    public async Task A_venue_declaring_no_coverage_is_not_the_same_as_one_that_lapsed()
     {
         // No claim was ever made about it. Collapsing "never recorded" into
         // "expired" is the same mistake as reading an unstated coverage floor
@@ -136,13 +136,13 @@ public sealed class DeploymentCommandsTests
         var code = await harness.RunAsync("calendar", "status");
 
         Assert.Equal(ExitCode.Ok, code);
-        Assert.Contains("not recorded", harness.Result, StringComparison.Ordinal);
+        Assert.Contains("not declared", harness.Result, StringComparison.Ordinal);
         Assert.Contains("never been measurable", harness.Result, StringComparison.Ordinal);
         Assert.DoesNotContain("lapsed", harness.Result, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task An_unrecorded_calendar_renders_its_horizon_as_unknown_rather_than_blank()
+    public async Task An_undeclared_calendar_renders_its_reach_as_unknown_rather_than_blank()
     {
         var harness = new Harness();
         harness.Calendar.Covers("UPCOM", through: null);

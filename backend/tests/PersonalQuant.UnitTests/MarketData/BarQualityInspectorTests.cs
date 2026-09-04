@@ -450,12 +450,17 @@ public sealed class BarQualityInspectorTests
             _exchanges.AddHoliday(TradingHoliday.Record(VenueId, date, name, Now));
 
         /// <summary>
-        /// Records a closure far enough out that the calendar counts as
-        /// covering the window under test.
+        /// Declares that the venue's calendar was transcribed up to a date.
         /// </summary>
-        public void WithCalendarThrough(DateOnly horizon) =>
-            _exchanges.AddHoliday(
-                TradingHoliday.Record(VenueId, horizon, "Calendar horizon", Now));
+        /// <remarks>
+        /// This used to plant a closure far in the future, because coverage was
+        /// inferred from the furthest recorded one. That made the tests encode
+        /// the defect: a calendar was "covering" precisely when it happened to
+        /// hold a late holiday, which is how a year with no rows at all came to
+        /// look covered in production.
+        /// </remarks>
+        public void WithCalendarThrough(DateOnly through) =>
+            _exchanges.DeclareCoverage(VenueId, new DateOnly(2000, 1, 1), through.AddDays(1));
 
         /// <summary>Makes staged findings visible, as a commit would.</summary>
         public void CommitIssues() => _issues.Commit();

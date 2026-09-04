@@ -101,6 +101,28 @@ public sealed class Exchange : AuditableEntity
     public PriceLimit? DailyPriceLimit { get; private set; }
 
     /// <summary>
+    /// Gets the span this venue's trading calendar has been transcribed for,
+    /// or <see langword="null"/> when nobody has said.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Null is <em>no claim</em>, and it is the state every venue starts in.
+    /// Completeness is then reported as unmeasurable rather than computed
+    /// against a calendar of unknown extent — the honest answer, and the same
+    /// one a universe gives before its membership is sourced.
+    /// </para>
+    /// <para>
+    /// Recorded rather than derived from the closure rows. Deriving it is what
+    /// this replaces: the furthest recorded closure made a calendar
+    /// transcribed to the end of 2026 report its horizon as 2 September, and
+    /// made 2016 — a year holding no rows at all — look covered.
+    /// </para>
+    /// </remarks>
+    public CalendarCoverage? CalendarCoverage { get; private set; }
+
+    /// <summary>
+    /// Registers a trading venue.
+    /// </summary>    /// <summary>
     /// Registers a trading venue.
     /// </summary>
     /// <param name="code">The operating code.</param>
@@ -152,6 +174,37 @@ public sealed class Exchange : AuditableEntity
     }
 
     /// <summary>
+    /// Records the span this venue's calendar has been transcribed for.
+    /// </summary>
+    /// <remarks>
+    /// Replaces any previous claim outright rather than widening it. A
+    /// transcription that was extended states its new span; one that was found
+    /// to be wrong states a narrower one, and a claim that could only ever grow
+    /// would make the second impossible to express.
+    /// </remarks>
+    /// <param name="coverage">The span now claimed, or null to withdraw the claim.</param>
+    /// <param name="occurredAtUtc">The instant the claim is recorded.</param>
+    public void DeclareCalendarCoverage(CalendarCoverage? coverage, DateTimeOffset occurredAtUtc)
+    {
+        CalendarCoverage = coverage;
+        MarkUpdated(occurredAtUtc);
+    }
+
+    /// <summary>
+    /// Reports whether the calendar was transcribed for an entire window.
+    /// </summary>
+    /// <param name="fromDate">The first date of the window.</param>
+    /// <param name="toDate">The last date of the window, inclusive.</param>
+    /// <returns>
+    /// <see langword="true"/> only when a claim exists and covers every date in
+    /// the window. No claim is not a small claim.
+    /// </returns>
+    public bool CalendarCovers(DateOnly fromDate, DateOnly toDate) =>
+        CalendarCoverage?.CoversRange(fromDate, toDate) ?? false;
+
+    /// <summary>
+    /// Renames the venue.
+    /// </summary>    /// <summary>
     /// Renames the venue.
     /// </summary>
     /// <param name="name">The new name.</param>

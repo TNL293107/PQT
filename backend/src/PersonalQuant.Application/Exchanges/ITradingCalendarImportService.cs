@@ -23,7 +23,41 @@ public interface ITradingCalendarProvider
     /// <exception cref="MarketDataProviderException">The source could not be read.</exception>
     Task<IReadOnlyList<ProviderTradingHoliday>> ListHolidaysAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads how far the source claims to have been transcribed, per venue.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared by the source, never derived from the closures it returned.
+    /// Deriving it was the defect this method replaces: the furthest recorded
+    /// closure reported a calendar transcribed to the end of 2026 as ending on
+    /// 2 September, and reported 2016 — a year with no rows at all — as
+    /// covered, which raised three real public holidays as missing sessions.
+    /// </para>
+    /// <para>
+    /// A source that declares nothing is not a source that covers nothing in
+    /// particular; it is a source nobody has made a claim about, and every
+    /// completeness figure over it reports unmeasurable.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The claims, which may be empty.</returns>
+    /// <exception cref="MarketDataProviderException">The source could not be read.</exception>
+    Task<IReadOnlyList<ProviderCalendarCoverage>> ListCoverageAsync(
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// One venue's transcription claim as a source reported it.
+/// </summary>
+/// <param name="ExchangeCode">The venue's operating code.</param>
+/// <param name="From">The first date transcribed. Inclusive.</param>
+/// <param name="Until">
+/// The first date not transcribed, or <see langword="null"/> when the claim
+/// runs on. Exclusive.
+/// </param>
+public sealed record ProviderCalendarCoverage(string ExchangeCode, DateOnly From, DateOnly? Until);
 
 /// <summary>
 /// One closure as a source reported it.
@@ -82,4 +116,5 @@ public sealed record TradingCalendarImportReport(
     int RowsRead,
     int Created,
     int AlreadyHeld,
-    IReadOnlyList<string> Rejections);
+    IReadOnlyList<string> Rejections,
+    int CoverageDeclared = 0);

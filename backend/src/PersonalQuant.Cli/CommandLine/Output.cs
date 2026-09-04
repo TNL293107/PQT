@@ -79,13 +79,32 @@ internal sealed class Output(TextWriter output, TextWriter error)
     }
 
     /// <summary>Renders a count with its noun, singular or plural.</summary>
+    /// <remarks>
+    /// A sibilant ending takes <c>-es</c>. Not linguistics for its own sake:
+    /// the backfill summary counts passes, and appending a bare <c>s</c>
+    /// produced "4 passs" in real operator output.
+    /// </remarks>
     /// <param name="count">How many.</param>
     /// <param name="noun">The singular noun.</param>
     /// <returns>The rendered phrase.</returns>
-    public static string Plural(int count, string noun) =>
-        count == 1
-            ? $"{count} {noun}"
-            : string.Create(CultureInfo.InvariantCulture, $"{count} {noun}s");
+    public static string Plural(int count, string noun)
+    {
+        ArgumentNullException.ThrowIfNull(noun);
+
+        if (count == 1)
+        {
+            return $"{count} {noun}";
+        }
+
+        var suffix = noun.EndsWith('s')
+            || noun.EndsWith('x')
+            || noun.EndsWith("ch", StringComparison.Ordinal)
+            || noun.EndsWith("sh", StringComparison.Ordinal)
+                ? "es"
+                : "s";
+
+        return string.Create(CultureInfo.InvariantCulture, $"{count} {noun}{suffix}");
+    }
 
     private static string Compose(IReadOnlyList<string> cells, int[] widths)
     {
