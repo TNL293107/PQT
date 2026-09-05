@@ -40,7 +40,7 @@ to simulate.
                               │ HTTP
                     ┌─────────▼──────────┐
                     │   Frontend (nginx) │   React 19 + TypeScript
-                    │   :3000            │   System status, capability map
+                    │   :3100            │   System status, capability map
                     └─────────┬──────────┘
                               │ GET /health, /health/ready
                     ┌─────────▼──────────┐

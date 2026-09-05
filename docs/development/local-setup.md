@@ -46,7 +46,7 @@ docker compose up --build
 
 | Service    | URL                                  |
 | ---------- | ------------------------------------ |
-| Terminal   | http://localhost:3000                |
+| Terminal   | http://localhost:3100                |
 | Liveness   | http://localhost:8080/health         |
 | Readiness  | http://localhost:8080/health/ready   |
 | OpenAPI UI | http://localhost:8080/scalar/v1      |
@@ -126,7 +126,7 @@ npm install --prefix frontend
 npm run dev --prefix frontend
 ```
 
-Vite serves on http://localhost:3000 and calls the API at the URL in
+Vite serves on http://localhost:3100 and calls the API at the URL in
 `VITE_API_BASE_URL`.
 
 ## 4. Database migrations
