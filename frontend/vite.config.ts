@@ -7,14 +7,14 @@ export default defineConfig({
 
   server: {
     // Matches FRONTEND_PORT in .env.example and the Compose port mapping.
-    port: 3000,
+    port: 3100,
     // Required so the dev server is reachable from outside its container.
     host: true,
     strictPort: true,
   },
 
   preview: {
-    port: 3000,
+    port: 3100,
     host: true,
     strictPort: true,
   },

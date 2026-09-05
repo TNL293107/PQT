@@ -156,7 +156,7 @@ provider's spelling of `FPT` from another's is worth nothing.
                               │
                     ┌─────────▼──────────┐
                     │  Frontend (nginx)  │   React 19 + TypeScript
-                    │  :3000             │
+                    │  :3100             │
                     └─────────┬──────────┘
                               │  /health, /health/ready
                     ┌─────────▼──────────┐
@@ -234,7 +234,7 @@ docker compose up --build
 
 | Service    | URL                                |
 | ---------- | ---------------------------------- |
-| Terminal   | http://localhost:3000              |
+| Terminal   | http://localhost:3100              |
 | Liveness   | http://localhost:8080/health       |
 | Readiness  | http://localhost:8080/health/ready |
 | OpenAPI UI | http://localhost:8080/scalar/v1    |
