@@ -12,7 +12,8 @@ interface NavigationItem {
 }
 
 const NAVIGATION: readonly NavigationItem[] = [
-  { to: "/", label: "Infrastructure" },
+  { to: "/", label: "Console" },
+  { to: "/infrastructure", label: "Infrastructure" },
   { to: "/capabilities", label: "Capability Map" },
 ];
 
@@ -82,7 +83,7 @@ export function AppShell() {
       </main>
 
       <footer className="shell__footer">
-        <span>Instrument master only — no market data, trading, or broker connection.</span>
+        <span>Read-only. Every write — ingest, resolve a finding — belongs to the operator CLI.</span>
         <span className="numeric">LIVE_TRADING_ENABLED=false</span>
       </footer>
 
