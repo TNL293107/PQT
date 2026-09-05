@@ -1,0 +1,350 @@
+/*
+ * The console.
+ *
+ * A terminal, drawn as one: monospace throughout, a scrolling transcript, a
+ * prompt pinned to the bottom. Colour is state, never decoration — amber is
+ * the caret and what the reader typed, green and red are direction and
+ * outcome, and everything else is one of three greys.
+ *
+ * Every value comes from tokens.css. Nothing here invents a colour.
+ */
+
+.console {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-void);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  cursor: text;
+}
+
+.console__scroll {
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-6) var(--space-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.turn {
+  margin-bottom: var(--space-4);
+}
+
+.turn__entry {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.prompt {
+  color: var(--accent);
+  flex: none;
+  user-select: none;
+}
+
+.turn__busy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: console-pulse 1s ease-in-out infinite;
+}
+
+@keyframes console-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* --- The prompt line ---------------------------------------------------- */
+
+.console__prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+}
+
+.console__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  caret-color: var(--accent);
+  outline: none;
+}
+
+.console__input::placeholder {
+  color: var(--text-muted);
+}
+
+.console__input:disabled {
+  color: var(--text-muted);
+}
+
+/* --- Output blocks ------------------------------------------------------ */
+
+.out {
+  color: var(--text-secondary);
+}
+
+.out__line {
+  margin: 0 0 var(--space-1);
+  white-space: pre-wrap;
+}
+
+.out__line--dim {
+  color: var(--text-muted);
+}
+
+.out__line--warn {
+  color: var(--state-degraded);
+}
+
+.out--error .out__line {
+  color: var(--state-offline);
+}
+
+.out__hint {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+}
+
+.out__opts {
+  color: var(--text-muted);
+}
+
+.lit {
+  color: var(--accent);
+}
+
+/* --- Tables ------------------------------------------------------------- */
+
+.grid {
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+  width: 100%;
+  max-width: 78rem;
+}
+
+.grid th {
+  text-align: left;
+  padding: 0 var(--space-4) var(--space-1) 0;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.grid td {
+  padding: 2px var(--space-4) 2px 0;
+  vertical-align: top;
+  color: var(--text-secondary);
+}
+
+.grid__key {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.grid__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-right: var(--space-4);
+}
+
+.grid__note {
+  color: var(--text-muted);
+}
+
+.grid--pairs td:first-child,
+.grid--help td:first-child {
+  width: 12rem;
+}
+
+/* --- Quote line and chart ----------------------------------------------- */
+
+.quote {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.quote__last {
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.quote__meta {
+  color: var(--text-muted);
+}
+
+.is-up,
+.quote__chg.is-up {
+  color: var(--state-online);
+}
+
+.is-down,
+.quote__chg.is-down {
+  color: var(--state-offline);
+}
+
+.is-good {
+  color: var(--state-online);
+}
+
+.is-fair {
+  color: var(--state-degraded);
+}
+
+.is-poor {
+  color: var(--state-offline);
+}
+
+.is-unmeasured {
+  color: var(--text-muted);
+}
+
+.spark {
+  display: block;
+  width: 100%;
+  max-width: 52rem;
+  height: 7.5rem;
+}
+
+.spark__line {
+  fill: none;
+  stroke: var(--state-online);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.spark--down .spark__line {
+  stroke: var(--state-offline);
+}
+
+.spark__stop--top {
+  stop-color: var(--state-online);
+  stop-opacity: 0.22;
+}
+
+.spark__stop--bottom {
+  stop-color: var(--state-online);
+  stop-opacity: 0;
+}
+
+.spark--down .spark__stop--top {
+  stop-color: var(--state-offline);
+}
+
+.spark--down .spark__stop--bottom {
+  stop-color: var(--state-offline);
+}
+
+.scale {
+  display: flex;
+  justify-content: space-between;
+  max-width: 52rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-2);
+}
+
+/* --- Scores ------------------------------------------------------------- */
+
+.scores {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.score {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.score__key {
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+}
+
+.score__val {
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Status dots -------------------------------------------------------- */
+
+.dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  margin-right: var(--space-2);
+  background: var(--state-unknown);
+}
+
+.dot--online {
+  background: var(--state-online);
+}
+
+.dot--degraded {
+  background: var(--state-degraded);
+}
+
+.dot--offline {
+  background: var(--state-offline);
+}
+
+/* --- Disclosure --------------------------------------------------------- */
+
+.fold {
+  margin-top: var(--space-2);
+}
+
+.fold summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  width: fit-content;
+}
+
+.fold summary:hover,
+.fold summary:focus-visible {
+  color: var(--accent);
+}

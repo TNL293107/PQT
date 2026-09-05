@@ -30,8 +30,17 @@ describe("App shell", () => {
     expect(screen.getByText("LIVE_TRADING_ENABLED=false")).toBeInTheDocument();
   });
 
-  it("opens on the infrastructure view", () => {
+  it("opens on the console", () => {
+    // The terminal's primary surface is a prompt, not a dashboard. Anything
+    // that needs a page of panels is reachable from the nav; the thing you
+    // land on is the thing you type into.
     renderAt("/");
+
+    expect(screen.getByRole("textbox", { name: "Terminal command" })).toBeInTheDocument();
+  });
+
+  it("still reaches the infrastructure view", () => {
+    renderAt("/infrastructure");
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Infrastructure" }),
