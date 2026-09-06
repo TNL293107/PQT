@@ -202,6 +202,19 @@ async function graph(
 
   const knownAsOf = asOf.day;
 
+  // Strict excludes an action whose announcement date the source never gave,
+  // which is the reading a backtest wants: it can only under-adjust, and
+  // under-adjustment shows up as a visible break in the series. Look-ahead
+  // shows up as a better result, which nobody investigates.
+  const strict = "strict" in options;
+
+  if (strict && knownAsOf === null) {
+    return failure(
+      "--strict has nothing to decide without --as-of.",
+      "A read of the current series applies everything this system knows. Name the instant you want to read as of.",
+    );
+  }
+
   const series = await services.bars(
     instrument.instrumentId,
     {
@@ -210,6 +223,7 @@ async function graph(
       ...(wantsRaw ? { adjusted: false } : {}),
       ...(wantsAdjusted ? { adjusted: true } : {}),
       ...(knownAsOf !== null ? { knownAsOf: new Date(knownAsOf).toISOString() } : {}),
+      ...(strict ? { announcementPolicy: "strict" as const } : {}),
     },
     signal,
   );

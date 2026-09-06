@@ -64,6 +64,27 @@ public enum DataQualityIssueKind
     /// computed against it wrong too.
     /// </remarks>
     UnexpectedSession = 3,
+
+    /// <summary>
+    /// A corporate action whose factor does not match what the prices did on
+    /// its ex-date.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The inverse of <see cref="PriceLimitBreach"/>, and it catches the
+    /// mistake that one cannot. A breach says the prices moved and nothing
+    /// explains it; this says something claims to explain a move that never
+    /// happened. A two-for-one split recorded against the wrong ex-date, a
+    /// ratio transcribed as 2 instead of 1.2, a dividend entered in đồng where
+    /// the source meant thousands — each produces a factor that rescales a
+    /// decade of history for an event the prices show no trace of.
+    /// </para>
+    /// <para>
+    /// Raised against the ex-date session, so it sits beside the breach it
+    /// would otherwise have been mistaken for.
+    /// </para>
+    /// </remarks>
+    ActionWithoutDiscontinuity = 4,
 }
 
 /// <summary>Where an issue stands.</summary>

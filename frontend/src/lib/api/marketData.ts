@@ -48,6 +48,15 @@ export interface BarQuery {
    * filled from the current value.
    */
   readonly knownAsOf?: string;
+
+  /**
+   * What to do with an action whose announcement date the source never gave.
+   *
+   * Only meaningful alongside `knownAsOf`. Absent means the server's default,
+   * which is permissive: a chart wants the series to look right, and a
+   * backtest asks for strict explicitly.
+   */
+  readonly announcementPolicy?: "strict" | "permissive";
 }
 
 /**
@@ -68,6 +77,7 @@ export async function fetchBars(
   if (query.limit !== undefined) params.set("limit", String(query.limit));
   if (query.adjusted !== undefined) params.set("adjusted", String(query.adjusted));
   if (query.knownAsOf) params.set("knownAsOf", query.knownAsOf);
+  if (query.announcementPolicy) params.set("announcementPolicy", query.announcementPolicy);
 
   return getJson<BarSeries>(path(instrumentId, "bars", params), signal);
 }

@@ -217,5 +217,5 @@ data in U3 is the moment that history starts mattering.
 - `GET /instruments/{id}/bars?knownAsOf=` reads `bar_revisions`; without the parameter it reads `bars` exactly as before.
 - An as-of instant earlier than a bar's first observation returns **empty**. It never falls back to the current value.
 - `Revise()` returning `false` writes no revision row and performs no temporal mutation. `Restating_a_bar_with_the_same_values_changes_nothing` stays true.
-- Corporate actions are **out of scope**. The adjusted-series path still reads actions without an announcement filter, so an as-of series is point-in-time in its *prices* and not yet in its *adjustments*. That limitation is real, is documented in [`../data-architecture.md`](../data-architecture.md), and is closed by U4 — not here.
+- Corporate actions are **out of scope**. The adjusted-series path still reads actions without an announcement filter, so an as-of series is point-in-time in its *prices* and not yet in its *adjustments*. That limitation is real, is documented in [`../data-architecture.md`](../data-architecture.md), and is closed by U4 — not here. **Closed 2026-09-06 by [ADR-022](ADR-022-announcement-aware-adjustment.md).**
 - Nothing in this decision touches universes, dataset export, the Python layer, Qlib, Redis or DuckDB.

@@ -30,6 +30,7 @@ reasoning at the time is preserved.
 | [019](ADR-019-openbb-boundary.md)                            | OpenBB as a deferred, out-of-process data option | Accepted |
 | [020](ADR-020-universe-membership-and-coverage.md)           | Universe membership and the coverage claim | Accepted |
 | [021](ADR-021-raw-vietnamese-price-history.md)               | Raw Vietnamese price history, superseding ADR-015's source landscape | Accepted |
+| [022](ADR-022-announcement-aware-adjustment.md)              | Announcement-aware adjustment, closing ADR-018's stated gap | Accepted |
 
 ## Format
 

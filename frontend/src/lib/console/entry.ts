@@ -40,7 +40,7 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   {
     code: "GP",
     summary: "Price graph and the stored series behind it",
-    options: ["interval", "limit", "raw", "adjusted", "as-of"],
+    options: ["interval", "limit", "raw", "adjusted", "as-of", "strict"],
   },
   {
     code: "QLTY",

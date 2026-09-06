@@ -43,6 +43,29 @@ export interface BarSeries {
   readonly adjustedBars: number;
   readonly count: number;
   readonly limit: number;
+
+  /** The observation instant the read answered as of, or null for now. */
+  readonly knownAsOf: string | null;
+
+  /**
+   * What the read did with an action whose announcement date is unknown.
+   *
+   * Stated rather than assumed, because the two readings are opposites: one
+   * under-adjusts, the other looks ahead. "We do not know when this was
+   * announced" must never silently read as "we always knew".
+   */
+  readonly announcementPolicy: "strict" | "permissive";
+
+  /** Stored factors that contributed to this series. */
+  readonly adjustmentsApplied: number;
+
+  /**
+   * Factors held back because the market had not been told about them by
+   * `knownAsOf`. A non-zero count on a historical read is the look-ahead that
+   * was prevented, not a fault.
+   */
+  readonly adjustmentsWithheld: number;
+
   readonly bars: readonly Bar[];
 }
 

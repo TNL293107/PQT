@@ -21,6 +21,10 @@ const SERIES: BarSeries = {
   adjustedBars: 0,
   count: 0,
   limit: 40,
+  knownAsOf: null,
+  announcementPolicy: "permissive",
+  adjustmentsApplied: 0,
+  adjustmentsWithheld: 0,
   bars: [],
 };
 
@@ -239,6 +243,46 @@ describe("runEntry — GP", () => {
       undefined,
     );
     expect(record).toMatchObject({ kind: "series", knownAsOf: "2016-05-27" });
+  });
+  it("asks for the strict reading when --strict is given with an as-of", async () => {
+    const services = stubServices();
+
+    await runEntry("FPT GP --as-of 2016-05-27 --strict", services);
+
+    expect(services.bars).toHaveBeenCalledWith(
+      FPT.instrumentId,
+      {
+        knownAsOf: new Date("2016-05-27").toISOString(),
+        announcementPolicy: "strict",
+      },
+      undefined,
+    );
+  });
+
+  it("refuses --strict on a current read rather than implying an as-of", async () => {
+    // A read of the current series applies everything this system knows, so
+    // there is nothing for the policy to decide. Accepting the flag silently
+    // would suggest a point-in-time read that never happened.
+    const services = stubServices();
+
+    const record = (await runEntry("FPT GP --strict", services)).record;
+
+    expect(record.kind).toBe("error");
+    expect(services.bars).not.toHaveBeenCalled();
+  });
+
+  it("does not name a policy when none was asked for", async () => {
+    // Absent means the server's default. Sending "permissive" explicitly would
+    // freeze a default this client does not own.
+    const services = stubServices();
+
+    await runEntry("FPT GP --as-of 2016-05-27", services);
+
+    expect(services.bars).toHaveBeenCalledWith(
+      FPT.instrumentId,
+      { knownAsOf: new Date("2016-05-27").toISOString() },
+      undefined,
+    );
   });
 });
 

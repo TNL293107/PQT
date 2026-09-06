@@ -242,6 +242,18 @@ function SeriesView({ record }: { readonly record: Extract<ConsoleRecord, { kind
         {knownAsOf ? ` Point-in-time as of ${knownAsOf}.` : ""}
       </p>
 
+      {series.adjustmentsWithheld > 0 ? (
+        <p className="out__line out__line--warn">
+          {series.adjustmentsWithheld} corporate action
+          {series.adjustmentsWithheld === 1 ? " was" : "s were"} held back: the market had not been
+          told about {series.adjustmentsWithheld === 1 ? "it" : "them"} by {knownAsOf}
+          {series.announcementPolicy === "strict"
+            ? ", or the announcement date is unknown and --strict was asked for"
+            : ""}
+          . That is the look-ahead this read prevented, not a gap in the data.
+        </p>
+      ) : null}
+
       <details className="fold">
         <summary>Last ten sessions</summary>
         <table className="grid">

@@ -27,9 +27,9 @@ Observation history  quant.bar_revisions (append-only)     exists (U1)
       ↓
 AS-OF view           what PQT believed at an instant       exists (U1)
       ↓
-Announcement filter  actions with announced_on <= as-of    U4
+Announcement filter  actions with announced_on <= as-of    exists (U4)
       ↓
-ADJUSTED-AS-OF series                                      U4
+ADJUSTED-AS-OF series                                      exists (U4)
       ↓
 Universe filter      constituents as of the same instant   exists (U2)
       ↓
@@ -52,7 +52,7 @@ restoring a backup.
 | --- | --- | --- | --- | --- |
 | 1 | **Event time** | When did the period occur? | `bars.opened_at_utc` | exists |
 | 2 | **Effective time** | When did the fact become true in the world? | `corporate_actions.ex_date` | exists |
-| 3 | **Announcement time** | When did it become public? | `corporate_actions.announced_on` | exists, **unused** |
+| 3 | **Announcement time** | When did it become public? | `corporate_actions.announced_on` | exists, read by the as-of filter (U4) |
 | 4 | **Observation time** | When did PQT learn it? | `bar_revisions.observed_from_utc` / `observed_to_utc` | exists, prices only |
 | 5 | **Revision** | Which statement of the fact is this? | `bars.revision`, `corporate_actions.version` | exists |
 
@@ -83,12 +83,17 @@ time, never by revision number.
 
 ## Point-in-time reads (U1)
 
-**Status: implemented for prices.** `quant.bar_revisions` and the `knownAsOf`
-read below exist and are exercised against a real PostgreSQL. They cover bars
-and nothing else: corporate actions carry a `version` and no observation
-history, and `announced_on` is still unread, so an adjusted series read as of a
-past instant is point-in-time in its prices and not in its adjustments. U4
-closes that; until then this is not an as-of read research may rely on.
+**Status: implemented.** `quant.bar_revisions` and the `knownAsOf` read below
+exist and are exercised against a real PostgreSQL. Since U4 the adjustment is
+filtered by announcement date against the same instant, so an adjusted as-of
+read is point-in-time in both halves — see
+[ADR-022](decisions/ADR-022-announcement-aware-adjustment.md).
+
+Corporate actions still carry a `version` and no observation history. That is a
+narrower gap than it sounds: `announced_on` answers when the market learned of
+the action, which is what the filter needs; a full observation history would
+answer when *PQT* learned of it, which matters only for reproducing a read
+taken before a restatement.
 
 ### Design
 
@@ -236,6 +241,9 @@ has no way back.
 
 ### What U4 changes
 
+**Status: implemented.** The decision and what it costs are in
+[ADR-022](decisions/ADR-022-announcement-aware-adjustment.md).
+
 The read filters actions by announcement time. The cumulative factor product is
 taken over actions with `announced_on <= knownAsOf`, so an action that had not
 been announced at the requested instant cannot rescale the series returned for
@@ -260,9 +268,11 @@ both say which they got.
 
 Phase 4 recorded a gap against itself: nothing cross-checks an imported ratio
 against the price series, so a ratio transcribed as 20 instead of 2 produces a
-plausible factor and a ruined chart. U4 closes it. An action whose implied
-factor does not correspond to an observed discontinuity raises a data-quality
-finding — reusing the Phase 3 findings machinery rather than inventing a second
+plausible factor and a ruined chart. U4 closes it: rescale the last close
+before the ex-date by the factor, and the ex-date's own close should land
+within one ordinary session of it. An action whose implied factor does not
+correspond to an observed discontinuity raises an
+`ActionWithoutDiscontinuity` finding — reusing the Phase 3 findings machinery rather than inventing a second
 mechanism, and recording the suspicion rather than correcting the data.
 
 ### Revision history

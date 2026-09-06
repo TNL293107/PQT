@@ -60,12 +60,34 @@ public interface IMarketDataQueryService
 /// tell them apart will eventually compare one against the other.
 /// </param>
 /// <param name="Bars">The bars, oldest first.</param>
+/// <param name="AdjustedAtSource">
+/// Whether the source had already rescaled the prices, so this system applied
+/// nothing. Separate from <paramref name="Adjusted"/> because the two answer
+/// different questions: whether the series is adjusted, and who adjusted it.
+/// </param>
+/// <param name="KnownAsOfUtc">
+/// The observation instant the read answered as of, echoed so the answer
+/// states its own cut rather than leaving the caller to remember it.
+/// </param>
+/// <param name="AnnouncementPolicy">
+/// Which reading of an unknown announcement date produced the adjustments.
+/// </param>
+/// <param name="AdjustmentsApplied">Factors that contributed to the series.</param>
+/// <param name="AdjustmentsWithheld">
+/// Factors excluded because the market had not been told about them by
+/// <paramref name="KnownAsOfUtc"/>, or because their announcement date is
+/// unknown and the policy was strict.
+/// </param>
 public sealed record BarSeries(
     InstrumentId InstrumentId,
     BarInterval Interval,
     bool Adjusted,
     IReadOnlyList<SeriesBar> Bars,
-    bool AdjustedAtSource = false)
+    bool AdjustedAtSource = false,
+    DateTimeOffset? KnownAsOfUtc = null,
+    AnnouncementPolicy AnnouncementPolicy = AnnouncementPolicyExtensions.Default,
+    int AdjustmentsApplied = 0,
+    int AdjustmentsWithheld = 0)
 {
     /// <summary>Gets the opening instant of the oldest bar, if any.</summary>
     public DateTimeOffset? FirstOpenedAtUtc => Bars.Count == 0 ? null : Bars[0].OpenedAtUtc;
@@ -144,7 +166,13 @@ internal sealed class MarketDataQueryService(
 
         if (!query.Adjusted)
         {
-            return new BarSeries(query.InstrumentId, query.Interval, Adjusted: false, projected);
+            return new BarSeries(
+                query.InstrumentId,
+                query.Interval,
+                Adjusted: false,
+                projected,
+                KnownAsOfUtc: query.KnownAsOfUtc,
+                AnnouncementPolicy: query.AnnouncementPolicy);
         }
 
         // A series whose source already adjusted it must not be adjusted
@@ -159,18 +187,35 @@ internal sealed class MarketDataQueryService(
                 query.Interval,
                 Adjusted: true,
                 projected,
-                AdjustedAtSource: true);
+                AdjustedAtSource: true,
+                KnownAsOfUtc: query.KnownAsOfUtc,
+                AnnouncementPolicy: query.AnnouncementPolicy);
         }
 
-        var adjustments = await actions
+        var stored = await actions
             .ListAdjustmentsAsync(query.InstrumentId, cancellationToken)
             .ConfigureAwait(false);
+
+        // The point-in-time half of the adjustment. Prices were already read
+        // as of the instant; without this the factors applied to them are
+        // today's, and a backtest rescales a 2016 session for a split it could
+        // not have known was coming.
+        IReadOnlyList<PriceAdjustment> known =
+        [
+            .. stored.Where(adjustment =>
+                query.AnnouncementPolicy.Admits(adjustment.AnnouncedOn, query.KnownAsOfUtc)),
+        ];
 
         return new BarSeries(
             query.InstrumentId,
             query.Interval,
             Adjusted: true,
-            Rescale(results, adjustments, openedAt, raw, adjusted));
+            Rescale(results, known, openedAt, raw, adjusted),
+            AdjustedAtSource: false,
+            KnownAsOfUtc: query.KnownAsOfUtc,
+            AnnouncementPolicy: query.AnnouncementPolicy,
+            AdjustmentsApplied: known.Count,
+            AdjustmentsWithheld: stored.Count - known.Count);
     }
 
     /// <summary>

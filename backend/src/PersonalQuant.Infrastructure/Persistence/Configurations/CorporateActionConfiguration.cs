@@ -128,6 +128,10 @@ internal sealed class PriceAdjustmentConfiguration : IEntityTypeConfiguration<Pr
 
         builder.Property(adjustment => adjustment.ExDate).HasColumnName("ex_date").IsRequired();
 
+        // Copied from the action so an as-of read can filter here rather than
+        // joining corporate_actions on every chart draw.
+        builder.Property(adjustment => adjustment.AnnouncedOn).HasColumnName("announced_on");
+
         // The two multipliers are stored as separate columns because they are
         // separate quantities: a cash dividend moves the price and leaves the
         // share count alone.

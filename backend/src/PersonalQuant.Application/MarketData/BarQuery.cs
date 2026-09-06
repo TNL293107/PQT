@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 
@@ -36,7 +37,8 @@ public sealed record BarQuery
         DateTimeOffset? toUtc,
         int limit,
         bool adjusted,
-        DateTimeOffset? knownAsOfUtc)
+        DateTimeOffset? knownAsOfUtc,
+        AnnouncementPolicy announcementPolicy)
     {
         InstrumentId = instrumentId;
         Interval = interval;
@@ -45,6 +47,7 @@ public sealed record BarQuery
         Limit = limit;
         Adjusted = adjusted;
         KnownAsOfUtc = knownAsOfUtc;
+        AnnouncementPolicy = announcementPolicy;
     }
 
     /// <summary>Gets the instrument to read.</summary>
@@ -99,13 +102,26 @@ public sealed record BarQuery
     /// the current value, which would be exactly the leak this exists to stop.
     /// </para>
     /// <para>
-    /// Corporate actions are <em>not</em> filtered by announcement date yet, so
-    /// an adjusted series read as of a past instant is point-in-time in its
-    /// prices and not in its adjustments. See
-    /// ADR-018; the remainder is U4's.
+    /// Corporate actions are filtered by announcement date against this same
+    /// instant, so an adjusted as-of read is point-in-time in its prices
+    /// <em>and</em> in its adjustments. Which reading of an unknown
+    /// announcement date it used is
+    /// <see cref="AnnouncementPolicy"/>'s, and the answer states it. See
+    /// ADR-018 and ADR-022.
     /// </para>
     /// </remarks>
     public DateTimeOffset? KnownAsOfUtc { get; }
+
+    /// <summary>
+    /// Gets what an as-of read does with an action whose announcement date is
+    /// unknown.
+    /// </summary>
+    /// <remarks>
+    /// Has no effect without <see cref="KnownAsOfUtc"/>: a read of the current
+    /// series applies everything this system currently knows, which is what
+    /// "current" means, so there is nothing for the policy to decide.
+    /// </remarks>
+    public AnnouncementPolicy AnnouncementPolicy { get; }
 
     /// <summary>
     /// Validates a read request.
@@ -128,7 +144,8 @@ public sealed record BarQuery
         [NotNullWhen(true)] out BarQuery? query,
         [NotNullWhen(false)] out string? problem,
         bool adjusted = true,
-        DateTimeOffset? knownAsOfUtc = null)
+        DateTimeOffset? knownAsOfUtc = null,
+        AnnouncementPolicy announcementPolicy = AnnouncementPolicyExtensions.Default)
     {
         query = null;
 
@@ -141,6 +158,12 @@ public sealed record BarQuery
         if (!interval.IsDeclared())
         {
             problem = "The bar resolution is not one this system records.";
+            return false;
+        }
+
+        if (!announcementPolicy.IsDeclared())
+        {
+            problem = "The announcement policy is not one this system understands.";
             return false;
         }
 
@@ -168,7 +191,8 @@ public sealed record BarQuery
             normalisedTo,
             resolvedLimit,
             adjusted,
-            knownAsOfUtc?.ToUniversalTime());
+            knownAsOfUtc?.ToUniversalTime(),
+            announcementPolicy);
         problem = null;
         return true;
     }

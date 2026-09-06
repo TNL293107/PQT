@@ -98,6 +98,26 @@ public sealed record BarResponse(
 /// </param>
 /// <param name="Count">How many bars are in this response.</param>
 /// <param name="Limit">The bound that was applied.</param>
+/// <param name="KnownAsOf">
+/// The observation instant this answer was read as of, or <c>null</c> for the
+/// current series. Echoed so the response states its own cut: a client holding
+/// two series has no other way to tell which was point-in-time.
+/// </param>
+/// <param name="AnnouncementPolicy">
+/// What the read did with an action whose announcement date is unknown —
+/// <c>strict</c> excluded it, <c>permissive</c> applied it. Always stated,
+/// because "we do not know when this was announced" must never silently read
+/// as "we always knew".
+/// </param>
+/// <param name="AdjustmentsApplied">
+/// How many stored factors contributed to this series.
+/// </param>
+/// <param name="AdjustmentsWithheld">
+/// How many were held back because the market had not been told about them by
+/// <paramref name="KnownAsOf"/>, or because their announcement date is unknown
+/// and the policy was strict. A non-zero count on a historical read is
+/// expected, not a fault: it is the look-ahead that was prevented.
+/// </param>
 /// <param name="Bars">The bars, oldest first.</param>
 public sealed record BarSeriesResponse(
     Guid InstrumentId,
@@ -107,6 +127,10 @@ public sealed record BarSeriesResponse(
     int AdjustedBars,
     int Count,
     int Limit,
+    DateTimeOffset? KnownAsOf,
+    string AnnouncementPolicy,
+    int AdjustmentsApplied,
+    int AdjustmentsWithheld,
     IReadOnlyList<BarResponse> Bars)
 {
     /// <summary>Projects a series onto the wire contract.</summary>
@@ -125,6 +149,10 @@ public sealed record BarSeriesResponse(
             series.Bars.Count(bar => bar.IsAdjusted),
             series.Bars.Count,
             limit,
+            series.KnownAsOfUtc,
+            series.AnnouncementPolicy.ToString().ToLowerInvariant(),
+            series.AdjustmentsApplied,
+            series.AdjustmentsWithheld,
             [.. series.Bars.Select(BarResponse.From)]);
     }
 }

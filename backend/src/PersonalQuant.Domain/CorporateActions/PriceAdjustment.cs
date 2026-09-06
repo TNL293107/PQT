@@ -40,6 +40,7 @@ public sealed class PriceAdjustment
         CorporateActionId corporateActionId,
         InstrumentId instrumentId,
         DateOnly exDate,
+        DateOnly? announcedOn,
         AdjustmentFactor factor,
         Price referenceClose,
         int actionVersion,
@@ -49,6 +50,7 @@ public sealed class PriceAdjustment
         CorporateActionId = corporateActionId;
         InstrumentId = instrumentId;
         ExDate = exDate;
+        AnnouncedOn = announcedOn;
         Factor = factor;
         ReferenceClose = referenceClose;
         ActionVersion = actionVersion;
@@ -67,6 +69,19 @@ public sealed class PriceAdjustment
     /// it are already ex.
     /// </summary>
     public DateOnly ExDate { get; private set; }
+
+    /// <summary>
+    /// Gets the date the action became public, when the source stated one.
+    /// </summary>
+    /// <remarks>
+    /// Copied from the action rather than joined on every read. A series is
+    /// rescaled on the way out of the database on every chart draw, and the
+    /// alternative is a join to <c>corporate_actions</c> in the hot path to
+    /// read one nullable date. The copy is kept honest by
+    /// <see cref="IsCurrentFor"/>: an adjustment whose announcement date no
+    /// longer matches its action is stale and is recomputed.
+    /// </remarks>
+    public DateOnly? AnnouncedOn { get; private set; }
 
     /// <summary>Gets what to multiply historical prices and volumes by.</summary>
     public AdjustmentFactor Factor { get; private set; }
@@ -129,6 +144,7 @@ public sealed class PriceAdjustment
             action.Id,
             action.InstrumentId,
             action.ExDate,
+            action.AnnouncedOn,
             factor,
             referenceClose,
             action.Version,
@@ -145,8 +161,14 @@ public sealed class PriceAdjustment
     {
         ArgumentNullException.ThrowIfNull(action);
 
+        // The announcement date is compared even though it does not change the
+        // factor, because it changes which reads the factor participates in.
+        // A source that later supplies one turns an action a strict as-of read
+        // was excluding into one it must apply, and Schedule does not bump the
+        // action's version.
         return !action.IsCancelled
             && ActionVersion == action.Version
+            && AnnouncedOn == action.AnnouncedOn
             && AdjustmentVersion == DataRules.AdjustmentVersion;
     }
 

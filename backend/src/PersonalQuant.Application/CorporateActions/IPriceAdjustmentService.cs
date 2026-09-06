@@ -66,6 +66,12 @@ public sealed record AdjustmentRejection(
 /// <param name="Unchanged">Factors that still described their action.</param>
 /// <param name="Removed">Factors dropped because their action no longer rescales anything.</param>
 /// <param name="IssuesExplained">Open quality findings the actions accounted for.</param>
+/// <param name="IssuesRaised">
+/// Actions whose factor no discontinuity in the prices supports. The opposite
+/// direction from <paramref name="IssuesExplained"/>: one says an action
+/// accounts for a move, the other that an action claims a move that never
+/// happened.
+/// </param>
 /// <param name="Rejections">Actions no factor could be computed for.</param>
 public sealed record AdjustmentRun(
     InstrumentId InstrumentId,
@@ -74,11 +80,12 @@ public sealed record AdjustmentRun(
     int Unchanged,
     int Removed,
     int IssuesExplained,
+    int IssuesRaised,
     IReadOnlyList<AdjustmentRejection> Rejections)
 {
     /// <summary>A run over an instrument with no actions.</summary>
     /// <param name="instrumentId">The instrument.</param>
     /// <returns>An empty run.</returns>
     public static AdjustmentRun Nothing(InstrumentId instrumentId) =>
-        new(instrumentId, 0, 0, 0, 0, 0, []);
+        new(instrumentId, 0, 0, 0, 0, 0, 0, []);
 }

@@ -387,6 +387,61 @@ public sealed class CorporateActionPersistenceTests(DependencyContainerFixture c
         return query;
     }
 
+    [Fact]
+    public async Task An_announcement_date_reaches_the_factor_and_makes_an_earlier_one_stale()
+    {
+        // The column the strict as-of read filters on. Sources routinely supply
+        // the ex-date first and the announcement later, so the factor computed
+        // before it arrived has to be recognised as stale - and Schedule does
+        // not bump the action's version, which is the trap.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "CAN", "CAN");
+        var action = Split(instrumentId, new DateOnly(2026, 8, 5));
+
+        scope.Bars.AddRange([Bar(instrumentId, Monday, 100_000m)]);
+        scope.Actions.Add(action);
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using var first = await CreateScopeAsync();
+        _ = await first.Adjustments.RecomputeAsync(
+            instrumentId, TestContext.Current.CancellationToken);
+        await first.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using var beforeReader = await CreateScopeAsync();
+        Assert.Null(
+            Assert.Single(await beforeReader.Actions.ListAdjustmentsAsync(
+                instrumentId, TestContext.Current.CancellationToken)).AnnouncedOn);
+
+        // Act - the source supplies the announcement date on a later import.
+        await using var scheduling = await CreateScopeAsync();
+        var tracked = await scheduling.Actions.FindAsync(
+            instrumentId,
+            CorporateActionType.StockSplit,
+            new DateOnly(2026, 8, 5),
+            TestContext.Current.CancellationToken);
+
+        tracked!.Schedule(null, null, new DateOnly(2026, 8, 1), Now);
+        await scheduling.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using var second = await CreateScopeAsync();
+        var run = await second.Adjustments.RecomputeAsync(
+            instrumentId, TestContext.Current.CancellationToken);
+        await second.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, run.Computed);
+        Assert.Equal(0, run.Unchanged);
+
+        await using var reader = await CreateScopeAsync();
+        var factor = Assert.Single(
+            await reader.Actions.ListAdjustmentsAsync(
+                instrumentId, TestContext.Current.CancellationToken));
+
+        Assert.Equal(new DateOnly(2026, 8, 1), factor.AnnouncedOn);
+    }
+
     private static CorporateAction Split(InstrumentId instrumentId, DateOnly exDate) =>
         CorporateAction.Record(
             instrumentId, CorporateActionType.StockSplit, exDate, 2m, null, Source, Now);

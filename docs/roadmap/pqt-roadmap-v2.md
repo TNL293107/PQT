@@ -266,10 +266,10 @@ Design, the T0–T3 scenario and the required tests are in
 **Where it stands.** The price half is implemented: `quant.bar_revisions`, the
 append-only observation history, and the `knownAsOf` read over it, per
 [`../architecture/decisions/ADR-018-point-in-time-market-bars.md`](../architecture/decisions/ADR-018-point-in-time-market-bars.md).
-Concept 3 remains `exists, unused` — the corporate actions applied to an as-of
-series are today's, so an adjusted as-of read is point-in-time in its prices
-and not in its adjustments. That is U4's, and until U4 lands this read is not
-one research may rely on.
+Concept 3 is read since U4: the cumulative factor is taken over actions with
+`announced_on <= knownAsOf`, so an adjusted as-of read is point-in-time in both
+halves — per
+[`../architecture/decisions/ADR-022-announcement-aware-adjustment.md`](../architecture/decisions/ADR-022-announcement-aware-adjustment.md).
 
 ---
 
@@ -406,10 +406,19 @@ Keep this note tight. U3 gates Phase 5 and must not swell.
 
 ---
 
-### U4 — Adjustment & Announcement Awareness · Gate A
+### U4 — Adjustment & Announcement Awareness · Gate A ✅
 
 **Objective.** Close look-ahead in the adjustment path, and catch action data
 that was transcribed wrongly.
+
+**Where it stands.** Implemented. The decision, the alternatives and what it
+costs are in
+[`../architecture/decisions/ADR-022-announcement-aware-adjustment.md`](../architecture/decisions/ADR-022-announcement-aware-adjustment.md).
+`price_adjustments` carries `announced_on`; `BarQuery` carries the policy; the
+bars endpoint takes `announcementPolicy` and reports the policy, the instant,
+and how many factors were applied and withheld; the console's `GP` takes
+`--strict`. An action whose factor no discontinuity supports raises
+`ActionWithoutDiscontinuity`.
 
 The Phase 4 shape is correct and does not change:
 

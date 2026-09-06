@@ -2,9 +2,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.CorporateActions;
+using PersonalQuant.Domain.Currencies;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 using PersonalQuant.UnitTests.CorporateActions.Fakes;
+using PersonalQuant.UnitTests.Instruments.Fakes;
 using PersonalQuant.UnitTests.MarketData.Fakes;
 
 namespace PersonalQuant.UnitTests.CorporateActions;
@@ -280,6 +282,193 @@ public sealed class PriceAdjustmentServiceTests
         Assert.All(series.Bars, bar => Assert.False(bar.IsAdjusted));
     }
 
+    [Fact]
+    public async Task An_action_the_market_had_not_been_told_about_does_not_rescale_an_as_of_read()
+    {
+        // The look-ahead U4 closes. Prices were already read as of the instant;
+        // without this the factors applied to them are today's, and a strategy
+        // simulated on the Monday sees a split announced on the Tuesday.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.ObserveWeek();
+
+        var action = harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        action.Schedule(null, null, new DateOnly(2026, 8, 4), Now);
+        await harness.RecomputeAsync();
+
+        // Act - as of the Monday, a day before the announcement.
+        var series = await harness.ReadAsOfAsync(Monday, AnnouncementPolicy.Strict);
+
+        // Assert
+        Assert.Equal(0, series.AdjustmentsApplied);
+        Assert.Equal(1, series.AdjustmentsWithheld);
+        Assert.All(series.Bars, bar => Assert.Equal(100m, bar.Close));
+    }
+
+    [Fact]
+    public async Task An_action_already_announced_rescales_an_as_of_read()
+    {
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.ObserveWeek();
+
+        var action = harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        action.Schedule(null, null, new DateOnly(2026, 8, 4), Now);
+        await harness.RecomputeAsync();
+
+        // Act - as of the Friday, well after the announcement.
+        var series = await harness.ReadAsOfAsync(
+            new DateTimeOffset(2026, 8, 7, 0, 0, 0, TimeSpan.Zero), AnnouncementPolicy.Strict);
+
+        // Assert
+        Assert.Equal(1, series.AdjustmentsApplied);
+        Assert.Equal(0, series.AdjustmentsWithheld);
+        Assert.Equal(50m, series.Bars[0].Close);
+    }
+
+    [Fact]
+    public async Task An_action_announced_on_the_as_of_day_itself_is_applied()
+    {
+        // Inclusive, because it was public that day. Excluding it would
+        // misstate what a strategy trading that session could read.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.ObserveWeek();
+
+        var action = harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        action.Schedule(null, null, new DateOnly(2026, 8, 4), Now);
+        await harness.RecomputeAsync();
+
+        var series = await harness.ReadAsOfAsync(
+            new DateTimeOffset(2026, 8, 4, 9, 0, 0, TimeSpan.Zero), AnnouncementPolicy.Strict);
+
+        Assert.Equal(1, series.AdjustmentsApplied);
+    }
+
+    [Theory]
+    [InlineData(AnnouncementPolicy.Strict, 0, 1)]
+    [InlineData(AnnouncementPolicy.Permissive, 1, 0)]
+    public async Task An_unknown_announcement_date_is_decided_by_the_policy(
+        AnnouncementPolicy policy,
+        int expectedApplied,
+        int expectedWithheld)
+    {
+        // Most Vietnamese action records carry an ex-date and nothing else, so
+        // this is the common case rather than the corner one. The two readings
+        // are opposites, and the answer says which it used.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.ObserveWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync();
+
+        var series = await harness.ReadAsOfAsync(Monday, policy);
+
+        Assert.Equal(policy, series.AnnouncementPolicy);
+        Assert.Equal(expectedApplied, series.AdjustmentsApplied);
+        Assert.Equal(expectedWithheld, series.AdjustmentsWithheld);
+    }
+
+    [Fact]
+    public async Task A_current_read_applies_everything_recorded_whatever_the_policy()
+    {
+        // "As of now" means everything this system knows. A strict current read
+        // that withheld actions for want of an announcement date would report a
+        // series no instant justifies.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync();
+
+        var series = await harness.ReadAsync(adjusted: true);
+
+        Assert.Null(series.KnownAsOfUtc);
+        Assert.Equal(1, series.AdjustmentsApplied);
+        Assert.Equal(0, series.AdjustmentsWithheld);
+        Assert.Equal(50m, series.Bars[0].Close);
+    }
+
+    [Fact]
+    public async Task A_later_announcement_date_makes_the_stored_factor_stale()
+    {
+        // Schedule does not bump the action's version, so without the
+        // announcement date in the staleness check a factor computed before the
+        // date arrived would keep the old null and go on being excluded from
+        // every strict as-of read.
+        var harness = new Harness();
+        harness.StoreWeek();
+
+        var action = harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync();
+
+        Assert.Null(Assert.Single(harness.Actions.Adjustments).AnnouncedOn);
+
+        // Act - the source supplies what it did not have the first time.
+        action.Schedule(null, null, new DateOnly(2026, 8, 4), Now);
+        var run = await harness.RecomputeAsync();
+
+        // Assert
+        Assert.Equal(1, run.Computed);
+        Assert.Equal(0, run.Unchanged);
+        Assert.Equal(
+            new DateOnly(2026, 8, 4),
+            Assert.Single(harness.Actions.Adjustments).AnnouncedOn);
+    }
+
+    [Fact]
+    public async Task An_action_no_discontinuity_supports_raises_a_finding()
+    {
+        // The gap Phase 4 recorded against itself. These prices are flat at 100
+        // all week, so a two-for-one split going ex on the Wednesday claims a
+        // halving that never happened - a ratio, an amount or an ex-date
+        // transcribed wrongly, and one that rescales everything before it.
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+
+        // Act
+        var run = await harness.RecomputeAsync();
+
+        // Assert
+        Assert.Equal(1, run.IssuesRaised);
+
+        var issue = Assert.Single(harness.Issues.All);
+        Assert.Equal(DataQualityIssueKind.ActionWithoutDiscontinuity, issue.Kind);
+        Assert.Equal(Wednesday, DateOnly.FromDateTime(issue.SessionAtUtc.UtcDateTime));
+
+        // The factor is stored regardless. Refusing it would lose the record of
+        // what the source said.
+        Assert.Single(harness.Actions.Adjustments);
+    }
+
+    [Fact]
+    public async Task An_action_the_prices_do_support_raises_nothing()
+    {
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreWeek();
+        harness.HalveFrom(Wednesday);
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+
+        var run = await harness.RecomputeAsync();
+
+        Assert.Equal(0, run.IssuesRaised);
+        Assert.Empty(harness.Issues.All);
+    }
+
+    [Fact]
+    public async Task A_venue_with_no_band_cannot_contradict_an_action()
+    {
+        // Nothing to measure the discrepancy against. Skipped rather than
+        // guessed at a threshold, which is what the whole check rests on.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+
+        var run = await harness.RecomputeAsync();
+
+        Assert.Equal(0, run.IssuesRaised);
+    }
+
     /// <summary>Wires the real engine and read path over in-memory ports.</summary>
     [Fact]
     public async Task A_series_its_source_already_adjusted_is_not_adjusted_again()
@@ -323,17 +512,32 @@ public sealed class PriceAdjustmentServiceTests
         private readonly PriceAdjustmentService _service;
         private readonly MarketDataQueryService _query;
 
-        public Harness(bool sourceAdjusts = false)
+        public Harness(bool sourceAdjusts = false, decimal? dailyPriceLimitPercent = null)
         {
             InstrumentId = InstrumentId.New();
             Bars = new FakeBarRepository();
             Actions = new FakeCorporateActionRepository();
             Issues = new FakeQualityRepository();
 
+            // No band by default, which switches the discontinuity check off:
+            // most of these tests are about the arithmetic and the staleness
+            // rules, and a venue would make every one of them assert a second
+            // thing it was not written to test.
+            var exchanges = new InMemoryExchanges();
+            var master = new InMemoryInstrumentMaster();
+            var venue = exchanges.Add("ADJ", Now, dailyPriceLimitPercent);
+            var instrument = Instrument.Register(
+                venue, Ticker.Create("ADJ"), "Adjusted Company", AssetType.Equity, CurrencyCode.Vnd, Now);
+
+            instrument.List(Now);
+            master.Seed(WithIdentity(instrument, InstrumentId));
+
             _service = new PriceAdjustmentService(
                 Actions,
                 Bars,
                 Issues,
+                master,
+                exchanges,
                 new FakeUnitOfWork(),
                 new FakeClock(Now),
                 NullLogger<PriceAdjustmentService>.Instance);
@@ -391,6 +595,76 @@ public sealed class PriceAdjustmentServiceTests
 
             Actions.Add(action);
             return action;
+        }
+
+        /// <summary>
+        /// Forces the seeded instrument to carry the identifier the fake bar
+        /// and action repositories are keyed by.
+        /// </summary>
+        private static Instrument WithIdentity(Instrument instrument, InstrumentId id)
+        {
+            typeof(Instrument)
+                .GetProperty(nameof(Instrument.Id))!
+                .SetValue(instrument, id);
+
+            return instrument;
+        }
+
+        /// <summary>
+        /// Mirrors every stored bar into the observation history, observed
+        /// from the Monday.
+        /// </summary>
+        /// <remarks>
+        /// Every revision is known at any as-of these tests use, so what an
+        /// as-of read returns is decided entirely by the announcement filter.
+        /// A test that had to reason about revision windows as well would stop
+        /// being a test of the announcement policy.
+        /// </remarks>
+        public void ObserveWeek() =>
+            Bars.AddRevisions([.. Bars.All.Select(bar => BarRevision.Snapshot(bar, Monday))]);
+
+        /// <summary>Reads the series as of an instant, under a policy.</summary>
+        public Task<BarSeries> ReadAsOfAsync(
+            DateTimeOffset knownAsOf,
+            AnnouncementPolicy policy)
+        {
+            Assert.True(
+                BarQuery.TryCreate(
+                    InstrumentId,
+                    BarInterval.OneDay,
+                    null,
+                    null,
+                    null,
+                    out var query,
+                    out var problem,
+                    adjusted: true,
+                    knownAsOf,
+                    policy),
+                problem);
+
+            return _query.GetSeriesAsync(query, TestContext.Current.CancellationToken);
+        }
+
+        /// <summary>
+        /// Halves every close from a date onward, so the prices show the
+        /// discontinuity a split on that date implies.
+        /// </summary>
+        public void HalveFrom(DateOnly exDate)
+        {
+            var ex = new DateTimeOffset(exDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+            foreach (var bar in Bars.All.Where(bar => bar.OpenedAtUtc >= ex).ToList())
+            {
+                bar.Revise(
+                    Price.Create(50m),
+                    Price.Create(50m),
+                    Price.Create(50m),
+                    Price.Create(50m),
+                    bar.Volume,
+                    bar.Turnover,
+                    Source,
+                    Now);
+            }
         }
 
         public void RaiseBreach(DateOnly session) =>

@@ -2,8 +2,11 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Diagnostics;
+using PersonalQuant.Application.Exchanges;
+using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.CorporateActions;
+using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 
@@ -29,6 +32,8 @@ namespace PersonalQuant.Application.CorporateActions;
 /// <param name="actions">Corporate actions and the factors derived from them.</param>
 /// <param name="bars">The canonical series, for the close each factor measures against.</param>
 /// <param name="issues">Open quality findings an action may account for.</param>
+/// <param name="instruments">Resolves the instrument's venue and asset class.</param>
+/// <param name="exchanges">Supplies the venue's price limit.</param>
 /// <param name="unitOfWork">Commits the run.</param>
 /// <param name="clock">Supplies the computation instant.</param>
 /// <param name="logger">Logger for adjustment telemetry.</param>
@@ -36,10 +41,24 @@ internal sealed class PriceAdjustmentService(
     ICorporateActionRepository actions,
     IBarRepository bars,
     IDataQualityRepository issues,
+    IInstrumentRepository instruments,
+    IExchangeRepository exchanges,
     IUnitOfWork unitOfWork,
     IClock clock,
     ILogger<PriceAdjustmentService> logger) : IPriceAdjustmentService
 {
+    /// <summary>
+    /// Extra fractional room allowed on top of a venue's band, matching
+    /// <see cref="MarketData.IBarQualityInspector"/>'s.
+    /// </summary>
+    /// <remarks>
+    /// The same number for the same reason: prices are rounded to a tick, so a
+    /// realised move can exceed the nominal band slightly with nothing wrong.
+    /// The two checks are opposite sides of one question and must not disagree
+    /// about what counts as an ordinary day.
+    /// </remarks>
+    private const decimal PriceLimitTolerance = 0.005m;
+
     /// <inheritdoc />
     public async Task<AdjustmentRun> RecomputeAsync(
         InstrumentId instrumentId,
@@ -70,6 +89,14 @@ internal sealed class PriceAdjustmentService(
         var unchanged = 0;
         var removed = 0;
         var explained = 0;
+        var raised = 0;
+
+        // Resolved once for the whole run rather than per action. Both are
+        // needed only by the discontinuity check, and an instrument whose
+        // venue is not held simply skips it — a missing venue is not a reason
+        // to refuse to adjust a series.
+        var band = await FindPriceLimitAsync(instrumentId, cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var action in recorded)
         {
@@ -117,12 +144,20 @@ internal sealed class PriceAdjustmentService(
 
             explained += await ExplainFindingsAsync(action, cancellationToken)
                 .ConfigureAwait(false);
+
+            raised += await RaiseIfUnsupportedAsync(
+                    action,
+                    outcome.Adjustment!,
+                    band,
+                    computedAtUtc,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         var run = new AdjustmentRun(
-            instrumentId, recorded.Count, computed, unchanged, removed, explained, rejections);
+            instrumentId, recorded.Count, computed, unchanged, removed, explained, raised, rejections);
 
         ApplicationLog.PriceAdjustmentsRecomputed(
             logger, recorded.Count, computed, unchanged, removed, explained, rejections.Count);
@@ -238,6 +273,137 @@ internal sealed class PriceAdjustmentService(
 
         return explained;
     }
+
+    /// <summary>
+    /// Finds the daily band the instrument's venue enforces, when there is one
+    /// to check against.
+    /// </summary>
+    /// <remarks>
+    /// Null for an instrument whose venue is unknown, whose venue publishes no
+    /// band, or that is calculated rather than traded. An index has no band to
+    /// breach, so an action recorded against one cannot be checked this way and
+    /// is left alone rather than flagged on every volatile day.
+    /// </remarks>
+    private async Task<PriceLimit?> FindPriceLimitAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken)
+    {
+        var instrument = await instruments
+            .FindByIdAsync(instrumentId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (instrument is null || instrument.AssetType == AssetType.Index)
+        {
+            return null;
+        }
+
+        var exchange = await exchanges
+            .FindByIdAsync(instrument.ExchangeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return exchange?.DailyPriceLimit;
+    }
+
+    /// <summary>
+    /// Raises a finding when an action claims to explain a move the prices
+    /// never made.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The gap Phase 4 recorded against itself. An action rescales every bar
+    /// before its ex-date, so one transcribed wrongly — a ratio of 2 where the
+    /// source said 1.2, a dividend in đồng where it meant thousands, an ex-date
+    /// off by a week — corrupts a decade of history while leaving a series that
+    /// still looks smooth. Nothing downstream can detect it, because the
+    /// adjustment is what made it smooth.
+    /// </para>
+    /// <para>
+    /// The test is the venue's own band, applied to the adjusted move. Rescale
+    /// the last close before the ex-date by the factor and the ex-date's close
+    /// should sit within one ordinary day of it; that is precisely what the
+    /// factor claims. A discrepancy larger than a session's permitted move did
+    /// not come from the market.
+    /// </para>
+    /// <para>
+    /// It is a finding, not a refusal. The factor is stored either way, for the
+    /// reason a suspect bar is: refusing it would lose the record of what the
+    /// source said, and an unexplained discontinuity somebody can see beats a
+    /// silent absence.
+    /// </para>
+    /// </remarks>
+    private async Task<int> RaiseIfUnsupportedAsync(
+        CorporateAction action,
+        PriceAdjustment adjustment,
+        PriceLimit? band,
+        DateTimeOffset detectedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (band is not { } limit)
+        {
+            return 0;
+        }
+
+        var session = new DateTimeOffset(
+            action.ExDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+        var onExDate = await bars
+            .ListForUpdateAsync(
+                action.InstrumentId,
+                BarInterval.OneDay,
+                session,
+                session.AddDays(1),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // No bar on the ex-date is not evidence either way. The action may
+        // predate the ingested history, or the session may simply not have been
+        // fetched yet.
+        if (onExDate.Count == 0)
+        {
+            return 0;
+        }
+
+        var expected = adjustment.ReferenceClose.Value * adjustment.Factor.Price;
+        var observed = onExDate[0].Close.Value;
+
+        if (limit.Permits(expected, observed, PriceLimitTolerance))
+        {
+            return 0;
+        }
+
+        var existing = await issues
+            .ListAsync(
+                action.InstrumentId,
+                BarInterval.OneDay,
+                session,
+                session.AddDays(1),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // One finding per instrument, resolution, session and kind. Raising it
+        // again on every recompute would bury the ones nobody has looked at,
+        // and would undo a dismissal.
+        if (existing.Any(issue => issue.Kind == DataQualityIssueKind.ActionWithoutDiscontinuity))
+        {
+            return 0;
+        }
+
+        issues.Add(DataQualityIssue.Raise(
+            action.InstrumentId,
+            BarInterval.OneDay,
+            session,
+            DataQualityIssueKind.ActionWithoutDiscontinuity,
+            $"A {action.Type} implies a close of {Format(expected)} on its ex-date, but "
+            + $"{Format(observed)} was recorded — further from it than {limit} allows in a "
+            + "session. The ratio, the amount or the ex-date is likely transcribed wrongly.",
+            DataRules.ValidationVersion,
+            detectedAtUtc));
+
+        return 1;
+    }
+
+    private static string Format(decimal value) =>
+        value.ToString("0.####", CultureInfo.InvariantCulture);
 
     private static AdjustmentRejection Reject(CorporateAction action, string detail) =>
         new(action.Id, action.Type, action.ExDate, detail);

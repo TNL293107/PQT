@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using PersonalQuant.Api.Contracts;
+using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.Instruments;
@@ -111,8 +112,14 @@ internal static class MarketDataEndpoints
     /// correction published after its decision is not a backtest.
     /// </para>
     /// <para>
-    /// The prices are point-in-time; the corporate actions applied to them are
-    /// not yet filtered by announcement date. See ADR-018.
+    /// The corporate actions applied are filtered by announcement date against
+    /// the same instant, so an adjusted as-of read is point-in-time in both
+    /// halves. <c>announcementPolicy=strict</c> excludes an action whose
+    /// announcement date the source never supplied — the reading a backtest
+    /// wants, since it can only under-adjust — while the default
+    /// <c>permissive</c> applies it, which is what a chart wants. The response
+    /// states which was used and how many factors were withheld. See ADR-018
+    /// and ADR-022.
     /// </para>
     /// </remarks>
     private static async Task<Results<Ok<BarSeriesResponse>, ProblemHttpResult>> GetBarsAsync(
@@ -123,6 +130,7 @@ internal static class MarketDataEndpoints
         int? limit,
         bool? adjusted,
         DateTimeOffset? knownAsOf,
+        string? announcementPolicy,
         IInstrumentCatalog catalog,
         IMarketDataQueryService marketData,
         CancellationToken cancellationToken)
@@ -131,6 +139,14 @@ internal static class MarketDataEndpoints
         {
             return TypedResults.Problem(
                 detail: $"The interval is not one this system records. Accepted: {BarIntervalParser.DescribeAccepted()}.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "The bar request is not valid.");
+        }
+
+        if (!AnnouncementPolicyParser.TryParse(announcementPolicy, out var policy))
+        {
+            return TypedResults.Problem(
+                detail: $"The announcement policy is not one this system understands. Accepted: {AnnouncementPolicyParser.DescribeAccepted()}.",
                 statusCode: StatusCodes.Status400BadRequest,
                 title: "The bar request is not valid.");
         }
@@ -146,7 +162,8 @@ internal static class MarketDataEndpoints
                 out var query,
                 out var problem,
                 adjusted ?? true,
-                knownAsOf))
+                knownAsOf,
+                policy))
         {
             return TypedResults.Problem(
                 detail: problem,
