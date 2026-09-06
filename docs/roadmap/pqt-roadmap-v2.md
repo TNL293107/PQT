@@ -444,10 +444,17 @@ finding, reusing Phase 3's machinery rather than inventing a mechanism.
 
 ---
 
-### U5 — Canonical Dataset Contract · Gate A
+### U5 — Canonical Dataset Contract · Gate A ✅
 
 **Objective.** Define the research dataset PQT owns, so that no third-party
 research framework can become the canonical data model.
+
+**Where it stands.** Implemented, per
+[`../architecture/decisions/ADR-023-canonical-dataset-contract.md`](../architecture/decisions/ADR-023-canonical-dataset-contract.md).
+`pqt dataset export` writes Parquet and a manifest governed by a published JSON
+Schema; `pqt dataset verify` recomputes every file digest and the manifest's own
+content hash. The export refuses when a universe's membership is unknown, and
+defaults to the strict announcement reading.
 
 The manifest carries instrument identity, timestamps, OHLCV, corporate actions,
 adjustment state, provider lineage, revision and version, PIT semantics,

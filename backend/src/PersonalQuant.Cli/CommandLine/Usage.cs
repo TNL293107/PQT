@@ -28,6 +28,11 @@ internal static class Usage
         output.WriteLine("  pqt quality list    --instrument <TICKER> [--interval 1d] [--limit 50] [--status open]");
         output.WriteLine("  pqt quality resolve <ID> --explained|--dismissed --reason \"<text>\"");
         output.WriteLine();
+        output.WriteLine("  pqt dataset export --universe <CODE> --from yyyy-MM-dd [--to yyyy-MM-dd]");
+        output.WriteLine("                     [--as-of yyyy-MM-dd] [--interval 1d] [--raw]");
+        output.WriteLine("                     [--known-as-of yyyy-MM-dd] [--policy strict|permissive]");
+        output.WriteLine("  pqt dataset verify <DATASET-ID> [--version N]");
+        output.WriteLine();
         output.WriteLine("  pqt schema status");
         output.WriteLine("  pqt calendar status");
         output.WriteLine();

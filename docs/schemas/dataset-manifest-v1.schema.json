@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-quant-terminal.local/schemas/dataset-manifest-v1.schema.json",
+  "title": "PQT canonical dataset manifest, schema version 1",
+  "description": "Describes one build of an exported research dataset. The backend generates it; a consumer validates against this schema before reading a single row. The two languages agreeing on a file is what keeps them from drifting apart, which ADR-004 raised and left open.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_id",
+    "dataset_version",
+    "schema_version",
+    "content_hash",
+    "known_as_of_utc",
+    "adjusted",
+    "announcement_policy",
+    "universe_code",
+    "universe_as_of",
+    "instruments",
+    "interval",
+    "from_date",
+    "to_date",
+    "transformation_version",
+    "validation_version",
+    "adjustment_version",
+    "sources",
+    "files",
+    "row_count",
+    "created_at_utc",
+    "created_by_commit"
+  ],
+  "properties": {
+    "dataset_id": {
+      "description": "Derived from the export parameters, not issued at random, so the same request names the same dataset.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "dataset_version": {
+      "description": "Which build of this dataset it is. Deliberately excluded from content_hash.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "schema_version": {
+      "description": "Which manifest shape this is. A reader that does not know the version must refuse rather than guess which fields it can trust.",
+      "type": "integer",
+      "const": 1
+    },
+    "content_hash": {
+      "description": "Digest over every field except dataset_version, created_at_utc and created_by_commit — the three that say which run this was rather than what the data is. Recompute it on load; a mismatch means the manifest's own fields were changed after the export.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "known_as_of_utc": {
+      "description": "The observation instant the bars were read at, or null for the current series. Null is a legitimate export and a different object from a point-in-time one.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "adjusted": {
+      "description": "Whether prices were rescaled for corporate actions.",
+      "type": "boolean"
+    },
+    "announcement_policy": {
+      "description": "What the read did with an action whose announcement date is unknown. A dataset built permissively carries look-ahead into every experiment run against it.",
+      "type": "string",
+      "enum": ["strict", "permissive"]
+    },
+    "universe_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "universe_as_of": {
+      "description": "The date the constituent set was read at. Never later than to_date, or the export applies a later membership to earlier prices.",
+      "type": "string",
+      "format": "date"
+    },
+    "instruments": {
+      "description": "The exported set. The identifier is the identity; the ticker is a label valid at universe_as_of and appears nowhere in the data rows, so nothing can be joined on it by accident.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["instrument_id", "ticker_at_as_of", "exchange"],
+        "properties": {
+          "instrument_id": { "type": "string", "format": "uuid" },
+          "ticker_at_as_of": { "type": "string", "minLength": 1 },
+          "exchange": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "interval": {
+      "description": "The bar resolution, in the spelling the API and the operator CLI accept.",
+      "type": "string",
+      "enum": ["1m", "5m", "15m", "30m", "1h", "1d"]
+    },
+    "from_date": { "type": "string", "format": "date" },
+    "to_date": { "type": "string", "format": "date" },
+    "transformation_version": {
+      "description": "Normalisation rules the bars passed through. A dataset that cannot say which rules produced it cannot be reproduced when those rules change.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "validation_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "adjustment_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sources": {
+      "description": "Every provider that contributed a row, with what this deployment records about its right to the data. A dataset that cannot say where its rows came from cannot answer whether it may be redistributed.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "licence_note"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1 },
+          "licence_note": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "files": {
+      "description": "The data files. Hashes are verified on load, not merely recorded: a reproducible result computed from a silently changed input is worse than no result.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "row_count", "bytes", "sha256"],
+        "properties": {
+          "name": {
+            "description": "Relative to the dataset build's directory. Never a path.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "row_count": { "type": "integer", "minimum": 0 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "row_count": {
+      "description": "Total rows across every file. Derived from files[].row_count and written for convenience; it is not part of content_hash because the file hashes it summarises already are.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "created_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by_commit": {
+      "description": "The build that produced the export, or null when the build recorded none. Null rather than a placeholder: a dataset claiming a commit it does not know is worse than one that admits it.",
+      "type": ["string", "null"]
+    }
+  }
+}

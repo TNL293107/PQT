@@ -308,6 +308,11 @@ data is often impossible and never free.
 
 ## Canonical dataset (U5)
 
+**Status: implemented.** The decision, the alternatives and what it costs are in
+[ADR-023](decisions/ADR-023-canonical-dataset-contract.md); the manifest is
+governed by [`../schemas/dataset-manifest-v1.schema.json`](../schemas/dataset-manifest-v1.schema.json),
+and a test holds the two to each other so neither can move alone.
+
 The dataset PQT owns. **No third-party research framework may become the
 canonical data model**; frameworks consume this and hand results back.
 
@@ -331,9 +336,22 @@ what keeps the two languages from drifting apart — a concern
 longer matches its manifest is a hard error, because a reproducible result
 computed from a silently changed input is worse than no result.
 
-**Reproducibility property:** the same parameters produce the same manifest
-hash. An export at a past `known_as_of` excludes both later revisions and
-later-announced actions.
+**Reproducibility property:** the same parameters produce the same
+`content_hash`. That digest deliberately excludes `dataset_version`,
+`created_at_utc` and `created_by_commit` — the three fields that say *which run
+this was* rather than *what the data is* — so rebuilding identical parameters
+over identical data agrees, while the manifest's own bytes differ because one
+of them happened later. An export at a past `known_as_of` excludes both later
+revisions and later-announced actions.
+
+Rows are keyed by `instrument_id` and carry no ticker; the label lives once in
+the manifest, stamped with the instant it was valid. Prices are written as
+strings, because a decimal forced through binary floating point is no longer the
+number the market printed.
+
+Built with `pqt dataset export`, checked with `pqt dataset verify` — an operator
+command rather than an endpoint, because it walks a whole universe across a date
+range and writes to the deployment's own disk.
 
 ---
 

@@ -54,6 +54,12 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+# The research store is the one path this container writes to. Created here and
+# owned by the app user, because Docker copies an image directory's ownership
+# onto a fresh named volume mounted over it — and without that the volume
+# arrives owned by root, which the non-root process cannot write to.
+RUN mkdir -p /app/datasets && chown -R $APP_UID:$APP_UID /app/datasets
+
 # The base image ships a non-root 'app' user (uid 1654). Drop back to it.
 USER $APP_UID
 

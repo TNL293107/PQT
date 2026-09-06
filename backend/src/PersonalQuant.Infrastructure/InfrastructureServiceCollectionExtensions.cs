@@ -8,6 +8,7 @@ using Npgsql;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Classification;
 using PersonalQuant.Application.CorporateActions;
+using PersonalQuant.Application.Datasets;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
@@ -51,6 +52,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddOptionsWithValidation<PostgresOptions>(configuration, PostgresOptions.SectionName);
         services.AddOptionsWithValidation<RedisOptions>(configuration, RedisOptions.SectionName);
         services.AddOptionsWithValidation<MarketDataOptions>(configuration, MarketDataOptions.SectionName);
+        services.AddOptionsWithValidation<Datasets.DatasetOptions>(
+            configuration, Datasets.DatasetOptions.SectionName);
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IDelayScheduler, SystemDelayScheduler>();
@@ -104,6 +107,16 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
         services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
         services.AddScoped<IUniverseRepository, UniverseRepository>();
+
+        // The research store. One object serves both ports because they are two
+        // halves of the same fact: where a dataset's bytes go, and what this
+        // deployment records about its right to have written them.
+        services.AddSingleton<Datasets.ParquetDatasetStore>();
+        services.AddSingleton<IDatasetStore>(
+            provider => provider.GetRequiredService<Datasets.ParquetDatasetStore>());
+        services.AddSingleton<IDatasetLicenceRegistry>(
+            provider => provider.GetRequiredService<Datasets.ParquetDatasetStore>());
+        services.AddSingleton<IBuildIdentity, Datasets.AssemblyBuildIdentity>();
 
         services.AddHostedService<DatabaseMigrationHostedService>();
 

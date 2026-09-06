@@ -33,6 +33,15 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
+  <ItemGroup Label="Research store">
+    <!--
+      Fully managed Parquet, so the research store needs no native dependency
+      in the container image. U5 writes datasets as files with a hash; U7
+      decides whether anything more is warranted.
+    -->
+    <PackageVersion Include="Parquet.Net" Version="6.1.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Cache / realtime">
     <PackageVersion Include="StackExchange.Redis" Version="3.1.13" />
   </ItemGroup>

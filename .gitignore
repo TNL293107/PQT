@@ -216,6 +216,9 @@ backups/
 # docker-compose.yml is what the project runs; anything here is a fault being
 # routed around on somebody's laptop and must not become everyone's.
 docker-compose.override.yml
+# Exported research datasets hold real market prices. The licence position
+# on every source this system reads forbids redistributing them.
+data/datasets/
 datasets/raw/
 datasets/cache/
 datasets/tmp/

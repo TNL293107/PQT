@@ -198,4 +198,16 @@ internal static partial class ApplicationLog
         int amended,
         int unchanged,
         int rejected);
+
+    [LoggerMessage(
+        EventId = 3400,
+        Level = LogLevel.Information,
+        Message = "dataset.export {DatasetId} v{Version} wrote {Rows} row(s) for {Instruments} instrument(s); {WithoutBars} had no stored bars.")]
+    public static partial void DatasetExported(
+        ILogger logger,
+        string datasetId,
+        int version,
+        int instruments,
+        long rows,
+        int withoutBars);
 }

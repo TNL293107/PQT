@@ -192,6 +192,71 @@ calendar with no 2016 closures in it, and three real Vietnamese public holidays
 were raised as missing sessions. The claim now lives on the venue and comes from
 `MarketData__TradingCalendarCoveragePath`.
 
+### `dataset`
+
+```bash
+pqt dataset export --universe DEMO_INDEX --from 2026-01-02 --to 2026-09-05 --as-of 2026-01-02
+pqt dataset verify 6a233e778e940860 --version 1
+```
+
+Builds the canonical research dataset, and checks one still is what it claims to
+be. An operator command rather than an endpoint: an export walks every
+constituent of a universe across a date range and writes files to the
+deployment's own disk, which is a scheduled job's shape and not a web request's.
+
+A build lands at `{Datasets:Directory}/{dataset_id}/v{version}/` as
+`bars.parquet` beside `manifest.json`. The identifier is **derived from the
+parameters**, not issued, so the same request always names the same dataset and
+a rebuild is a new version of it rather than a new dataset.
+
+| Option | Default | What it decides |
+| --- | --- | --- |
+| `--universe` | required | Where the instrument set comes from |
+| `--from` | required | First session, inclusive |
+| `--to` | today | Last session, inclusive |
+| `--as-of` | the window's end | When the constituent set is read |
+| `--interval` | `1d` | Bar resolution |
+| `--raw` | off | Export what printed rather than the adjusted series |
+| `--known-as-of` | current series | Read the bars as this system believed them then |
+| `--policy` | `strict` | What to do with an unknown announcement date |
+
+`--as-of` defaults to the **end of the window**, not to today. A universe read
+today against a window that ended in 2018 exports the index as it now stands,
+which is survivorship bias assembled by hand — everything removed since is
+silently absent.
+
+`--policy` defaults to `strict`, the opposite of the chart's default. A dataset
+is run against repeatedly by things nobody has written yet, so look-ahead baked
+into one propagates into every experiment that reads it and shows up as a better
+result, which nobody investigates. See
+[ADR-022](../architecture/decisions/ADR-022-announcement-aware-adjustment.md).
+
+**An unknown universe membership refuses the export.** Not an empty dataset — an
+empty one produces a backtest that reports no positions and no error:
+
+```
+Membership of VN30 on 2016-12-31 is not known (NoSuchUniverse). Declare the
+universe's coverage and import its history before exporting a dataset over it.
+```
+
+`verify` recomputes every file digest **and** the manifest's own content hash.
+Checking only the files would let somebody change the as-of a dataset claims, or
+the policy it was built under, and leave every hash matching. A recorded digest
+that is never checked is a comment.
+
+Each export prints the licence note recorded against every contributing source.
+The default says the true position: no licence was granted, the rows are
+retained under the absence of a prohibition rather than a permission, and they
+are not for redistribution. Configure a real one per source under
+`Datasets:LicenceNotes` if a deployment ever obtains one.
+
+The store is a **named volume**, never a bind mount into the repository, for the
+same reason: an export holds real market prices. Copy one out deliberately.
+
+```bash
+docker compose cp backend:/app/datasets/6a233e778e940860/v1 ./exported
+```
+
 ---
 
 ## Exit codes

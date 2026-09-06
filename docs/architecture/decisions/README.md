@@ -31,6 +31,7 @@ reasoning at the time is preserved.
 | [020](ADR-020-universe-membership-and-coverage.md)           | Universe membership and the coverage claim | Accepted |
 | [021](ADR-021-raw-vietnamese-price-history.md)               | Raw Vietnamese price history, superseding ADR-015's source landscape | Accepted |
 | [022](ADR-022-announcement-aware-adjustment.md)              | Announcement-aware adjustment, closing ADR-018's stated gap | Accepted |
+| [023](ADR-023-canonical-dataset-contract.md)                 | The canonical dataset contract PQT owns | Accepted |
 
 ## Format
 
