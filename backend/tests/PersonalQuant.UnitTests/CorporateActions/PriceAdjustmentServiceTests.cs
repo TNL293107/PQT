@@ -456,6 +456,57 @@ public sealed class PriceAdjustmentServiceTests
     }
 
     [Fact]
+    public async Task Actions_sharing_an_ex_date_are_judged_by_their_combined_factor()
+    {
+        // FPT, 27 May 2016: a 1,000 dong cash dividend and a 20:3 stock
+        // dividend went ex on the same session. Neither explains the gap on its
+        // own - the dividend alone implies a close 13% above what printed, and
+        // a check that reads one action at a time reports a correctly
+        // transcribed entitlement as a transcription error. The prices support
+        // the pair, and the pair is what the series is read through.
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreWeek();
+
+        // ((100 - 2) / 100) x (1 / 1.15) = 0.852174, against a close of 85.
+        harness.CloseFrom(Wednesday, 85m);
+        harness.Record(CorporateActionType.CashDividend, Wednesday, cashAmount: 2m);
+        harness.Record(CorporateActionType.StockDividend, Wednesday, ratio: 0.15m);
+
+        // Act
+        var run = await harness.RecomputeAsync();
+
+        // Assert
+        Assert.Equal(2, run.Computed);
+        Assert.Equal(0, run.IssuesRaised);
+        Assert.Empty(harness.Issues.All);
+    }
+
+    [Fact]
+    public async Task A_combination_no_discontinuity_supports_still_raises_one_finding()
+    {
+        // The other half of the same rule. Reading the actions together must
+        // not become a way for a wrong one to hide behind a right one: these
+        // prices are flat, so the pair claims a 15% drop that never happened.
+        // One finding, because the session is what is in doubt rather than
+        // either row individually - which of the two is wrong is exactly what
+        // the finding asks somebody to look at.
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.CashDividend, Wednesday, cashAmount: 2m);
+        harness.Record(CorporateActionType.StockDividend, Wednesday, ratio: 0.15m);
+
+        // Act
+        var run = await harness.RecomputeAsync();
+
+        // Assert
+        Assert.Equal(1, run.IssuesRaised);
+
+        var issue = Assert.Single(harness.Issues.All);
+        Assert.Equal(DataQualityIssueKind.ActionWithoutDiscontinuity, issue.Kind);
+        Assert.Equal(Wednesday, DateOnly.FromDateTime(issue.SessionAtUtc.UtcDateTime));
+    }
+
+    [Fact]
     public async Task A_venue_with_no_band_cannot_contradict_an_action()
     {
         // Nothing to measure the discrepancy against. Skipped rather than
@@ -660,6 +711,28 @@ public sealed class PriceAdjustmentServiceTests
                     Price.Create(50m),
                     Price.Create(50m),
                     Price.Create(50m),
+                    bar.Volume,
+                    bar.Turnover,
+                    Source,
+                    Now);
+            }
+        }
+
+        /// <summary>
+        /// Sets every close from a date onward, so the prices show the exact
+        /// discontinuity a combination of actions implies.
+        /// </summary>
+        public void CloseFrom(DateOnly exDate, decimal close)
+        {
+            var ex = new DateTimeOffset(exDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+            foreach (var bar in Bars.All.Where(bar => bar.OpenedAtUtc >= ex).ToList())
+            {
+                bar.Revise(
+                    Price.Create(close),
+                    Price.Create(close),
+                    Price.Create(close),
+                    Price.Create(close),
                     bar.Volume,
                     bar.Turnover,
                     Source,

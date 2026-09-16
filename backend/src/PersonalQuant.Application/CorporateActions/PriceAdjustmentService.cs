@@ -85,6 +85,20 @@ internal sealed class PriceAdjustmentService(
 
         var computedAtUtc = clock.UtcNow;
         var rejections = new List<AdjustmentRejection>();
+
+        // Every live adjustment for this instrument, grouped by the session it
+        // goes ex on. The discontinuity check below reads a whole ex-date at
+        // once, so it has to see the actions that were already current as well
+        // as the ones recomputed here - a group missing the half that did not
+        // change would be judged against a factor the series is not read
+        // through.
+        var byExDate = new Dictionary<DateOnly, List<(CorporateAction Action, PriceAdjustment Adjustment)>>();
+
+        // The ex-dates something actually moved on. Checking only these keeps
+        // the read count where it was: a recompute that changes nothing asks
+        // the database nothing.
+        var touched = new HashSet<DateOnly>();
+
         var computed = 0;
         var unchanged = 0;
         var removed = 0;
@@ -118,6 +132,7 @@ internal sealed class PriceAdjustmentService(
 
             if (stored is not null && stored.IsCurrentFor(action))
             {
+                Group(byExDate, action, stored);
                 unchanged++;
                 continue;
             }
@@ -140,14 +155,23 @@ internal sealed class PriceAdjustmentService(
             }
 
             actions.AddAdjustment(outcome.Adjustment!);
+            Group(byExDate, action, outcome.Adjustment!);
+            touched.Add(action.ExDate);
             computed++;
 
             explained += await ExplainFindingsAsync(action, cancellationToken)
                 .ConfigureAwait(false);
+        }
 
+        // After the loop, not inside it. An action is only contradicted by the
+        // prices once everything going ex with it has been computed, and the
+        // order the actions arrive in is not something this can depend on.
+        foreach (var exDate in touched.Order())
+        {
             raised += await RaiseIfUnsupportedAsync(
-                    action,
-                    outcome.Adjustment!,
+                    instrumentId,
+                    exDate,
+                    byExDate[exDate],
                     band,
                     computedAtUtc,
                     cancellationToken)
@@ -305,8 +329,8 @@ internal sealed class PriceAdjustmentService(
     }
 
     /// <summary>
-    /// Raises a finding when an action claims to explain a move the prices
-    /// never made.
+    /// Raises a finding when the actions going ex on a session claim to explain
+    /// a move the prices never made.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -325,6 +349,17 @@ internal sealed class PriceAdjustmentService(
     /// not come from the market.
     /// </para>
     /// <para>
+    /// <strong>The unit is the ex-date, not the action.</strong> Several
+    /// entitlements detaching on one session is ordinary in Vietnam — FPT on
+    /// 27 May 2016 paid a cash dividend and a stock dividend together — and each
+    /// of them rescales the same prices, so what the series is read through is
+    /// the product of their factors. Reading them one at a time was the first
+    /// thing a real reproduction broke: the dividend alone implied a close 13%
+    /// above what printed, and a correctly transcribed pair was reported as a
+    /// transcription error. A check that cries wolf on the ordinary case is
+    /// worse than no check, because the findings it buries are the real ones.
+    /// </para>
+    /// <para>
     /// It is a finding, not a refusal. The factor is stored either way, for the
     /// reason a suspect bar is: refusing it would lose the record of what the
     /// source said, and an unexplained discontinuity somebody can see beats a
@@ -332,23 +367,24 @@ internal sealed class PriceAdjustmentService(
     /// </para>
     /// </remarks>
     private async Task<int> RaiseIfUnsupportedAsync(
-        CorporateAction action,
-        PriceAdjustment adjustment,
+        InstrumentId instrumentId,
+        DateOnly exDate,
+        List<(CorporateAction Action, PriceAdjustment Adjustment)> sharing,
         PriceLimit? band,
         DateTimeOffset detectedAtUtc,
         CancellationToken cancellationToken)
     {
-        if (band is not { } limit)
+        if (band is not { } limit || sharing.Count == 0)
         {
             return 0;
         }
 
         var session = new DateTimeOffset(
-            action.ExDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            exDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
         var onExDate = await bars
             .ListForUpdateAsync(
-                action.InstrumentId,
+                instrumentId,
                 BarInterval.OneDay,
                 session,
                 session.AddDays(1),
@@ -363,7 +399,15 @@ internal sealed class PriceAdjustmentService(
             return 0;
         }
 
-        var expected = adjustment.ReferenceClose.Value * adjustment.Factor.Price;
+        // Every action going ex on this session rescales the same prices, so
+        // what the series is read through is their product. Each factor was
+        // measured against the same close - the last one before the ex-date -
+        // which is what makes multiplying them the right composition rather
+        // than an approximation of one.
+        var reference = sharing[0].Adjustment.ReferenceClose.Value;
+        var combined = sharing.Aggregate(1m, (running, pair) => running * pair.Adjustment.Factor.Price);
+
+        var expected = reference * combined;
         var observed = onExDate[0].Close.Value;
 
         if (limit.Permits(expected, observed, PriceLimitTolerance))
@@ -373,7 +417,7 @@ internal sealed class PriceAdjustmentService(
 
         var existing = await issues
             .ListAsync(
-                action.InstrumentId,
+                instrumentId,
                 BarInterval.OneDay,
                 session,
                 session.AddDays(1),
@@ -389,17 +433,67 @@ internal sealed class PriceAdjustmentService(
         }
 
         issues.Add(DataQualityIssue.Raise(
-            action.InstrumentId,
+            instrumentId,
             BarInterval.OneDay,
             session,
             DataQualityIssueKind.ActionWithoutDiscontinuity,
-            $"A {action.Type} implies a close of {Format(expected)} on its ex-date, but "
-            + $"{Format(observed)} was recorded — further from it than {limit} allows in a "
-            + "session. The ratio, the amount or the ex-date is likely transcribed wrongly.",
+            Describe(sharing, expected, observed, limit),
             DataRules.ValidationVersion,
             detectedAtUtc));
 
         return 1;
+    }
+
+    /// <summary>
+    /// Adds an action and its factor to the group for its ex-date.
+    /// </summary>
+    private static void Group(
+        Dictionary<DateOnly, List<(CorporateAction Action, PriceAdjustment Adjustment)>> byExDate,
+        CorporateAction action,
+        PriceAdjustment adjustment)
+    {
+        if (!byExDate.TryGetValue(action.ExDate, out var sharing))
+        {
+            sharing = [];
+            byExDate[action.ExDate] = sharing;
+        }
+
+        sharing.Add((action, adjustment));
+    }
+
+    /// <summary>
+    /// States what the session's actions claimed and what the prices did.
+    /// </summary>
+    /// <remarks>
+    /// One action and several read differently on purpose. When two entitlements
+    /// detach together the finding cannot say which of them is wrong — only that
+    /// the pair does not match the print — and wording it as though it knew
+    /// would send the reader to the wrong row.
+    /// </remarks>
+    private static string Describe(
+        List<(CorporateAction Action, PriceAdjustment Adjustment)> sharing,
+        decimal expected,
+        decimal observed,
+        PriceLimit limit)
+    {
+        var tail =
+            $"but {Format(observed)} was recorded — further from it than {limit} allows in a session. ";
+
+        if (sharing.Count == 1)
+        {
+            return $"A {sharing[0].Action.Type} implies a close of {Format(expected)} on its ex-date, "
+                + tail
+                + "The ratio, the amount or the ex-date is likely transcribed wrongly.";
+        }
+
+        var types = string.Join(
+            ", ", sharing.Select(pair => pair.Action.Type).Order().Select(type => type.ToString()));
+
+        return $"{sharing.Count} actions going ex together ({types}) imply a close of "
+            + $"{Format(expected)}, "
+            + tail
+            + "One of their ratios, amounts or ex-dates is likely transcribed wrongly, or an "
+            + "action that also went ex that session has not been recorded.";
     }
 
     private static string Format(decimal value) =>
