@@ -133,5 +133,23 @@ claim it read the next one correctly.
 
 ## Fixture
 
-[`../fixtures/corporate-actions.csv`](../fixtures/corporate-actions.csv) is a
-tiny synthetic file for the `DEMO` series. Every figure in it was invented.
+[`../fixtures/corporate-actions.csv`](../fixtures/corporate-actions.csv) holds
+four rows, and they are not all of a kind.
+
+The two `DEMO` rows are synthetic and every figure in them was invented.
+
+The two `FPT.HM` rows are **real**: the remaining FY2015 cash dividend of 1,000₫
+per share and the FY2015 stock dividend at 20:3, which went ex together on
+27 May 2016. They are Gate A's acceptance case rather than an illustration, and
+they are the reason this format's two awkward corners are worth reading twice:
+
+- **The ratio is not the announcement's wording.** A 20:3 stock dividend is
+  `0.15` here — *additional* shares per share held — because that is the
+  quantity `StockDividend` declares. Transcribing `20`, `3` or `1.15` all parse.
+- **Several actions may share one ex-date**, and in Vietnam that is ordinary
+  rather than exceptional. Neither of these two explains the 27 May gap alone;
+  the product of their factors does. Anything reading actions one at a time will
+  be wrong on exactly the rows that matter most.
+
+See [`../fixtures/README.md`](../fixtures/README.md) for the sourcing, and for
+why `announced_on` is empty.

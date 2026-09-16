@@ -389,9 +389,33 @@ are ignored in silence in any other format, and `FPT` on 27 May 2016 carries a
 account for. See
 [ADR-021](../architecture/decisions/ADR-021-raw-vietnamese-price-history.md).
 
-The adapter does not exist, the action is not recorded, and nothing has been run
-through the engine. **U3 is not complete and Gate A does not pass** — but what
-remains is work rather than a search.
+**That criterion has since been met, on 16 September 2026.** The adapter exists
+(`CafefMarketDataProvider`, raw, registered), the action is recorded, and the
+series has been run through the engine:
+
+- 61 raw daily `FPT` bars were ingested from CafeF for Q2 2016, and the quality
+  inspector raised a `PriceLimitBreach` from them — `-13.68 % from 47500.0`,
+  against HOSE's ±7% band.
+- Two entitlements went ex on 27 May 2016 and both are recorded in
+  `data/fixtures/corporate-actions.csv`: the remaining FY2015 cash dividend of
+  1,000₫ per share, and the FY2015 stock dividend of 20:3. Their factors are
+  `0.9789473684` and `0.8695652174`, whose product is `0.8512585812`.
+- `47,500 × 0.8512585812 = 40,434.78` against a printed close of `41,000`, a
+  move of +1.40% — an ordinary session. The breach is explained, and
+  `ActionWithoutDiscontinuity` is not raised.
+- Read back adjusted, the step across the ex-date is `1.01398` against CafeF's
+  own adjusted series at `1.01412`: a residual of `-0.0137%`, smaller than the
+  ±0.09% rounding noise CafeF's two-decimal adjusted quotes carry on ordinary
+  days.
+
+Reproducing it surfaced one product bug, now fixed: the discontinuity check read
+**one action at a time**, so the cash dividend alone implied a close of 46,500
+against the 41,000 that printed and a correctly transcribed entitlement was
+reported as a transcription error. Actions sharing an ex-date are now judged by
+the product of their factors, which is what the series is read through.
+
+**The remaining Gate A items are U2 membership and a dataset export over a real
+universe**, not the reproduction.
 
 **Automatic provider fallback is rejected, not merely unimplemented.** Falling
 through to a second provider when the first is unavailable would silently

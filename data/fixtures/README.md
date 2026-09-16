@@ -90,8 +90,10 @@ above; register an instrument under it before ingesting.
 
 ## Corporate actions
 
-Two invented actions against `DEMO`, the same security the market data fixture
-describes, so the adjustment pipeline can be run end to end on a fresh clone:
+Four rows, and they are not all of a kind. Two are invented actions against
+`DEMO`, the same security the market data fixture describes, so the adjustment
+pipeline can be run end to end on a fresh clone. **Two are real**, and are
+documented under *The FPT entitlement* below.
 
 ```
 MarketData__CorporateActionPath=data/fixtures/corporate-actions.csv
@@ -102,6 +104,45 @@ The cash dividend is fitted to the price series on purpose. `DEMO` closes at
 the whole of the final session's decline is the dividend coming out, and the
 adjusted series is flat across it where the raw series drops. That is what an
 adjusted chart is for, visible on six sessions.
+
+Both `DEMO` rows are currently **rejected** on import as `UnknownInstrument`:
+`DEMO` is not in `instruments.csv`, and the corporate action import matches the
+`FILE` source's own symbol alias with no fallback to a bare ticker. Register an
+instrument under `DEMO` first, as the market data fixture says.
+
+### The FPT entitlement
+
+```csv
+FPT.HM,CashDividend,2016-05-27,,1000,,2016-06-10,
+FPT.HM,StockDividend,2016-05-27,0.15,,,,
+```
+
+These two are **real**, and they are the Gate A acceptance case: one known
+entitlement reproduced through the adjustment engine against raw bars from a
+live source. They are what `docs/roadmap/pqt-roadmap-v2.md` U3 and
+[ADR-021](../../docs/architecture/decisions/ADR-021-raw-vietnamese-price-history.md)
+describe.
+
+On 27 May 2016 two entitlements went ex on `FPT` together: the remaining FY2015
+cash dividend of 1,000₫ per share, paid on 10 June 2016, and the FY2015 stock
+dividend at 20:3 — three new shares for every twenty held, so `ratio` is the
+`0.15` *additional* shares per share the format asks for, not the `20:3` the
+announcement is worded in.
+
+The raw close gapped from 47,500 to 41,000, −13.68%, which HOSE's ±7% band makes
+impossible as a price move. Their factors multiply to `0.8512585812`, and
+`47,500 × 0.8512585812 = 40,434.78` against the 41,000 that printed: +1.40%, an
+ordinary session.
+
+**`announced_on` is deliberately empty.** The ex-date, the ratio, the cash
+amount and the payment date are all sourced; the announcement date is not, and
+inventing one would make a strict as-of read claim knowledge nobody has
+evidenced. It is the case `AnnouncementPolicy` exists for — the actions apply
+under `permissive` and are withheld under `strict`. `record_date` is empty for
+the same reason.
+
+The symbol is `FPT.HM`, not `FPT`, because the corporate action import matches
+the `FILE` source's alias exactly — the spelling `instruments.csv` carries.
 
 The second row is a share issuance, which is recorded and rescales nothing. It
 is there so the fixture exercises the path where an action is a real fact about

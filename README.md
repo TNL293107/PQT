@@ -28,16 +28,26 @@ Phase 5–20                    PLANNED
 | **Tests**    | 815 green in CI — 601 unit, 123 integration, 71 Vitest, 14 pytest, 6 CTest |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
-**The caveat that matters.** Phases 2–4 are built, tested and reviewed. They
-have never processed a real Vietnamese price — the only market data here is a
-six-session synthetic series for a ticker listed on no venue. That makes their
-correctness properties **designed and tested but not empirically validated**:
+**The caveat that mattered, and where it now stands.** Phases 2–4 were built,
+tested and reviewed long before they had processed a real Vietnamese price, and
+for most of that time the only market data here was a six-session synthetic
+series for a ticker listed on no venue:
 
 ```
 Implemented + tested   ≠   Empirically validated with real market data
 ```
 
-Closing that gap is **U3**, and it is mandatory. See the
+As of **16 September 2026 that gap is closed for the price and adjustment
+path.** Raw daily `FPT` bars are ingested from CafeF, the two entitlements that
+went ex on 27 May 2016 — a 1,000₫ cash dividend and a 20:3 stock dividend — are
+recorded, and the engine accounts for the −13.68% gap they caused: the
+`PriceLimitBreach` the quality inspector raised from the real bars is explained,
+and the adjusted series agrees with CafeF's own to within its quoting precision.
+It cost one real bug, in a discontinuity check that read one action at a time.
+
+What is **not** yet validated on real data: universe membership (only `DEMO`
+histories exist) and therefore dataset export over a real universe. Those are
+the rest of **U3/U2 and Gate A**. See the
 [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
