@@ -31,6 +31,56 @@ public interface IPriceAdjustmentService
     Task<AdjustmentRun> RecomputeAsync(
         InstrumentId instrumentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recomputes every factor for one instrument, to the depth a scope asks for.
+    /// </summary>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="scope">How much of the instrument's record is re-examined.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>What the run did.</returns>
+    Task<AdjustmentRun> RecomputeAsync(
+        InstrumentId instrumentId,
+        RecomputeScope scope,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// How much of an instrument's record a recompute re-examines.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A factor's staleness is judged from its action alone: the action's version,
+/// its announcement date, the rules version. That is the right test for an
+/// import, which only ever changes actions. It is blind to everything that
+/// changes on the price side, because none of it touches the action:
+/// </para>
+/// <list type="bullet">
+/// <item>the close a factor was measured against is restated by its source;</item>
+/// <item>a bar on the ex-date arrives after the factor, so the discontinuity
+/// check had nothing to compare against when it ran;</item>
+/// <item>the inspector raises a price-limit breach on the ex-date after the
+/// factor was stored, so nothing ever matches it to the action.</item>
+/// </list>
+/// <para>
+/// A backfill produces all three. <see cref="Everything"/> is the operator's
+/// answer after one.
+/// </para>
+/// </remarks>
+public enum RecomputeScope
+{
+    /// <summary>
+    /// Only actions whose factor no longer describes them. Cheap and
+    /// proportional to the news; what an import runs.
+    /// </summary>
+    Changed = 0,
+
+    /// <summary>
+    /// Every action: each factor is measured again against the close now on
+    /// record, every ex-date is checked for findings it explains or a move it
+    /// claims that never happened. Still idempotent.
+    /// </summary>
+    Everything = 1,
 }
 
 /// <summary>

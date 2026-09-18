@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Datasets;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
@@ -93,10 +94,17 @@ internal static class Dispatcher
                         output)
                     .RunAsync(command, cancellationToken);
 
+            case "adjust":
+                return new AdjustCommands(
+                        Defer<IPriceAdjustmentService>(services),
+                        Defer<IInstrumentResolver>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, ingest, quality, "
-                        + "dataset, schema or calendar.");
+                        + "adjust, dataset, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

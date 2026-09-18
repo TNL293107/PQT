@@ -60,8 +60,15 @@ internal sealed class PriceAdjustmentService(
     private const decimal PriceLimitTolerance = 0.005m;
 
     /// <inheritdoc />
+    public Task<AdjustmentRun> RecomputeAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken = default) =>
+        RecomputeAsync(instrumentId, RecomputeScope.Changed, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<AdjustmentRun> RecomputeAsync(
         InstrumentId instrumentId,
+        RecomputeScope scope,
         CancellationToken cancellationToken = default)
     {
         if (instrumentId.IsEmpty)
@@ -99,6 +106,13 @@ internal sealed class PriceAdjustmentService(
         // the database nothing.
         var touched = new HashSet<DateOnly>();
 
+        // Ex-dates on which some action could not be measured. Their group is
+        // missing a member, so the product of what is left is not what the
+        // session claims and cannot be judged against the prices. The
+        // rejection is already reported; a finding on top of it would be a
+        // second, wrong account of the same row.
+        var incomplete = new HashSet<DateOnly>();
+
         var computed = 0;
         var unchanged = 0;
         var removed = 0;
@@ -130,9 +144,11 @@ internal sealed class PriceAdjustmentService(
                 continue;
             }
 
-            if (stored is not null && stored.IsCurrentFor(action))
+            var isCurrent = stored is not null && stored.IsCurrentFor(action);
+
+            if (isCurrent && scope == RecomputeScope.Changed)
             {
-                Group(byExDate, action, stored);
+                Group(byExDate, action, stored!);
                 unchanged++;
                 continue;
             }
@@ -143,6 +159,35 @@ internal sealed class PriceAdjustmentService(
             if (outcome.Rejection is { } rejection)
             {
                 rejections.Add(rejection);
+                incomplete.Add(action.ExDate);
+
+                // A factor that cannot be measured for the action as it stands
+                // no longer describes it. Left in place it would go on
+                // rescaling the series by a number known to be wrong, under a
+                // run that reports no factor for this action.
+                if (stored is not null)
+                {
+                    actions.RemoveAdjustment(stored);
+                    removed++;
+                }
+
+                continue;
+            }
+
+            // Measured again and found the same: the stored row is kept, so
+            // its computation instant still says when the factor was last
+            // actually different. Its ex-date is still examined - that is the
+            // half of a full recompute the action's version cannot stand in
+            // for.
+            if (isCurrent && MeasuresTheSame(stored!, outcome.Adjustment!))
+            {
+                Group(byExDate, action, stored!);
+                touched.Add(action.ExDate);
+                unchanged++;
+
+                explained += await ExplainFindingsAsync(action, cancellationToken)
+                    .ConfigureAwait(false);
+
                 continue;
             }
 
@@ -166,7 +211,7 @@ internal sealed class PriceAdjustmentService(
         // After the loop, not inside it. An action is only contradicted by the
         // prices once everything going ex with it has been computed, and the
         // order the actions arrive in is not something this can depend on.
-        foreach (var exDate in touched.Order())
+        foreach (var exDate in touched.Except(incomplete).Order())
         {
             raised += await RaiseIfUnsupportedAsync(
                     instrumentId,
@@ -443,6 +488,18 @@ internal sealed class PriceAdjustmentService(
 
         return 1;
     }
+
+    /// <summary>
+    /// Reports whether a factor measured again agrees with the one stored.
+    /// </summary>
+    /// <remarks>
+    /// The reference close as well as the factor. Two closes can round to the
+    /// same factor, and the stored close is what an auditor reads to see what
+    /// the factor was measured against - it must be the one now on record.
+    /// </remarks>
+    private static bool MeasuresTheSame(PriceAdjustment stored, PriceAdjustment remeasured) =>
+        stored.Factor == remeasured.Factor
+        && stored.ReferenceClose.Value == remeasured.ReferenceClose.Value;
 
     /// <summary>
     /// Adds an action and its factor to the group for its ex-date.

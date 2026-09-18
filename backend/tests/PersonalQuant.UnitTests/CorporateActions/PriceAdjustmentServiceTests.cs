@@ -520,6 +520,145 @@ public sealed class PriceAdjustmentServiceTests
         Assert.Equal(0, run.IssuesRaised);
     }
 
+    [Fact]
+    public async Task A_breach_found_after_the_factor_is_left_open_by_an_ordinary_recompute()
+    {
+        // The baseline the full scope exists for. An import recomputes only
+        // what moved, so a finding the inspector raises after the factor was
+        // stored is never matched to the action that explains it.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync();
+        harness.RaiseBreach(Wednesday);
+
+        // Act
+        var run = await harness.RecomputeAsync();
+
+        // Assert
+        Assert.Equal(0, run.IssuesExplained);
+        Assert.True(Assert.Single(harness.Issues.All).IsOpen);
+    }
+
+    [Fact]
+    public async Task A_full_recompute_explains_a_breach_found_after_the_factor()
+    {
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync();
+        harness.RaiseBreach(Wednesday);
+
+        // Act
+        var run = await harness.RecomputeAsync(RecomputeScope.Everything);
+
+        // Assert
+        Assert.Equal(0, run.Computed);
+        Assert.Equal(1, run.Unchanged);
+        Assert.Equal(1, run.IssuesExplained);
+        Assert.Equal(DataQualityIssueStatus.Explained, Assert.Single(harness.Issues.All).Status);
+    }
+
+    [Fact]
+    public async Task A_full_recompute_judges_an_ex_date_whose_bar_arrived_after_the_factor()
+    {
+        // The factor was measured when only Monday and Tuesday were held, so
+        // there was nothing on the ex-date to contradict it. The rest of the
+        // week arrives flat, which a two-for-one split cannot have produced.
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreDays(0, 2);
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+
+        var first = await harness.RecomputeAsync();
+        Assert.Equal(0, first.IssuesRaised);
+
+        harness.StoreDays(2, 3);
+
+        // Act
+        var ordinary = await harness.RecomputeAsync();
+        var full = await harness.RecomputeAsync(RecomputeScope.Everything);
+
+        // Assert
+        Assert.Equal(0, ordinary.IssuesRaised);
+        Assert.Equal(1, full.IssuesRaised);
+        Assert.Equal(
+            DataQualityIssueKind.ActionWithoutDiscontinuity,
+            Assert.Single(harness.Issues.All).Kind);
+    }
+
+    [Fact]
+    public async Task A_full_recompute_replaces_a_factor_whose_reference_close_was_restated()
+    {
+        // The action did not change; the close it was measured against did.
+        // Its version says current, and only reading the close again finds
+        // that the factor describes a price that is no longer on record.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.CashDividend, Wednesday, cashAmount: 10m);
+        await harness.RecomputeAsync();
+        harness.CloseOn(new DateOnly(2026, 8, 4), 80m);
+
+        // Act
+        var run = await harness.RecomputeAsync(RecomputeScope.Everything);
+
+        // Assert
+        Assert.Equal(1, run.Computed);
+        Assert.Equal(0, run.Unchanged);
+
+        var adjustment = Assert.Single(harness.Actions.Adjustments);
+        Assert.Equal(80m, adjustment.ReferenceClose.Value);
+        Assert.Equal(0.875m, adjustment.Factor.Price);
+    }
+
+    [Fact]
+    public async Task A_factor_that_can_no_longer_be_measured_is_removed_and_its_ex_date_is_not_judged()
+    {
+        // A split and a dividend go ex together and the prices support the
+        // pair. The close before them is then restated below the dividend, so
+        // the dividend's factor can no longer be computed. Its old factor was
+        // measured against a close no longer on record: keeping it would go on
+        // rescaling the series by a number known to be wrong while the run
+        // reports "no factor". And judging the ex-date by the split alone
+        // would raise a finding against a group that is missing a member.
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreWeek();
+        harness.CloseFrom(Wednesday, 50m);
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        harness.Record(CorporateActionType.CashDividend, Wednesday, cashAmount: 1m);
+        await harness.RecomputeAsync();
+        harness.CloseOn(new DateOnly(2026, 8, 4), 0.5m);
+
+        // Act
+        var run = await harness.RecomputeAsync(RecomputeScope.Everything);
+
+        // Assert
+        var rejection = Assert.Single(run.Rejections);
+        Assert.Equal(CorporateActionType.CashDividend, rejection.Type);
+        Assert.Equal(1, run.Removed);
+        Assert.Equal(0, run.IssuesRaised);
+        Assert.Equal(2m, Assert.Single(harness.Actions.Adjustments).Factor.Shares);
+        Assert.Empty(harness.Issues.All);
+    }
+
+    [Fact]
+    public async Task A_full_recompute_twice_changes_nothing_the_second_time()
+    {
+        var harness = new Harness(dailyPriceLimitPercent: 7m);
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockSplit, Wednesday, ratio: 2m);
+        await harness.RecomputeAsync(RecomputeScope.Everything);
+
+        // Act
+        var second = await harness.RecomputeAsync(RecomputeScope.Everything);
+
+        // Assert — the finding the first run raised is not raised again.
+        Assert.Equal(0, second.Computed);
+        Assert.Equal(1, second.Unchanged);
+        Assert.Equal(0, second.IssuesRaised);
+        Assert.Single(harness.Actions.Adjustments);
+        Assert.Single(harness.Issues.All);
+    }
+
     /// <summary>Wires the real engine and read path over in-memory ports.</summary>
     [Fact]
     public async Task A_series_its_source_already_adjusted_is_not_adjusted_again()
@@ -620,9 +759,12 @@ public sealed class PriceAdjustmentServiceTests
 
         public FakeQualityRepository Issues { get; }
 
-        public void StoreWeek(decimal? turnover = null) =>
+        public void StoreWeek(decimal? turnover = null) => StoreDays(0, 5, turnover);
+
+        /// <summary>Stores flat bars for part of the week, from Monday plus an offset.</summary>
+        public void StoreDays(int fromOffset, int count, decimal? turnover = null) =>
             Bars.AddRange(
-                [.. Enumerable.Range(0, 5).Select(offset => OhlcvBar.Record(
+                [.. Enumerable.Range(fromOffset, count).Select(offset => OhlcvBar.Record(
                     InstrumentId,
                     BarInterval.OneDay,
                     Monday.AddDays(offset),
@@ -740,6 +882,23 @@ public sealed class PriceAdjustmentServiceTests
             }
         }
 
+        /// <summary>Restates one session's close, as a source correction would.</summary>
+        public void CloseOn(DateOnly session, decimal close)
+        {
+            var opened = new DateTimeOffset(session.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var bar = Bars.All.Single(bar => bar.OpenedAtUtc == opened);
+
+            bar.Revise(
+                Price.Create(close),
+                Price.Create(close),
+                Price.Create(close),
+                Price.Create(close),
+                bar.Volume,
+                bar.Turnover,
+                Source,
+                Now);
+        }
+
         public void RaiseBreach(DateOnly session) =>
             Issues.Seed(DataQualityIssue.Raise(
                 InstrumentId,
@@ -752,6 +911,9 @@ public sealed class PriceAdjustmentServiceTests
 
         public Task<AdjustmentRun> RecomputeAsync() =>
             _service.RecomputeAsync(InstrumentId, TestContext.Current.CancellationToken);
+
+        public Task<AdjustmentRun> RecomputeAsync(RecomputeScope scope) =>
+            _service.RecomputeAsync(InstrumentId, scope, TestContext.Current.CancellationToken);
 
         public Task<BarSeries> ReadAsync(bool adjusted)
         {

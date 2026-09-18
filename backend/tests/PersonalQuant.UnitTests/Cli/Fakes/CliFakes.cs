@@ -1,5 +1,6 @@
 using System.Text;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
@@ -288,5 +289,34 @@ internal sealed class FakeDataQualityService : IDataQualityService
         }
 
         return Task.FromResult<DataQualityIssue?>(finding);
+    }
+}
+
+/// <summary>Records which instruments were recomputed, and at what scope.</summary>
+internal sealed class FakePriceAdjustmentService : IPriceAdjustmentService
+{
+    private Func<InstrumentId, AdjustmentRun> _outcome = AdjustmentRun.Nothing;
+
+    public List<(InstrumentId Instrument, RecomputeScope Scope)> Runs { get; } = [];
+
+    /// <summary>Scripts what every run reports.</summary>
+    public FakePriceAdjustmentService Then(Func<InstrumentId, AdjustmentRun> outcome)
+    {
+        _outcome = outcome;
+        return this;
+    }
+
+    public Task<AdjustmentRun> RecomputeAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken = default) =>
+        RecomputeAsync(instrumentId, RecomputeScope.Changed, cancellationToken);
+
+    public Task<AdjustmentRun> RecomputeAsync(
+        InstrumentId instrumentId,
+        RecomputeScope scope,
+        CancellationToken cancellationToken = default)
+    {
+        Runs.Add((instrumentId, scope));
+        return Task.FromResult(_outcome(instrumentId));
     }
 }
