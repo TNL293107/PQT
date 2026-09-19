@@ -198,7 +198,7 @@ Deliberately not recorded:
 
 Three sets in [`universes/`](universes/). `DEMO_INDEX` and `DEMO_EMPTY` are
 invented and make no claim about a real index. `VN30` is real, sourced, and
-**covers 4 August 2025 up to 18 September 2026 and nothing else** — read
+**covers 5 August 2024 up to 18 September 2026 and nothing else** — read
 outside that span it answers *unknown*, which is the point. Seeding today's
 constituents and letting them stand in for earlier years would be the
 survivorship bias this workstream exists to remove.
@@ -210,27 +210,42 @@ MarketData__UniverseDirectory=data/fixtures/universes
 ### VN30
 
 Transcribed from HOSE's own constituent tables ("Công bố thông tin danh mục cổ
-phiếu thành phần chỉ số VN30") for three reviews, plus one change between
+phiếu thành phần chỉ số VN30") for five reviews, plus one change between
 reviews. Like the trading calendar, this is an exchange's public announcement,
 not vendor data. HOSE's site served an empty page, so the tables were read from
 copies of HOSE's documents hosted by Vietstock.
 
 | Effective | Change | Announced | Basket source |
 | --------- | ------ | --------- | ------------- |
-| 2025-08-04 | BVH out, DGC in; coverage starts here | 2025-07-17 | Kỳ 7/2025 table (HOSE) |
+| 2024-08-05 | no change from the previous basket; coverage starts here | 2024-07-15 | Kỳ 7/2024 table (HOSE, via Vietstock image) |
+| 2025-02-03 | POW out, LPB in | 2025-01-20 | Kỳ 1/2025 PDF (HOSE), which states its period: 03/02/2025 to 01/08/2025 |
+| 2025-08-04 | BVH out, DGC in | 2025-07-17 | Kỳ 7/2025 table (HOSE) |
 | 2026-02-02 | BCM out, VPL in | 2026-01-21 | Kỳ 1/2026 list (HOSE PDF) |
 | 2026-05-13 | DGC out, BSR in — extraordinary: DGC moved to the controlled list | 2026-05-07 | secondary (press); consistent with BSR heading the January reserve list |
 | 2026-08-03 | PLX, TPB out; MCH, TCX in | 2026-07-15 | Kỳ 7/2026 table (HOSE) |
 
-The quarterly reviews of October 2025 and April 2026 changed no members (the
-October one is primary; the April one is secondary). The four resulting
-baskets were checked by a script against the three published tables: 30 names
-on every date, and each basket equals the previous one plus the additions and
-minus the removals.
+The quarterly reviews of October 2024, April 2025, October 2025 and April 2026
+changed no members (April 2025 and October 2025 are primary; October 2024 and
+April 2026 are secondary). No extraordinary replacement was found between
+August 2024 and August 2025. The resulting baskets were checked by a script
+against the five published tables: 30 names on every date, and each basket
+equals the previous one plus the additions and minus the removals.
+
+**One spell per stint, and `announced_on` only for a real inclusion.** A
+security already in the index when coverage starts has a spell beginning on
+2024-08-05 and a blank announcement date, because neither its true start nor
+its announcement is known. The first transcription started every continuing
+member on the old coverage start and gave it that review's date, which told a
+point-in-time consumer an inclusion had been announced that never happened. The
+six real inclusions (LPB, DGC, VPL, BSR, MCH, TCX) carry their dates.
+`announced_on` means the admission announcement throughout; a removal's
+announcement is not modelled (see the handoff's known gap).
 
 Where the record is weaker than the membership itself:
 
-- **Announcement dates.** 2025-07-17 is the earliest date the announcement is
+- **Announcement dates.** 2024-07-15 and the October 2024 review's date rest on
+  secondary sources only (the latter was not found, and nothing hangs on it:
+  that review changed nobody). 2025-07-17 is the earliest date the announcement is
   evidenced as published (one secondary source says the 16th — the later date is
   used so a strict as-of read claims no knowledge earlier than the evidence).
   2026-01-21 is inferred from the HOSE PDF's file name and upload path.
@@ -243,8 +258,29 @@ Where the record is weaker than the membership itself:
 - **Names** in the symbol list for the VN30 additions are the Vietnamese
   registered names exactly as HOSE printed them; an English name would have been
   a translation nobody sourced. STB is printed "Sài Gòn Thương Tín" in 2025 and
-  "Sài Gòn Tài Lộc" in the July 2026 table; the long-standing name is kept, and
-  the import never overwrites a name anyway.
+  "Sài Gòn Tài Lộc" in the July 2026 table, and LPB "Bưu điện Liên Việt" in
+  January 2025 and "Lộc Phát Việt Nam" from April 2025; the current names are
+  kept, and the import never overwrites a name anyway.
+
+**What the first two-year VN30 backfill found in CafeF itself.** These are
+properties of the source, not of this fixture, and are recorded here because the
+VN30 backfill is what surfaced them. Every one is left as an open
+`MissingSession` finding, because a missing bar is the truth about the series:
+
+- **2025-02-03, 2026-01-29 and 2026-01-30** have no bar for any VN30 name. HOSE's
+  own notices have all three as trading days: Tết 2025 closed 27–31 January and
+  trading resumed on 3 February (Công văn 1046/SGDVN-GSTT), and the 2026
+  calendar's only January closure is the 1st. The calendar is therefore left as
+  it is. A calendar fitted to one vendor's gaps would stop reporting them.
+- **2025-08-14** is missing for nine names (TPB, VCB, VHM, VIB, VIC, VJC, VNM,
+  VPB, VRE) and present for the rest; asking CafeF again returns the same hole.
+- **STB 2025-05-06** is served with a close below the day's low. The ingest
+  rejects it as `InconsistentPrices`, so the session is missing rather than
+  wrong.
+- A gap makes the next close move across two or three sessions, which can
+  exceed one session's band. Four such breaches (VJC and VPB on 2025-08-15, GVR
+  and MWG on 2026-02-02) were dismissed with that reason. None is a corporate
+  action.
 
 **BSR moved from UPCOM to HOSE.** The symbol list and the development seed had
 it on UPCOM, which made CafeF — which does not serve UPCOM — refuse it and
