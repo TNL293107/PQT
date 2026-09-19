@@ -162,6 +162,45 @@ public sealed class PriceAdjustmentServiceTests
     }
 
     [Fact]
+    public async Task A_rights_issue_and_a_stock_dividend_on_one_session_are_read_through_their_true_product()
+    {
+        // (100 + 0.1 x 40) / ((1 + 0.15 + 0.1) x 100) = 0.832, not the
+        // 0.8221 that multiplying the standalone factors gives.
+        var harness = new Harness();
+        harness.StoreWeek();
+        harness.Record(CorporateActionType.StockDividend, Wednesday, ratio: 0.15m);
+        harness.Record(CorporateActionType.RightsIssue, Wednesday, ratio: 0.1m, cashAmount: 40m);
+
+        // Act
+        var run = await harness.RecomputeAsync();
+
+        // Assert
+        Assert.Equal(2, run.Computed);
+        Assert.Equal(0.832m, Math.Round(harness.PriceProduct(), 10));
+    }
+
+    [Fact]
+    public async Task Amending_one_action_recomputes_every_factor_sharing_its_ex_date()
+    {
+        // The rights factor carries the cross term with its siblings, so it is
+        // stale when a sibling changes even though its own version did not.
+        var harness = new Harness();
+        harness.StoreWeek();
+        var dividend = harness.Record(CorporateActionType.StockDividend, Wednesday, ratio: 0.15m);
+        harness.Record(CorporateActionType.RightsIssue, Wednesday, ratio: 0.1m, cashAmount: 40m);
+        await harness.RecomputeAsync();
+
+        dividend.Amend(Wednesday, ratio: 0.2m, cashAmount: null, "Restated.", Now);
+
+        // Act
+        var run = await harness.RecomputeAsync();
+
+        // Assert — (100 + 4) / 130.
+        Assert.Equal(2, run.Computed);
+        Assert.Equal(Math.Round(104m / 130m, 10), Math.Round(harness.PriceProduct(), 10));
+    }
+
+    [Fact]
     public async Task A_cancelled_action_has_its_factor_removed()
     {
         // Cancelled rather than deleted, so the series stops being adjusted for
@@ -881,6 +920,10 @@ public sealed class PriceAdjustmentServiceTests
                     Now);
             }
         }
+
+        /// <summary>The price multiplier the series before every ex-date is read through.</summary>
+        public decimal PriceProduct() =>
+            Actions.Adjustments.Aggregate(1m, (running, adjustment) => running * adjustment.Factor.Price);
 
         /// <summary>Restates one session's close, as a source correction would.</summary>
         public void CloseOn(DateOnly session, decimal close)

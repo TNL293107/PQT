@@ -55,8 +55,15 @@ public static class DataRules
     /// reverse splits by their published ratio, stock dividends and bonus
     /// issues by additional shares per share held, and rights issues by the
     /// theoretical ex-rights price.
+    /// <para>
+    /// Version 2: actions going ex on one session are composed together, on the
+    /// holding at the record date, so a rights issue beside a dividend or a
+    /// share distribution no longer compounds with them. Found on MBB, 11 August
+    /// 2026, where version 1 was 1.2% off. Factors from version 1 are stale and
+    /// recomputed; for a session with no rights issue they come out the same.
+    /// </para>
     /// </remarks>
-    public const int AdjustmentVersion = 1;
+    public const int AdjustmentVersion = 2;
 
     /// <summary>
     /// The version recorded on data that has not been checked by the rules at

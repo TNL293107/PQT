@@ -216,6 +216,114 @@ public sealed class AdjustmentFactorsTests
         // Zero would erase the history it was meant to rescale.
         Assert.False(AdjustmentFactor.TryCreate(price, shares, out _));
 
+    [Fact]
+    public void A_rights_issue_and_a_stock_dividend_on_one_session_compose_on_the_holding_before_both()
+    {
+        // MBB, ex 11 August 2026: 100:15 stock dividend and a 10:1 rights issue
+        // at 10,000 dong, both on the shares held at the record date. A holder
+        // of 100 ends with 125 shares worth 100P + 10S, so the reference is
+        // (24,250 + 1,000) / 1.25 = 20,200. Multiplying the two standalone
+        // factors divides by 1.15 x 1.10 = 1.265 instead and lands on 19,960 -
+        // 1.2% off, and inside the band, so nothing downstream would notice.
+        var dividend = Action(CorporateActionType.StockDividend, ratio: 0.15m);
+        var rights = Action(CorporateActionType.RightsIssue, ratio: 0.1m, cashAmount: 10_000m);
+
+        var session = Compose(24_250m, dividend, rights);
+
+        Assert.Equal(20_200m, Math.Round(24_250m * PriceProduct(session), 6));
+        Assert.Equal(1.25m, Math.Round(SharesProduct(session), 10));
+
+        // The dividend keeps the factor it has alone; the rights issue absorbs
+        // the cross term, so each stored row still reads as its own action.
+        Assert.Equal(Standalone(dividend, 24_250m), session[dividend.Id]);
+    }
+
+    [Fact]
+    public void A_rights_issue_beside_a_cash_dividend_takes_the_cash_out_before_the_subscription()
+    {
+        // (P - D + rS) / ((1 + r) P) = (100 - 5 + 0.5 x 40) / 150 = 115 / 150.
+        var cash = Action(CorporateActionType.CashDividend, cashAmount: 5m);
+        var rights = Action(CorporateActionType.RightsIssue, ratio: 0.5m, cashAmount: 40m);
+
+        var session = Compose(100m, cash, rights);
+
+        Assert.Equal(Math.Round(115m / 150m, 10), Math.Round(PriceProduct(session), 10));
+        Assert.Equal(1.5m, Math.Round(SharesProduct(session), 10));
+    }
+
+    [Fact]
+    public void A_session_with_no_rights_issue_keeps_its_standalone_factors()
+    {
+        // FPT, 27 May 2016: a cash dividend and a stock dividend multiply
+        // exactly, and nothing here may change the factors that reproduction
+        // was checked against.
+        var cash = Action(CorporateActionType.CashDividend, cashAmount: 1_000m);
+        var stock = Action(CorporateActionType.StockDividend, ratio: 0.15m);
+
+        var session = Compose(47_500m, cash, stock);
+
+        Assert.Equal(Standalone(cash, 47_500m), session[cash.Id]);
+        Assert.Equal(Standalone(stock, 47_500m), session[stock.Id]);
+    }
+
+    [Fact]
+    public void A_rights_issue_alone_keeps_its_standalone_factor()
+    {
+        var rights = Action(CorporateActionType.RightsIssue, ratio: 0.1m, cashAmount: 10_000m);
+
+        var session = Compose(24_250m, rights);
+
+        Assert.Equal(Standalone(rights, 24_250m), session[rights.Id]);
+    }
+
+    [Fact]
+    public void Cash_that_together_reaches_the_close_is_refused_rather_than_thrown()
+    {
+        // Each dividend is below the close on its own, so each passes alone.
+        // Together they take out more than the share was worth - the sum is in
+        // the wrong unit or one of them is not this session's.
+        var first = Action(CorporateActionType.CashDividend, cashAmount: 70m);
+        var second = Action(CorporateActionType.CashDividend, cashAmount: 40m);
+        var rights = Action(CorporateActionType.RightsIssue, ratio: 0.1m, cashAmount: 50m);
+
+        var composed = AdjustmentFactors.TryComposeSession(
+            [(first, Standalone(first, 100m)), (second, Standalone(second, 100m)), (rights, Standalone(rights, 100m))],
+            Price.Create(100m),
+            out _,
+            out var problem);
+
+        Assert.False(composed);
+        Assert.Contains("110", problem, StringComparison.Ordinal);
+    }
+
+    private static Dictionary<CorporateActionId, AdjustmentFactor> Compose(
+        decimal previousClose,
+        params CorporateAction[] actions)
+    {
+        var standalone = actions
+            .Select(action => (action, Standalone(action, previousClose)))
+            .ToList();
+
+        Assert.True(
+            AdjustmentFactors.TryComposeSession(
+                standalone, Price.Create(previousClose), out var factors, out var problem),
+            problem);
+
+        return factors.ToDictionary(pair => pair.Key, pair => pair.Value);
+    }
+
+    private static AdjustmentFactor Standalone(CorporateAction action, decimal previousClose)
+    {
+        Assert.True(AdjustmentFactors.TryCompute(action, Price.Create(previousClose), out var factor, out var problem), problem);
+        return factor;
+    }
+
+    private static decimal PriceProduct(Dictionary<CorporateActionId, AdjustmentFactor> session) =>
+        session.Values.Aggregate(1m, (running, factor) => running * factor.Price);
+
+    private static decimal SharesProduct(Dictionary<CorporateActionId, AdjustmentFactor> session) =>
+        session.Values.Aggregate(1m, (running, factor) => running * factor.Shares);
+
     private static CorporateAction Action(
         CorporateActionType type,
         decimal? ratio = null,

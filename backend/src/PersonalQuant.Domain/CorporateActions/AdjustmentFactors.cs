@@ -197,5 +197,135 @@ public static class AdjustmentFactors
         return true;
     }
 
+    /// <summary>
+    /// Composes the factors of every action going ex on one session, so that
+    /// their product is the session's true factor.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Multiplying standalone factors is exact for cash dividends and share
+    /// distributions together — <c>(P − D)/P × 1/(1+s) = (P − D)/((1+s)P)</c>,
+    /// which is FPT on 27 May 2016. It is not exact once a rights issue shares
+    /// the session. A holder of one share before MBB's 11 August 2026 session
+    /// received 0.15 new shares and the right to buy 0.1 more at 10,000₫, all
+    /// counted on the shares held at the record date, and so ends with 1.25
+    /// shares worth <c>P + 0.1S</c>. Standalone factors divide by
+    /// <c>1.15 × 1.1 = 1.265</c> instead — 1.2% off, inside the band, and
+    /// invisible to every check downstream.
+    /// </para>
+    /// <para>
+    /// The session factor is <c>(P − ΣD + Σ rᵢSᵢ) / ((1 + Σs + Σ rᵢ) P)</c>,
+    /// times any split, on the Vietnamese convention that every ratio refers to
+    /// the holding at the record date. The first rights issue absorbs the
+    /// difference from the standalone product. Every other action keeps the
+    /// factor it has alone, so a stored row still reads as its own action, and
+    /// the product of the stored rows is what the series is read through.
+    /// </para>
+    /// </remarks>
+    /// <param name="standalone">
+    /// Every action going ex on the session that a factor could be computed
+    /// for, with that factor.
+    /// </param>
+    /// <param name="previousClose">The last close before the ex-date.</param>
+    /// <param name="factors">The factor to store for each action.</param>
+    /// <param name="problem">
+    /// Why the session has no usable factor. Reported rather than thrown, like
+    /// every other refusal here: one session that cannot be composed must not
+    /// cost the instrument's other sessions their factors.
+    /// </param>
+    /// <returns><see langword="true"/> when the session composed.</returns>
+    public static bool TryComposeSession(
+        IReadOnlyList<(CorporateAction Action, AdjustmentFactor Factor)> standalone,
+        Price previousClose,
+        out IReadOnlyDictionary<CorporateActionId, AdjustmentFactor> factors,
+        [NotNullWhen(false)] out string? problem)
+    {
+        ArgumentNullException.ThrowIfNull(standalone);
+
+        var composed = standalone.ToDictionary(pair => pair.Action.Id, pair => pair.Factor);
+        factors = composed;
+        problem = null;
+
+        var absorber = standalone
+            .Where(pair => pair.Action.Type == CorporateActionType.RightsIssue)
+            .OrderBy(pair => pair.Action.Id.Value)
+            .Select(pair => pair.Action)
+            .FirstOrDefault();
+
+        if (absorber is null || standalone.Count == 1)
+        {
+            return true;
+        }
+
+        var close = previousClose.Value;
+        var cash = 0m;
+        var distributed = 0m;
+        var offered = 0m;
+        var subscribed = 0m;
+        var splitPrice = 1m;
+        var splitShares = 1m;
+
+        foreach (var (action, factor) in standalone)
+        {
+            switch (action.Type)
+            {
+                case CorporateActionType.CashDividend:
+                    cash += action.CashAmount!.Value;
+                    break;
+                case CorporateActionType.RightsIssue:
+                    offered += action.Ratio!.Value;
+                    subscribed += action.Ratio!.Value * action.CashAmount!.Value;
+                    break;
+                case CorporateActionType.StockSplit or CorporateActionType.ReverseSplit:
+                    splitPrice *= factor.Price;
+                    splitShares *= factor.Shares;
+                    break;
+                default:
+                    distributed += action.Ratio!.Value;
+                    break;
+            }
+        }
+
+        // One cash dividend per session is all the record can hold, and it is
+        // already below the close, so this cannot fail on stored actions. It is
+        // checked because the composition is public and a caller can hand it
+        // anything.
+        var remaining = close - cash + subscribed;
+
+        if (remaining <= 0m)
+        {
+            problem =
+                $"The session's cash entitlements of {Format(cash)} leave nothing of a close of "
+                + $"{Format(close)}. One of them is in the wrong unit or belongs to another session.";
+            return false;
+        }
+
+        var shares = 1m + distributed + offered;
+        var sessionPrice = remaining / (shares * close) * splitPrice;
+        var sessionShares = shares * splitShares;
+
+        var othersPrice = 1m;
+        var othersShares = 1m;
+
+        foreach (var (action, factor) in standalone)
+        {
+            if (action.Id != absorber.Id)
+            {
+                othersPrice *= factor.Price;
+                othersShares *= factor.Shares;
+            }
+        }
+
+        if (!AdjustmentFactor.TryCreate(
+                sessionPrice / othersPrice, sessionShares / othersShares, out var absorbed))
+        {
+            problem = "The session's actions compose to no usable factor.";
+            return false;
+        }
+
+        composed[absorber.Id] = absorbed;
+        return true;
+    }
+
     private static string Format(decimal value) => value.ToString(CultureInfo.InvariantCulture);
 }

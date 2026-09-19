@@ -126,86 +126,109 @@ internal sealed class PriceAdjustmentService(
         var band = await FindPriceLimitAsync(instrumentId, cancellationToken)
             .ConfigureAwait(false);
 
+        var live = new List<CorporateAction>();
+
         foreach (var action in recorded)
         {
-            existing.TryGetValue(action.Id, out var stored);
-
-            if (!action.AffectsPrice)
+            if (action.AffectsPrice)
             {
-                // Cancelled, or a type that never rescaled anything. Either
-                // way the factor it used to contribute has to go, or the
-                // series stays adjusted for an event that is not happening.
-                if (stored is not null)
+                live.Add(action);
+                continue;
+            }
+
+            // Cancelled, or a type that never rescaled anything. Either way the
+            // factor it used to contribute has to go, or the series stays
+            // adjusted for an event that is not happening.
+            if (existing.TryGetValue(action.Id, out var stale))
+            {
+                actions.RemoveAdjustment(stale);
+                removed++;
+            }
+        }
+
+        // The unit is the session, not the action. Every action going ex on one
+        // session is measured against the same close, and a rights issue's
+        // factor carries the cross term with its siblings - so one amended
+        // sibling makes the whole session's factors stale, not only its own.
+        foreach (var session in live.GroupBy(action => action.ExDate).OrderBy(group => group.Key))
+        {
+            var members = session.ToList();
+
+            var current = members.All(action =>
+                existing.TryGetValue(action.Id, out var stored) && stored.IsCurrentFor(action));
+
+            if (current && scope == RecomputeScope.Changed)
+            {
+                foreach (var action in members)
                 {
-                    actions.RemoveAdjustment(stored);
-                    removed++;
+                    Group(byExDate, action, existing[action.Id]);
+                    unchanged++;
                 }
 
                 continue;
             }
 
-            var isCurrent = stored is not null && stored.IsCurrentFor(action);
-
-            if (isCurrent && scope == RecomputeScope.Changed)
-            {
-                Group(byExDate, action, stored!);
-                unchanged++;
-                continue;
-            }
-
-            var outcome = await ComputeAsync(action, computedAtUtc, cancellationToken)
+            var measured = await MeasureSessionAsync(members, computedAtUtc, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (outcome.Rejection is { } rejection)
+            foreach (var action in members)
             {
-                rejections.Add(rejection);
-                incomplete.Add(action.ExDate);
+                existing.TryGetValue(action.Id, out var stored);
+                var outcome = measured[action.Id];
 
-                // A factor that cannot be measured for the action as it stands
-                // no longer describes it. Left in place it would go on
-                // rescaling the series by a number known to be wrong, under a
-                // run that reports no factor for this action.
+                if (outcome.Rejection is { } rejection)
+                {
+                    rejections.Add(rejection);
+                    incomplete.Add(action.ExDate);
+
+                    // A factor that cannot be measured for the action as it
+                    // stands no longer describes it. Left in place it would go
+                    // on rescaling the series by a number known to be wrong,
+                    // under a run that reports no factor for this action.
+                    if (stored is not null)
+                    {
+                        actions.RemoveAdjustment(stored);
+                        removed++;
+                    }
+
+                    continue;
+                }
+
+                // Measured again and found the same: the stored row is kept, so
+                // its computation instant still says when the factor was last
+                // actually different. Its ex-date is still examined - that is
+                // the half of a recompute the action's version cannot stand in
+                // for.
+                if (stored is not null
+                    && stored.IsCurrentFor(action)
+                    && MeasuresTheSame(stored, outcome.Adjustment!))
+                {
+                    Group(byExDate, action, stored);
+                    touched.Add(action.ExDate);
+                    unchanged++;
+
+                    explained += await ExplainFindingsAsync(action, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    continue;
+                }
+
+                // Replaced rather than mutated: the stored row records the
+                // action version and the close it was measured against, and
+                // both change together or not at all.
                 if (stored is not null)
                 {
                     actions.RemoveAdjustment(stored);
-                    removed++;
                 }
 
-                continue;
-            }
-
-            // Measured again and found the same: the stored row is kept, so
-            // its computation instant still says when the factor was last
-            // actually different. Its ex-date is still examined - that is the
-            // half of a full recompute the action's version cannot stand in
-            // for.
-            if (isCurrent && MeasuresTheSame(stored!, outcome.Adjustment!))
-            {
-                Group(byExDate, action, stored!);
+                actions.AddAdjustment(outcome.Adjustment!);
+                Group(byExDate, action, outcome.Adjustment!);
                 touched.Add(action.ExDate);
-                unchanged++;
+                computed++;
 
                 explained += await ExplainFindingsAsync(action, cancellationToken)
                     .ConfigureAwait(false);
-
-                continue;
             }
-
-            // Replaced rather than mutated: the stored row records the action
-            // version and the close it was measured against, and both change
-            // together or not at all.
-            if (stored is not null)
-            {
-                actions.RemoveAdjustment(stored);
-            }
-
-            actions.AddAdjustment(outcome.Adjustment!);
-            Group(byExDate, action, outcome.Adjustment!);
-            touched.Add(action.ExDate);
-            computed++;
-
-            explained += await ExplainFindingsAsync(action, cancellationToken)
-                .ConfigureAwait(false);
         }
 
         // After the loop, not inside it. An action is only contradicted by the
@@ -241,15 +264,16 @@ internal sealed class PriceAdjustmentService(
     }
 
     /// <summary>
-    /// Computes one action's factor, against the last close before its
-    /// ex-date.
+    /// Computes the factors of every action going ex on one session, against
+    /// the last close before it.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The reference close is the last daily bar that opened <em>strictly
     /// before</em> the ex-date. That is the price the market last saw with the
     /// entitlement attached, and it is what every published adjustment formula
-    /// measures against.
+    /// measures against. It is read once for the session: every action on it
+    /// is measured against the same price.
     /// </para>
     /// <para>
     /// An action with no price before it cannot be adjusted for and is reported
@@ -257,37 +281,79 @@ internal sealed class PriceAdjustmentService(
     /// history, which is worth knowing: the series is correct from the ex-date
     /// onwards and simply has nothing earlier to rescale.
     /// </para>
+    /// <para>
+    /// The standalone factors are then composed by
+    /// <see cref="AdjustmentFactors.TryComposeSession"/>, unless one of them was
+    /// rejected: a session with a member missing has no true factor to compose
+    /// towards, and the survivors keep the factors they have alone.
+    /// </para>
     /// </remarks>
-    private async Task<(PriceAdjustment? Adjustment, AdjustmentRejection? Rejection)> ComputeAsync(
-        CorporateAction action,
+    private async Task<Dictionary<CorporateActionId, (PriceAdjustment? Adjustment, AdjustmentRejection? Rejection)>> MeasureSessionAsync(
+        List<CorporateAction> members,
         DateTimeOffset computedAtUtc,
         CancellationToken cancellationToken)
     {
-        var exDateUtc = new DateTimeOffset(
-            action.ExDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var first = members[0];
+        var exDateUtc = new DateTimeOffset(first.ExDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
         var previous = await bars
-            .FindLastBeforeAsync(
-                action.InstrumentId, BarInterval.OneDay, exDateUtc, cancellationToken)
+            .FindLastBeforeAsync(first.InstrumentId, BarInterval.OneDay, exDateUtc, cancellationToken)
             .ConfigureAwait(false);
+
+        var outcomes = new Dictionary<CorporateActionId, (PriceAdjustment? Adjustment, AdjustmentRejection? Rejection)>();
 
         if (previous is null)
         {
-            return (null, Reject(
-                action,
-                "No daily bar is stored before the ex-date, so there is no close to measure against "
-                + "and nothing earlier to rescale."));
+            foreach (var action in members)
+            {
+                outcomes[action.Id] = (null, Reject(
+                    action,
+                    "No daily bar is stored before the ex-date, so there is no close to measure "
+                    + "against and nothing earlier to rescale."));
+            }
+
+            return outcomes;
         }
 
-        if (!AdjustmentFactors.TryCompute(action, previous.Close, out var factor, out var problem))
+        var standalone = new List<(CorporateAction Action, AdjustmentFactor Factor)>();
+
+        foreach (var action in members)
         {
-            return (null, Reject(action, problem));
+            if (AdjustmentFactors.TryCompute(action, previous.Close, out var factor, out var problem))
+            {
+                standalone.Add((action, factor));
+            }
+            else
+            {
+                outcomes[action.Id] = (null, Reject(action, problem));
+            }
         }
 
-        return (
-            PriceAdjustment.For(
-                action, factor, previous.Close, DataRules.AdjustmentVersion, computedAtUtc),
-            null);
+        IReadOnlyDictionary<CorporateActionId, AdjustmentFactor> factors =
+            standalone.ToDictionary(pair => pair.Action.Id, pair => pair.Factor);
+
+        if (standalone.Count == members.Count
+            && !AdjustmentFactors.TryComposeSession(standalone, previous.Close, out factors, out var refusal))
+        {
+            // The session has no factor to be read through, so none of its
+            // members gets one.
+            foreach (var (action, _) in standalone)
+            {
+                outcomes[action.Id] = (null, Reject(action, refusal));
+            }
+
+            return outcomes;
+        }
+
+        foreach (var (action, _) in standalone)
+        {
+            outcomes[action.Id] = (
+                PriceAdjustment.For(
+                    action, factors[action.Id], previous.Close, DataRules.AdjustmentVersion, computedAtUtc),
+                null);
+        }
+
+        return outcomes;
     }
 
     /// <summary>
@@ -445,10 +511,10 @@ internal sealed class PriceAdjustmentService(
         }
 
         // Every action going ex on this session rescales the same prices, so
-        // what the series is read through is their product. Each factor was
-        // measured against the same close - the last one before the ex-date -
-        // which is what makes multiplying them the right composition rather
-        // than an approximation of one.
+        // what the series is read through is their product. The stored factors
+        // were composed per session (AdjustmentFactors.TryComposeSession) so that
+        // their product is the session's true factor - standalone factors
+        // multiply exactly only while no rights issue shares the session.
         var reference = sharing[0].Adjustment.ReferenceClose.Value;
         var combined = sharing.Aggregate(1m, (running, pair) => running * pair.Adjustment.Factor.Price);
 
