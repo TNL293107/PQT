@@ -303,11 +303,20 @@ findings raised by the import in its own transaction. Design and rejected
 alternatives are in
 [`../architecture/decisions/ADR-020-universe-membership-and-coverage.md`](../architecture/decisions/ADR-020-universe-membership-and-coverage.md).
 
-What does not exist is a real membership history. **No VN30 constituents are
-seeded**: sourcing them means transcribing published review notices, and
-seeding today's set as a stand-in for earlier years would commit the bias this
-workstream removes. Until a history is transcribed, every universe carries an
-open coverage finding and every as-of read against it answers *unknown*.
+**VN30 now has a real membership history, and it is short on purpose.** It
+was transcribed from HOSE's constituent tables for the July 2025, January 2026
+and July 2026 reviews, plus the extraordinary DGC→BSR swap of 13 May 2026. It
+declares coverage from **4 August 2025 up to 18 September 2026** and claims
+nothing outside that span: an as-of read for 2024 still answers *unknown*.
+Earlier years need earlier review notices transcribed; today's set must not
+stand in for them. What was sourced primary and what secondary is recorded in
+[`../../data/fixtures/README.md`](../../data/fixtures/README.md).
+
+The first universe-driven backfill (`pqt ingest backfill --universe VN30`, raw
+CafeF) and the first non-DEMO export (`pqt dataset export --universe VN30`, then
+`verify`) have both run over that span. Doing so surfaced a stale venue (BSR,
+moved from UPCOM to HOSE; now `pqt instrument transfer`) and a seeder that
+re-created a moved security on every start-up.
 
 **U3 does not wait for this.** Ingesting one real ticker needs no membership
 history. Driving the ingestion policy from a universe becomes possible once one
@@ -414,8 +423,11 @@ against the 41,000 that printed and a correctly transcribed entitlement was
 reported as a transcription error. Actions sharing an ex-date are now judged by
 the product of their factors, which is what the series is read through.
 
-**The remaining Gate A items are U2 membership and a dataset export over a real
-universe**, not the reproduction.
+The U2 membership and the export over a real universe have since been done too;
+see U2. The VN30 backfill raised five more price-limit breaches from real bars.
+Each was a sourced entitlement, and one of them (MBB, a rights issue beside a
+stock dividend) exposed a second composition bug, which adjustment rules version
+2 fixes.
 
 **Automatic provider fallback is rejected, not merely unimplemented.** Falling
 through to a second provider when the first is unavailable would silently

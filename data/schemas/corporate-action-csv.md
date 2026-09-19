@@ -134,7 +134,7 @@ claim it read the next one correctly.
 ## Fixture
 
 [`../fixtures/corporate-actions.csv`](../fixtures/corporate-actions.csv) holds
-four rows, and they are not all of a kind.
+eleven rows, and they are not all of a kind.
 
 The two `DEMO` rows are synthetic and every figure in them was invented.
 
@@ -150,6 +150,14 @@ they are the reason this format's two awkward corners are worth reading twice:
   rather than exceptional. Neither of these two explains the 27 May gap alone;
   the product of their factors does. Anything reading actions one at a time will
   be wrong on exactly the rows that matter most.
+- **A rights issue does not multiply with its neighbours.** Every ratio refers to
+  the holding at the record date, so MBB's 100:15 stock dividend and 10:1 rights
+  on 11 August 2026 leave 1.25 shares per share, not `1.15 × 1.1`. Adjustment
+  rules version 2 composes a session's factors together for exactly this reason.
+
+The other seven real rows are the VN30 entitlements of August and September
+2026: VHM, MBB, SSI, VIB and TCX. Each was found as a price-limit breach in raw
+bars and transcribed from its VSD notice.
 
 See [`../fixtures/README.md`](../fixtures/README.md) for the sourcing, and for
 why `announced_on` is empty.

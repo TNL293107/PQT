@@ -90,10 +90,11 @@ above; register an instrument under it before ingesting.
 
 ## Corporate actions
 
-Four rows, and they are not all of a kind. Two are invented actions against
+Eleven rows, and they are not all of a kind. Two are invented actions against
 `DEMO`, the same security the market data fixture describes, so the adjustment
-pipeline can be run end to end on a fresh clone. **Two are real**, and are
-documented under *The FPT entitlement* below.
+pipeline can be run end to end on a fresh clone. **Nine are real**: the FPT
+entitlement of 2016 (below), and the seven VN30 entitlements of August and
+September 2026 (under *The VN30 entitlements*).
 
 ```
 MarketData__CorporateActionPath=data/fixtures/corporate-actions.csv
@@ -154,18 +155,104 @@ import wrote, so an instrument must be registered under `DEMO` for the same
 source first; otherwise both rows are refused as `UnknownInstrument`. There is
 no fallback to the bare ticker, deliberately.
 
+### The VN30 entitlements
+
+The first VN30 backfill (raw CafeF bars, July to September 2026) raised five
+price-limit breaches. Every one was an entitlement going ex, and each is
+transcribed from its VSD notice ("Thông báo ngày đăng ký cuối cùng", vsdc.vn),
+which gives the terms and the record date. The ex-date is the session before the
+record date, and the press states it outright in each case.
+
+| Session | Security | Actions | Raw move | Reference after the actions | Move from it |
+| ------- | -------- | ------- | -------- | --------------------------- | ------------ |
+| 2026-08-06 | VHM | 1:1 stock dividend | −49.61% | 76,500 | +0.78% |
+| 2026-08-11 | MBB | 100:15 stock dividend; 10:1 rights at 10,000₫ | −16.08% | 20,200 | +0.75% |
+| 2026-08-17 | SSI | 1,000₫ cash dividend; 5:1 bonus shares | −19.18% | 19,583 | +1.11% |
+| 2026-09-10 | VIB | 100:9.5 bonus shares | −8.67% | 13,699 | +0.01% |
+| 2026-09-17 | TCX | 5:1 stock dividend | −16.64% | 31,792 | +0.03% |
+
+The references were computed by hand from the published terms and then matched
+by the engine to the đồng. The terms were not fitted to the prices.
+
+**MBB found an engine bug.** Its dividend and its rights both count the
+shares held at the record date, so a holder of 100 ends with 125 shares worth
+`100P + 10S`, a reference of 20,200. Adjustment rules version 1 multiplied the
+two standalone factors, which divides by `1.15 × 1.1` and lands on 19,960. That
+is 1.2% off and inside the band, so no check would ever have caught it. Version
+2 composes each session's actions together; see
+`AdjustmentFactors.TryComposeSession`.
+
+**`announced_on` is the VSD notice's date.** For every row the issuer disclosed
+earlier, but its exact date could not be sourced for most of them. The VSD date
+is the latest candidate, so a strict as-of read claims no knowledge before the
+evidence. That makes it conservative, and it is not the true first publication.
+
+Deliberately not recorded:
+
+- **Share delivery dates.** None of the notices gives one.
+- **VHM's 6,000₫ cash dividend.** It paid on 22 July and went ex on another
+  session, outside this history.
+- **VIB's ESOP issue.** It is not pro rata and rescales nothing.
+
 ## Universes
 
-Two invented sets in [`universes/`](universes/), over the real tickers in the
-symbol list above. **Neither is a claim about a real index.** `DEMO_INDEX` is
-synthetic, and no fixture here states VN30's membership: that history has to be
-sourced from published review notices, and inventing it — or seeding today's
-constituents and letting them stand in for every earlier year — is the
-survivorship bias this workstream exists to remove, committed to the repository.
+Three sets in [`universes/`](universes/). `DEMO_INDEX` and `DEMO_EMPTY` are
+invented and make no claim about a real index. `VN30` is real, sourced, and
+**covers 4 August 2025 up to 18 September 2026 and nothing else** — read
+outside that span it answers *unknown*, which is the point. Seeding today's
+constituents and letting them stand in for earlier years would be the
+survivorship bias this workstream exists to remove.
 
 ```
 MarketData__UniverseDirectory=data/fixtures/universes
 ```
+
+### VN30
+
+Transcribed from HOSE's own constituent tables ("Công bố thông tin danh mục cổ
+phiếu thành phần chỉ số VN30") for three reviews, plus one change between
+reviews. Like the trading calendar, this is an exchange's public announcement,
+not vendor data. HOSE's site served an empty page, so the tables were read from
+copies of HOSE's documents hosted by Vietstock.
+
+| Effective | Change | Announced | Basket source |
+| --------- | ------ | --------- | ------------- |
+| 2025-08-04 | BVH out, DGC in; coverage starts here | 2025-07-17 | Kỳ 7/2025 table (HOSE) |
+| 2026-02-02 | BCM out, VPL in | 2026-01-21 | Kỳ 1/2026 list (HOSE PDF) |
+| 2026-05-13 | DGC out, BSR in — extraordinary: DGC moved to the controlled list | 2026-05-07 | secondary (press); consistent with BSR heading the January reserve list |
+| 2026-08-03 | PLX, TPB out; MCH, TCX in | 2026-07-15 | Kỳ 7/2026 table (HOSE) |
+
+The quarterly reviews of October 2025 and April 2026 changed no members (the
+October one is primary; the April one is secondary). The four resulting
+baskets were checked by a script against the three published tables: 30 names
+on every date, and each basket equals the previous one plus the additions and
+minus the removals.
+
+Where the record is weaker than the membership itself:
+
+- **Announcement dates.** 2025-07-17 is the earliest date the announcement is
+  evidenced as published (one secondary source says the 16th — the later date is
+  used so a strict as-of read claims no knowledge earlier than the evidence).
+  2026-01-21 is inferred from the HOSE PDF's file name and upload path.
+- **Effective dates** are from press reports of HOSE's announcement, not from
+  HOSE's own wording.
+- **Coverage ends on 2026-09-18, exclusive.** The search for changes after
+  3 August 2026 was brief. Extending the span means checking for any
+  extraordinary replacement before moving `coverage_until`, not only
+  transcribing the next review.
+- **Names** in the symbol list for the VN30 additions are the Vietnamese
+  registered names exactly as HOSE printed them; an English name would have been
+  a translation nobody sourced. STB is printed "Sài Gòn Thương Tín" in 2025 and
+  "Sài Gòn Tài Lộc" in the July 2026 table; the long-standing name is kept, and
+  the import never overwrites a name anyway.
+
+**BSR moved from UPCOM to HOSE.** The symbol list and the development seed had
+it on UPCOM, which made CafeF — which does not serve UPCOM — refuse it and
+judged its prices against the wrong band. Both now say HOSE. A database seeded
+before the move is corrected with `pqt instrument transfer --instrument BSR --to
+HOSE`; the import will not infer a transfer from a ticker.
+
+### The demonstration sets
 
 `DEMO_INDEX` claims coverage from 2026-01-02 onwards and carries five spells,
 including a re-entry: `VNM.HM` leaves on 2026-04-01 and returns on 2026-07-01,
