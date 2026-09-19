@@ -85,8 +85,83 @@ public sealed class DatasetManifestSchemaTests
         Assert.Equal("strict", Written().GetProperty("announcement_policy").GetString());
     }
 
+    [Fact]
+    public void An_instrument_carries_exactly_the_properties_the_schema_declares()
+    {
+        var item = Schema().GetProperty("properties").GetProperty("instruments").GetProperty("items");
+        var declared = Names(item.GetProperty("properties"));
+
+        var written = Names(Written(pointInTime: true).GetProperty("instruments")[0]);
+
+        Assert.Equal(declared.Order(StringComparer.Ordinal), written.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_spell_carries_exactly_the_properties_the_schema_declares()
+    {
+        var spell = Schema()
+            .GetProperty("properties").GetProperty("instruments").GetProperty("items")
+            .GetProperty("properties").GetProperty("spells").GetProperty("items");
+        var declared = Names(spell.GetProperty("properties"));
+
+        var written = Names(Written(pointInTime: true).GetProperty("instruments")[0].GetProperty("spells")[0]);
+
+        Assert.Equal(declared.Order(StringComparer.Ordinal), written.Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false, "as_of")]
+    [InlineData(true, "point_in_time")]
+    public void The_membership_is_written_in_the_spelling_the_schema_accepts(bool pointInTime, string expected)
+    {
+        var accepted = Schema()
+            .GetProperty("properties").GetProperty("membership").GetProperty("enum")
+            .EnumerateArray().Select(entry => entry.GetString()).ToList();
+
+        var written = Written(pointInTime).GetProperty("membership").GetString();
+
+        Assert.Equal(expected, written);
+        Assert.Contains(written, accepted);
+    }
+
+    [Fact]
+    public void A_version_one_manifest_still_reads_as_an_as_of_dataset()
+    {
+        // Datasets written before version 2 carry neither the membership nor
+        // any spells, and they are still on disk to be verified. Reading one
+        // must not invent a mode it was never built under.
+        var json = JsonSerializer.Serialize(Build(pointInTime: false), ParquetDatasetStore.ManifestJson);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        node.Remove("membership");
+        node["schema_version"] = 1;
+
+        foreach (var instrument in node["instruments"]!.AsArray())
+        {
+            instrument!.AsObject().Remove("spells");
+        }
+
+        var read = JsonSerializer.Deserialize<DatasetManifest>(node.ToJsonString(), ParquetDatasetStore.ManifestJson)!;
+
+        Assert.Equal(DatasetMembership.AsOf, read.Membership);
+        Assert.Null(Assert.Single(read.Instruments).Spells);
+        Assert.Equal(new DateOnly(2016, 12, 31), read.UniverseAsOf);
+    }
+
+    private static JsonElement Schema() =>
+        JsonDocument.Parse(File.ReadAllText(SchemaPath())).RootElement;
+
+    private static HashSet<string> Names(JsonElement element) =>
+        element.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
+
     /// <summary>Serialises a manifest exactly as the store writes one.</summary>
-    private static JsonElement Written()
+    private static JsonElement Written(bool pointInTime = false)
+    {
+        var json = JsonSerializer.Serialize(Build(pointInTime), ParquetDatasetStore.ManifestJson);
+
+        return JsonDocument.Parse(json).RootElement;
+    }
+
+    private static DatasetManifest Build(bool pointInTime)
     {
         var manifest = new DatasetManifest(
             "0123456789abcdef",
@@ -97,8 +172,16 @@ public sealed class DatasetManifestSchemaTests
             true,
             AnnouncementPolicy.Strict,
             "VN30",
-            new DateOnly(2016, 12, 31),
-            [new DatasetInstrument(Guid.Empty, "FPT", "HOSE")],
+            pointInTime ? null : new DateOnly(2016, 12, 31),
+            [
+                new DatasetInstrument(
+                    Guid.Empty,
+                    "FPT",
+                    "HOSE",
+                    pointInTime
+                        ? [new DatasetSpell(new DateOnly(2016, 1, 1), new DateOnly(2016, 8, 1), new DateOnly(2016, 7, 15))]
+                        : null),
+            ],
             "1d",
             new DateOnly(2016, 1, 1),
             new DateOnly(2016, 12, 31),
@@ -108,11 +191,10 @@ public sealed class DatasetManifestSchemaTests
             [new DatasetSource("CAFEF", IDatasetLicenceRegistry.UnstatedNote)],
             [new DatasetFile("bars.parquet", 5, 1_024, new string('a', 64))],
             new DateTimeOffset(2026, 9, 6, 0, 0, 0, TimeSpan.Zero),
-            null);
+            null,
+            pointInTime ? DatasetMembership.PointInTime : DatasetMembership.AsOf);
 
-        var json = JsonSerializer.Serialize(manifest, ParquetDatasetStore.ManifestJson);
-
-        return JsonDocument.Parse(json).RootElement;
+        return manifest;
     }
 
     /// <summary>
@@ -130,7 +212,7 @@ public sealed class DatasetManifestSchemaTests
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "docs", "schemas", "dataset-manifest-v1.schema.json");
+                directory.FullName, "docs", "schemas", "dataset-manifest-v2.schema.json");
 
             if (File.Exists(candidate))
             {
@@ -141,6 +223,6 @@ public sealed class DatasetManifestSchemaTests
         }
 
         throw new FileNotFoundException(
-            "dataset-manifest-v1.schema.json was not found above the test binary.");
+            "dataset-manifest-v2.schema.json was not found above the test binary.");
     }
 }

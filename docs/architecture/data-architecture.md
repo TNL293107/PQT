@@ -309,9 +309,11 @@ data is often impossible and never free.
 ## Canonical dataset (U5)
 
 **Status: implemented.** The decision, the alternatives and what it costs are in
-[ADR-023](decisions/ADR-023-canonical-dataset-contract.md); the manifest is
-governed by [`../schemas/dataset-manifest-v1.schema.json`](../schemas/dataset-manifest-v1.schema.json),
-and a test holds the two to each other so neither can move alone.
+[ADR-023](decisions/ADR-023-canonical-dataset-contract.md), and membership in
+[ADR-024](decisions/ADR-024-point-in-time-dataset-membership.md); the manifest is
+governed by [`../schemas/dataset-manifest-v2.schema.json`](../schemas/dataset-manifest-v2.schema.json)
+(version 1 manifests stay readable), and a test holds the two to each other so
+neither can move alone.
 
 The dataset PQT owns. **No third-party research framework may become the
 canonical data model**; frameworks consume this and hand results back.
@@ -319,7 +321,9 @@ canonical data model**; frameworks consume this and hand results back.
 ```
 dataset_id · dataset_version · schema_version
 known_as_of · adjustment_mode · null_announcement_policy
-universe_code · universe_as_of · instrument_set    (canonical IDs, never tickers)
+universe_code · membership (point_in_time | as_of)
+universe_as_of (as_of only) · instrument_set       (canonical IDs, never tickers;
+                                                    spells per instrument when point_in_time)
 interval · date_range
 transformation_version · validation_version
 source_set                                         (provider codes + licence note)

@@ -21,6 +21,23 @@ public interface IUniverseCatalog
         UniverseCode code,
         DateOnly asOf,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads who belonged to a universe on every day of a window.
+    /// </summary>
+    /// <param name="code">The universe to read.</param>
+    /// <param name="fromDate">The first date, inclusive.</param>
+    /// <param name="toDate">The last date, inclusive.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>
+    /// Every spell overlapping the window, or a statement that membership is
+    /// not known across all of it.
+    /// </returns>
+    Task<UniverseHistory> MembershipOverAsync(
+        UniverseCode code,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -77,5 +94,47 @@ public sealed class UniverseCatalog(IUniverseRepository universes) : IUniverseCa
         // the universe genuinely held nothing. That is why the claim is
         // consulted first — after it, an empty list means what it says.
         return UniverseConstituents.Known(code, asOf, members);
+    }
+
+    /// <inheritdoc />
+    public async Task<UniverseHistory> MembershipOverAsync(
+        UniverseCode code,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        if (toDate < fromDate)
+        {
+            throw new ArgumentOutOfRangeException(nameof(toDate), "The window must end on or after it starts.");
+        }
+
+        var universe = await universes.FindByCodeAsync(code, cancellationToken).ConfigureAwait(false);
+
+        if (universe is null)
+        {
+            return UniverseHistory.Unknown(code, fromDate, toDate, UniverseUnknownReason.NoSuchUniverse);
+        }
+
+        if (universe.Coverage is null)
+        {
+            return UniverseHistory.Unknown(code, fromDate, toDate, UniverseUnknownReason.NoCoverageDeclared);
+        }
+
+        // Both ends, because the claim is one contiguous span: covering the
+        // first and the last day of the window is covering every day of it.
+        // Checking only the start would hand back a history that silently stops
+        // where the sourcing did.
+        if (!universe.Knows(fromDate) || !universe.Knows(toDate))
+        {
+            return UniverseHistory.Unknown(code, fromDate, toDate, UniverseUnknownReason.OutsideCoverage);
+        }
+
+        var spells = await universes
+            .ListSpellsOverlappingAsync(universe.Id, fromDate, toDate, cancellationToken)
+            .ConfigureAwait(false);
+
+        return UniverseHistory.Known(code, fromDate, toDate, spells);
     }
 }

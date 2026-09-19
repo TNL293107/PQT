@@ -251,11 +251,179 @@ public sealed class DatasetExportServiceTests : IDisposable
     }
 
     /// <summary>Wires the real export over in-memory reads and a temp directory.</summary>
+    [Fact]
+    public async Task A_point_in_time_export_keeps_only_the_sessions_the_instrument_belonged_on()
+    {
+        // Member Monday to Wednesday, removed at Thursday's review. An as-of
+        // export read on Monday would carry Thursday and Friday too - prices
+        // from after it left, attributed to an index it was no longer in.
+        var harness = new Harness(root, spells: (id, _) => [Spell(id, From, new DateOnly(2026, 8, 6), new DateOnly(2026, 7, 20))]);
+
+        var export = await harness.ExportAsync(pointInTime: true);
+
+        Assert.True(export.Succeeded, export.Problem);
+
+        var manifest = export.Manifest!;
+        Assert.Equal(DatasetMembership.PointInTime, manifest.Membership);
+        Assert.Null(manifest.UniverseAsOf);
+        Assert.Equal(3, Assert.Single(manifest.Files).RowCount);
+
+        var spell = Assert.Single(Assert.Single(manifest.Instruments).Spells!);
+        Assert.Equal(new DatasetSpell(From, new DateOnly(2026, 8, 6), new DateOnly(2026, 7, 20)), spell);
+    }
+
+    [Fact]
+    public async Task A_spell_that_began_before_the_window_and_is_still_open_is_clipped_to_it()
+    {
+        var harness = new Harness(root, spells: (id, _) => [Spell(id, new DateOnly(2025, 8, 4), null, null)]);
+
+        var export = await harness.ExportAsync(pointInTime: true);
+
+        var manifest = export.Manifest!;
+        Assert.Equal(5, Assert.Single(manifest.Files).RowCount);
+        Assert.Equal(new DatasetSpell(From, null, null), Assert.Single(Assert.Single(manifest.Instruments).Spells!));
+    }
+
+    [Fact]
+    public async Task A_security_that_left_and_returned_contributes_only_its_two_spells()
+    {
+        // Out after Monday, back from Thursday. The gap is exactly what a
+        // survivorship-free backtest must be able to see, so no bar from it may
+        // reach the file.
+        var harness = new Harness(root, spells: (id, _) =>
+        [
+            Spell(id, From, new DateOnly(2026, 8, 4), null),
+            Spell(id, new DateOnly(2026, 8, 6), null, null),
+        ]);
+
+        var export = await harness.ExportAsync(pointInTime: true);
+
+        Assert.Equal(3, Assert.Single(export.Manifest!.Files).RowCount);
+        Assert.Equal(2, Assert.Single(export.Manifest!.Instruments).Spells!.Count);
+    }
+
+    [Fact]
+    public async Task A_review_inside_the_window_hands_the_sessions_from_one_name_to_the_other()
+    {
+        // The case point-in-time exists for. One security leaves at Thursday's
+        // review and another joins on the same date: the file holds the leaver
+        // Monday to Wednesday and the joiner Thursday and Friday, never both on
+        // one session, and never either outside its spell.
+        var harness = new Harness(root, spells: (leaver, joiner) =>
+        [
+            Spell(leaver, new DateOnly(2025, 8, 4), new DateOnly(2026, 8, 6), null),
+            Spell(joiner, new DateOnly(2026, 8, 6), null, new DateOnly(2026, 7, 15)),
+        ]);
+
+        var export = await harness.ExportAsync(pointInTime: true);
+
+        var manifest = export.Manifest!;
+        Assert.Equal(5, Assert.Single(manifest.Files).RowCount);
+        Assert.Equal(2, manifest.Instruments.Count);
+
+        // Ordered by identifier, so two exports of the same data hash alike.
+        Assert.Equal(
+            manifest.Instruments.Select(instrument => instrument.InstrumentId).Order(),
+            manifest.Instruments.Select(instrument => instrument.InstrumentId));
+
+        var joined = manifest.Instruments.Single(instrument => instrument.InstrumentId == harness.Joiner.Value);
+        Assert.Equal(new DatasetSpell(new DateOnly(2026, 8, 6), null, new DateOnly(2026, 7, 15)), Assert.Single(joined.Spells!));
+    }
+
+    [Fact]
+    public async Task A_window_whose_membership_is_not_known_on_every_session_refuses()
+    {
+        var harness = new Harness(root, membershipKnown: false);
+
+        var export = await harness.ExportAsync(pointInTime: true);
+
+        Assert.False(export.Succeeded);
+        Assert.Contains("every session", export.Problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_point_in_time_dataset_verifies_and_an_edited_spell_does_not()
+    {
+        var harness = new Harness(root, spells: (id, _) => [Spell(id, From, new DateOnly(2026, 8, 6), null)]);
+        var manifest = (await harness.ExportAsync(pointInTime: true)).Manifest!;
+
+        Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+
+        // The spells are part of what the data is: the same rows under a
+        // longer spell claim a different membership.
+        var path = Path.Combine(root, manifest.DatasetId, "v1", IDatasetStore.ManifestFileName);
+        await File.WriteAllTextAsync(
+            path,
+            (await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken))
+                .Replace("\"until\": \"2026-08-06\"", "\"until\": \"2026-08-07\"", StringComparison.Ordinal),
+            TestContext.Current.CancellationToken);
+
+        Assert.False((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+    }
+
+    [Theory]
+    [InlineData(false, "\"membership\": \"as_of\"", "\"membership\": \"point_in_time\"")]
+    [InlineData(true, "\"membership\": \"point_in_time\"", "\"membership\": \"as_of\"")]
+    public async Task A_manifest_whose_membership_was_edited_fails_verification(
+        bool pointInTime,
+        string written,
+        string forged)
+    {
+        // The mode is the claim a consumer trusts most: point_in_time says the
+        // rows are survivorship-free. Flipping it alone - leaving the as-of,
+        // the spells and the hash untouched - must not verify.
+        var harness = new Harness(root);
+        var manifest = (await harness.ExportAsync(pointInTime)).Manifest!;
+        var path = Path.Combine(root, manifest.DatasetId, "v1", IDatasetStore.ManifestFileName);
+        var json = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Contains(written, json, StringComparison.Ordinal);
+        await File.WriteAllTextAsync(
+            path, json.Replace(written, forged, StringComparison.Ordinal), TestContext.Current.CancellationToken);
+
+        Assert.False((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+    }
+
+    [Fact]
+    public void An_as_of_request_keeps_the_identifier_it_had_before_point_in_time_existed()
+    {
+        // Datasets already built are named by these identifiers. Changing how
+        // an as-of request is named would orphan every one of them.
+        Assert.True(DatasetRequest.TryCreate(
+            Vn30, To, BarInterval.OneDay, From, To, out var request, out var problem), problem);
+
+        var canonical = "VN30|2026-08-07|OneDay|2026-08-03|2026-08-07|adjusted|current|Strict";
+        var expected = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical)))[..16];
+
+        Assert.Equal(expected, request.DatasetId);
+    }
+
+    [Fact]
+    public void A_point_in_time_request_names_a_different_dataset_from_any_as_of_one()
+    {
+        Assert.True(DatasetRequest.TryCreatePointInTime(
+            Vn30, BarInterval.OneDay, From, To, out var pointInTime, out var problem), problem);
+        Assert.True(DatasetRequest.TryCreate(
+            Vn30, To, BarInterval.OneDay, From, To, out var asOf, out problem), problem);
+
+        Assert.NotEqual(asOf.DatasetId, pointInTime.DatasetId);
+        Assert.Null(pointInTime.UniverseAsOf);
+        Assert.Equal(DatasetMembership.PointInTime, pointInTime.Membership);
+    }
+
+    private static UniverseSpell Spell(InstrumentId id, DateOnly from, DateOnly? until, DateOnly? announcedOn) =>
+        new(id, from, until, announcedOn);
+
     private sealed class Harness
     {
         private readonly DatasetExportService service;
 
-        public Harness(string root, bool membershipKnown = true, bool storeBars = true)
+        public Harness(
+            string root,
+            bool membershipKnown = true,
+            bool storeBars = true,
+            Func<InstrumentId, InstrumentId, IReadOnlyList<UniverseSpell>>? spells = null)
         {
             InstrumentId = InstrumentId.New();
 
@@ -263,8 +431,10 @@ public sealed class DatasetExportServiceTests : IDisposable
                 Options.Create(new DatasetOptions { Directory = root }));
 
             service = new DatasetExportService(
-                new FakeUniverseCatalog(membershipKnown ? [InstrumentId] : null),
-                new FakeInstrumentDetails(InstrumentId),
+                new FakeUniverseCatalog(
+                    membershipKnown ? [InstrumentId] : null,
+                    membershipKnown ? spells?.Invoke(InstrumentId, Joiner) ?? [Spell(InstrumentId, From, null, null)] : null),
+                new FakeInstrumentDetails(InstrumentId, Joiner),
                 new FakeSeries(InstrumentId, storeBars),
                 store,
                 store,
@@ -275,20 +445,40 @@ public sealed class DatasetExportServiceTests : IDisposable
 
         public InstrumentId InstrumentId { get; }
 
-        public Task<DatasetExport> ExportAsync()
-        {
-            Assert.True(DatasetRequest.TryCreate(
-                Vn30, To, BarInterval.OneDay, From, To, out var request, out var problem), problem);
+        /// <summary>A second security, for tests where a review swaps one name for another.</summary>
+        public InstrumentId Joiner { get; } = InstrumentId.New();
 
-            return service.ExportAsync(request, TestContext.Current.CancellationToken);
+        public Task<DatasetExport> ExportAsync(bool pointInTime = false)
+        {
+            DatasetRequest? request;
+            string? problem;
+
+            var valid = pointInTime
+                ? DatasetRequest.TryCreatePointInTime(Vn30, BarInterval.OneDay, From, To, out request, out problem)
+                : DatasetRequest.TryCreate(Vn30, To, BarInterval.OneDay, From, To, out request, out problem);
+
+            Assert.True(valid, problem);
+
+            return service.ExportAsync(request!, TestContext.Current.CancellationToken);
         }
 
         public Task<DatasetVerification> VerifyAsync(string datasetId, int version) =>
             service.VerifyAsync(datasetId, version, TestContext.Current.CancellationToken);
     }
 
-    private sealed class FakeUniverseCatalog(IReadOnlyList<InstrumentId>? members) : IUniverseCatalog
+    private sealed class FakeUniverseCatalog(
+        IReadOnlyList<InstrumentId>? members,
+        IReadOnlyList<UniverseSpell>? spells) : IUniverseCatalog
     {
+        public Task<UniverseHistory> MembershipOverAsync(
+            UniverseCode code,
+            DateOnly fromDate,
+            DateOnly toDate,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(spells is null
+                ? UniverseHistory.Unknown(code, fromDate, toDate, UniverseUnknownReason.OutsideCoverage)
+                : UniverseHistory.Known(code, fromDate, toDate, spells));
+
         public Task<UniverseConstituents> ConstituentsAsOfAsync(
             UniverseCode code,
             DateOnly asOf,
@@ -308,12 +498,12 @@ public sealed class DatasetExportServiceTests : IDisposable
     /// eleven questions to be asked one would hide which of them the export
     /// actually depends on.
     /// </remarks>
-    private sealed class FakeInstrumentDetails(InstrumentId known) : IInstrumentRepository
+    private sealed class FakeInstrumentDetails(params InstrumentId[] known) : IInstrumentRepository
     {
         public Task<InstrumentDetail?> FindDetailByIdAsync(
             InstrumentId id,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(id == known
+            Task.FromResult(known.Contains(id)
                 ? new InstrumentDetail(
                     id,
                     Ticker.Create("EXP"),

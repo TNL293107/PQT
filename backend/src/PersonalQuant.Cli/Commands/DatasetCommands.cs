@@ -103,12 +103,6 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
 
         var toDate = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // The constituent set defaults to the end of the window rather than to
-        // today. A universe read today against a window that ended in 2018
-        // exports the index as it is now, which is survivorship bias assembled
-        // by hand.
-        var universeAsOf = asOf ?? toDate;
-
         UniverseCode code;
 
         try
@@ -121,19 +115,45 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
             return ExitCode.Usage;
         }
 
-        if (!DatasetRequest.TryCreate(
+        var adjusted = !command.HasFlag("raw");
+        DateTimeOffset? knownAsOfUtc = knownAsOf is { } cut ? Instant(cut) : null;
+
+        // Point-in-time unless a date is named. Without --as-of each row is
+        // kept only where its instrument was a member that session, which is the
+        // survivorship-free reading and the one a backtest across a review
+        // needs. Naming a date asks for one constituent set applied to the whole
+        // window - the older behaviour, kept, and chosen rather than defaulted
+        // into, for the reason the strict policy is the default: a dataset is
+        // read by things nobody has written yet.
+        DatasetRequest? request;
+        string? invalidRequest;
+
+        var valid = asOf is { } universeAsOf
+            ? DatasetRequest.TryCreate(
                 code,
                 universeAsOf,
                 interval,
                 fromDate,
                 toDate,
-                out var request,
-                out var invalidRequest,
-                adjusted: !command.HasFlag("raw"),
-                knownAsOfUtc: knownAsOf is { } cut ? Instant(cut) : null,
-                announcementPolicy: policy))
+                out request,
+                out invalidRequest,
+                adjusted,
+                knownAsOfUtc,
+                policy)
+            : DatasetRequest.TryCreatePointInTime(
+                code,
+                interval,
+                fromDate,
+                toDate,
+                out request,
+                out invalidRequest,
+                adjusted,
+                knownAsOfUtc,
+                policy);
+
+        if (!valid || request is null)
         {
-            output.Problem(invalidRequest);
+            output.Problem(invalidRequest ?? "The export request is not valid.");
             return ExitCode.Usage;
         }
 
@@ -212,7 +232,13 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         output.Field("dataset", $"{manifest.DatasetId} v{manifest.DatasetVersion}", LabelWidth);
         output.Field("schema version", manifest.SchemaVersion.ToString(CultureInfo.InvariantCulture), LabelWidth);
         output.Field("content hash", manifest.ContentHash, LabelWidth);
-        output.Field("universe", $"{manifest.UniverseCode} as of {Day(manifest.UniverseAsOf)}", LabelWidth);
+        output.Field(
+            "universe",
+            manifest.Membership == DatasetMembership.AsOf && manifest.UniverseAsOf is { } asOf
+                ? $"{manifest.UniverseCode} as of {Day(asOf)}"
+                : $"{manifest.UniverseCode} point-in-time, "
+                    + $"{Output.Plural(manifest.Instruments.Sum(instrument => instrument.Spells?.Count ?? 0), "spell")}",
+            LabelWidth);
         output.Field("window", $"{Day(manifest.FromDate)} → {Day(manifest.ToDate)} {manifest.Interval}", LabelWidth);
         output.Field(
             "adjustment",

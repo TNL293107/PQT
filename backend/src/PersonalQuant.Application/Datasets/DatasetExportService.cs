@@ -54,28 +54,11 @@ internal sealed class DatasetExportService(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var constituents = await universes
-            .ConstituentsAsOfAsync(request.UniverseCode, request.UniverseAsOf, cancellationToken)
-            .ConfigureAwait(false);
+        var plan = await PlanAsync(request, cancellationToken).ConfigureAwait(false);
 
-        // The refusal U2 exists to make possible. An unknown membership is not
-        // an empty one, and exporting a dataset over "nobody" would produce a
-        // backtest that reports no positions and no error.
-        if (!constituents.IsKnown)
+        if (plan.Refusal is { } refusal)
         {
-            return DatasetExport.Refused(
-                $"Membership of {request.UniverseCode} on "
-                + $"{request.UniverseAsOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} is not "
-                + $"known ({constituents.UnknownReason}). Declare the universe's coverage and import "
-                + "its history before exporting a dataset over it.");
-        }
-
-        if (constituents.Members.Count == 0)
-        {
-            return DatasetExport.Refused(
-                $"{request.UniverseCode} had no constituents on "
-                + $"{request.UniverseAsOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}, so there "
-                + "is nothing to export.");
+            return DatasetExport.Refused(refusal);
         }
 
         var rows = new List<DatasetBar>();
@@ -83,7 +66,7 @@ internal sealed class DatasetExportService(
         var sources = new SortedSet<string>(StringComparer.Ordinal);
         var withoutBars = 0;
 
-        foreach (var instrumentId in constituents.Members)
+        foreach (var (instrumentId, spells) in plan.Members)
         {
             var detail = await instruments
                 .FindDetailByIdAsync(instrumentId, cancellationToken)
@@ -101,12 +84,22 @@ internal sealed class DatasetExportService(
             }
 
             members.Add(new DatasetInstrument(
-                instrumentId.Value, detail.Ticker.Value, detail.ExchangeCode.Value));
+                instrumentId.Value,
+                detail.Ticker.Value,
+                detail.ExchangeCode.Value,
+                spells is null ? null : [.. spells.Select(spell => Clip(spell, request))]));
 
             var before = rows.Count;
 
-            await ReadSeriesAsync(request, instrumentId, rows, sources, cancellationToken)
-                .ConfigureAwait(false);
+            // Read only across the sessions the instrument belonged on. For an
+            // as-of export that is the whole window; for a point-in-time one it
+            // is each spell, so a bar from before it joined or after it left
+            // never reaches the file.
+            foreach (var (from, to) in Ranges(request, spells))
+            {
+                await ReadSeriesAsync(request, instrumentId, from, to, rows, sources, cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
             if (rows.Count == before)
             {
@@ -210,19 +203,135 @@ internal sealed class DatasetExportService(
     /// <summary>
     /// Reads one instrument's series across the window, in bounded chunks.
     /// </summary>
+    /// <summary>
+    /// Decides which instruments the export covers and, for a point-in-time
+    /// export, when each one belonged.
+    /// </summary>
+    private async Task<ExportPlan> PlanAsync(
+        DatasetRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.UniverseAsOf is { } asOf)
+        {
+            var constituents = await universes
+                .ConstituentsAsOfAsync(request.UniverseCode, asOf, cancellationToken)
+                .ConfigureAwait(false);
+
+            // The refusal U2 exists to make possible. An unknown membership is
+            // not an empty one, and exporting a dataset over "nobody" would
+            // produce a backtest that reports no positions and no error.
+            if (!constituents.IsKnown)
+            {
+                return ExportPlan.Refuse(
+                    $"Membership of {request.UniverseCode} on {Day(asOf)} is not known "
+                    + $"({constituents.UnknownReason}). Declare the universe's coverage and import "
+                    + "its history before exporting a dataset over it.");
+            }
+
+            if (constituents.Members.Count == 0)
+            {
+                return ExportPlan.Refuse(
+                    $"{request.UniverseCode} had no constituents on {Day(asOf)}, so there is "
+                    + "nothing to export.");
+            }
+
+            return new ExportPlan(
+                [.. constituents.Members.Select(member => (member, (IReadOnlyList<UniverseSpell>?)null))],
+                null);
+        }
+
+        var history = await universes
+            .MembershipOverAsync(request.UniverseCode, request.FromDate, request.ToDate, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Every day of the window, not merely some of it. A history known from
+        // the middle of the window would export only the names recorded later,
+        // which is the survivorship bias this mode exists to remove.
+        if (!history.IsKnown)
+        {
+            return ExportPlan.Refuse(
+                $"Membership of {request.UniverseCode} is not known on every session from "
+                + $"{Day(request.FromDate)} to {Day(request.ToDate)} ({history.UnknownReason}). "
+                + "Narrow the window to the universe's declared coverage, or source the rest of "
+                + "its history first.");
+        }
+
+        if (history.Spells.Count == 0)
+        {
+            return ExportPlan.Refuse(
+                $"{request.UniverseCode} had no constituents between {Day(request.FromDate)} and "
+                + $"{Day(request.ToDate)}, so there is nothing to export.");
+        }
+
+        return new ExportPlan(
+            [.. history.Spells
+                .GroupBy(spell => spell.InstrumentId)
+                .OrderBy(group => group.Key.Value)
+                .Select(group => (group.Key, (IReadOnlyList<UniverseSpell>?)group.OrderBy(spell => spell.EffectiveFrom).ToList()))],
+            null);
+    }
+
+    /// <summary>
+    /// The inclusive date ranges to read for one instrument.
+    /// </summary>
+    private static IEnumerable<(DateOnly From, DateOnly To)> Ranges(
+        DatasetRequest request,
+        IReadOnlyList<UniverseSpell>? spells)
+    {
+        if (spells is null)
+        {
+            yield return (request.FromDate, request.ToDate);
+            yield break;
+        }
+
+        foreach (var spell in spells)
+        {
+            var from = spell.EffectiveFrom > request.FromDate ? spell.EffectiveFrom : request.FromDate;
+
+            // EffectiveTo is the day it left, so its last session is the day
+            // before.
+            var to = spell.EffectiveTo is { } left && left.AddDays(-1) < request.ToDate
+                ? left.AddDays(-1)
+                : request.ToDate;
+
+            if (from <= to)
+            {
+                yield return (from, to);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Restates a spell within the dataset's window.
+    /// </summary>
+    /// <remarks>
+    /// Clipped because the manifest describes this dataset rather than the
+    /// universe's whole history: a spell that began in 2019 began, as far as a
+    /// 2026 dataset can say, on the window's first day. The announcement date is
+    /// kept as recorded, because it is what says whether trading the change was
+    /// possible.
+    /// </remarks>
+    private static DatasetSpell Clip(UniverseSpell spell, DatasetRequest request) =>
+        new(
+            spell.EffectiveFrom > request.FromDate ? spell.EffectiveFrom : request.FromDate,
+            spell.EffectiveTo is { } left && left <= request.ToDate ? left : null,
+            spell.AnnouncedOn);
+
     private async Task ReadSeriesAsync(
         DatasetRequest request,
         InstrumentId instrumentId,
+        DateOnly fromDate,
+        DateOnly toDate,
         List<DatasetBar> rows,
         SortedSet<string> sources,
         CancellationToken cancellationToken)
     {
         var chunk = ChunkDays(request.Interval);
-        var cursor = request.FromDate;
+        var cursor = fromDate;
 
-        // The window is inclusive of its last day and the query's is not, so
+        // The range is inclusive of its last day and the query's is not, so
         // the exclusive end is the day after.
-        var end = request.ToDate.AddDays(1);
+        var end = toDate.AddDays(1);
 
         while (cursor < end)
         {
@@ -308,7 +417,8 @@ internal sealed class DatasetExportService(
             [.. sources.Select(code => new DatasetSource(code, licences.NoteFor(code)))],
             [file],
             clock.UtcNow,
-            build.Commit);
+            build.Commit,
+            request.Membership);
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
     }
@@ -332,4 +442,18 @@ internal sealed class DatasetExportService(
 
     private static DateTimeOffset ToInstant(DateOnly date) =>
         new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+    private static string Day(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The instruments an export covers, each with its spells when the export is
+    /// point-in-time; or why there is nothing to export.
+    /// </summary>
+    private sealed record ExportPlan(
+        IReadOnlyList<(InstrumentId Instrument, IReadOnlyList<UniverseSpell>? Spells)> Members,
+        string? Refusal)
+    {
+        public static ExportPlan Refuse(string refusal) => new([], refusal);
+    }
 }

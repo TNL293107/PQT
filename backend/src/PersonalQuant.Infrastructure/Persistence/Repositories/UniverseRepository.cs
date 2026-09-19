@@ -81,6 +81,28 @@ internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUn
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<UniverseSpell>> ListSpellsOverlappingAsync(
+        UniverseId universeId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.UniverseMemberships
+            .AsNoTracking()
+            .Where(membership =>
+                membership.UniverseId == universeId
+                && membership.EffectiveFrom <= toDate
+                && (membership.EffectiveTo == null || membership.EffectiveTo > fromDate))
+            .OrderBy(membership => membership.InstrumentId)
+            .ThenBy(membership => membership.EffectiveFrom)
+            .Select(membership => new UniverseSpell(
+                membership.InstrumentId,
+                membership.EffectiveFrom,
+                membership.EffectiveTo,
+                membership.AnnouncedOn))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<UniverseMembership>> ListSpellsForUpdateAsync(
         UniverseId universeId,
         InstrumentId instrumentId,

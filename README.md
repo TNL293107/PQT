@@ -25,7 +25,7 @@ Phase 5–20                    PLANNED
 | **Current**  | Research Foundation Upgrade — U1–U10 (phases run 0–20)        |
 | **Next**     | Phase 5 — Market Intelligence Terminal, after **Gate A**      |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 815 green in CI — 601 unit, 123 integration, 71 Vitest, 14 pytest, 6 CTest |
+| **Tests**    | 863 unit, 129 integration (2026-09-19); React, Python and C++ suites green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
@@ -45,10 +45,14 @@ recorded, and the engine accounts for the −13.68% gap they caused: the
 and the adjusted series agrees with CafeF's own to within its quoting precision.
 It cost one real bug, in a discontinuity check that read one action at a time.
 
-What is **not** yet validated on real data: universe membership (only `DEMO`
-histories exist) and therefore dataset export over a real universe. Those are
-the rest of **U3/U2 and Gate A**. See the
-[canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
+**VN30 membership is real** for August 2025 to September 2026, transcribed from
+HOSE's review tables, and a real universe has been exported end to end: raw
+CafeF bars for its 32 names, five more entitlements found from price-limit
+breaches and explained, and a point-in-time dataset holding exactly 30 members
+on every session across the 3 August 2026 review
+([ADR-024](docs/architecture/decisions/ADR-024-point-in-time-dataset-membership.md)).
+Every Gate A criterion is evidenced; declaring the gate passed is the operator's
+call. See the [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
 Redis for real; a complete instrument master — identity and listing lifecycle,

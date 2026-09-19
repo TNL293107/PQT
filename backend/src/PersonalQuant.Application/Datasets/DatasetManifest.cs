@@ -30,7 +30,30 @@ public sealed record DatasetFile(string Name, long RowCount, long Bytes, string 
 /// <param name="InstrumentId">The canonical identifier.</param>
 /// <param name="TickerAtAsOf">What it was called at the universe's as-of.</param>
 /// <param name="Exchange">The venue's operating code.</param>
-public sealed record DatasetInstrument(Guid InstrumentId, string TickerAtAsOf, string Exchange);
+/// <param name="Spells">
+/// When the instrument was a member within the window, for a point-in-time
+/// dataset; null for an as-of one. A reader needs these to tell a session the
+/// instrument was not a member from one it simply has no bar for.
+/// </param>
+public sealed record DatasetInstrument(
+    Guid InstrumentId,
+    string TickerAtAsOf,
+    string Exchange,
+    IReadOnlyList<DatasetSpell>? Spells = null);
+
+/// <summary>
+/// A spell of membership, clipped to the dataset's window.
+/// </summary>
+/// <param name="From">First session of membership within the window, inclusive.</param>
+/// <param name="Until">
+/// The date it left, exclusive, when that is within the window; null when it
+/// was still a member at the window's end.
+/// </param>
+/// <param name="AnnouncedOn">
+/// When the change was published, when known. A strategy that trades the
+/// inclusion before this date is looking ahead.
+/// </param>
+public sealed record DatasetSpell(DateOnly From, DateOnly? Until, DateOnly? AnnouncedOn);
 
 /// <summary>
 /// What a dataset is, what produced it, and what it must still hash to.
@@ -84,7 +107,10 @@ public sealed record DatasetInstrument(Guid InstrumentId, string TickerAtAsOf, s
 /// against it, which is why the export names it rather than assuming it.
 /// </param>
 /// <param name="UniverseCode">The universe the instrument set came from.</param>
-/// <param name="UniverseAsOf">The date the constituent set was read at.</param>
+/// <param name="UniverseAsOf">
+/// The date the constituent set was read at; null for a point-in-time dataset,
+/// which reads membership on every session.
+/// </param>
 /// <param name="Instruments">The exported set, by canonical identifier.</param>
 /// <param name="Interval">The bar resolution.</param>
 /// <param name="FromDate">First session in the window, inclusive.</param>
@@ -99,6 +125,10 @@ public sealed record DatasetInstrument(Guid InstrumentId, string TickerAtAsOf, s
 /// </param>
 /// <param name="Files">The data files, with their hashes.</param>
 /// <param name="CreatedAtUtc">When this export ran.</param>
+/// <param name="Membership">
+/// How rows were matched to membership. Absent from schema version 1, which
+/// only ever wrote as-of datasets, so a version 1 manifest reads as as-of.
+/// </param>
 /// <param name="CreatedByCommit">
 /// The build that produced it, or null when the build did not record one.
 /// Null rather than a placeholder: a dataset that claims a commit it does not
@@ -113,7 +143,7 @@ public sealed record DatasetManifest(
     bool Adjusted,
     AnnouncementPolicy AnnouncementPolicy,
     string UniverseCode,
-    DateOnly UniverseAsOf,
+    DateOnly? UniverseAsOf,
     IReadOnlyList<DatasetInstrument> Instruments,
     string Interval,
     DateOnly FromDate,
@@ -124,17 +154,25 @@ public sealed record DatasetManifest(
     IReadOnlyList<DatasetSource> Sources,
     IReadOnlyList<DatasetFile> Files,
     DateTimeOffset CreatedAtUtc,
-    string? CreatedByCommit)
+    string? CreatedByCommit,
+    DatasetMembership Membership = DatasetMembership.AsOf)
 {
     /// <summary>
     /// The manifest shape this build writes and knows how to read.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Version 1: one Parquet file of bars keyed by instrument identifier, a
     /// universe-derived instrument set, and the three rule versions the rows
     /// were produced under.
+    /// </para>
+    /// <para>
+    /// Version 2: <c>membership</c> says whether the set was read on one date
+    /// or on every session; <c>universe_as_of</c> is null for the second, and
+    /// each instrument then carries its <c>spells</c>. See ADR-024.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>Gets the total rows across every file.</summary>
     public long RowCount => Files.Sum(file => file.RowCount);

@@ -33,6 +33,7 @@ internal static class Usage
         output.WriteLine("  pqt adjust recompute --instrument <TICKER>");
         output.WriteLine();
         output.WriteLine("  pqt dataset export --universe <CODE> --from yyyy-MM-dd [--to yyyy-MM-dd]");
+        output.WriteLine("                     (point-in-time membership; --as-of reads one set instead)");
         output.WriteLine("                     [--as-of yyyy-MM-dd] [--interval 1d] [--raw]");
         output.WriteLine("                     [--known-as-of yyyy-MM-dd] [--policy strict|permissive]");
         output.WriteLine("  pqt dataset verify <DATASET-ID> [--version N]");

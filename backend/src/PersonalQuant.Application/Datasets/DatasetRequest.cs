@@ -9,6 +9,26 @@ using PersonalQuant.Domain.Universes;
 namespace PersonalQuant.Application.Datasets;
 
 /// <summary>
+/// How a dataset decides which instruments a row may belong to.
+/// </summary>
+public enum DatasetMembership
+{
+    /// <summary>
+    /// One constituent set, read on one date, applied to the whole window.
+    /// Every member contributes every bar it has in the window, including the
+    /// sessions before it joined and after it left.
+    /// </summary>
+    AsOf = 0,
+
+    /// <summary>
+    /// A row is included only when its instrument was a member on that row's
+    /// session. The survivorship-free reading of a universe, and what a
+    /// backtest over a window that crosses a review needs.
+    /// </summary>
+    PointInTime = 1,
+}
+
+/// <summary>
 /// A validated request to export a canonical dataset.
 /// </summary>
 /// <remarks>
@@ -34,7 +54,8 @@ public sealed record DatasetRequest
 
     private DatasetRequest(
         UniverseCode universeCode,
-        DateOnly universeAsOf,
+        DatasetMembership membership,
+        DateOnly? universeAsOf,
         BarInterval interval,
         DateOnly fromDate,
         DateOnly toDate,
@@ -43,6 +64,7 @@ public sealed record DatasetRequest
         AnnouncementPolicy announcementPolicy)
     {
         UniverseCode = universeCode;
+        Membership = membership;
         UniverseAsOf = universeAsOf;
         Interval = interval;
         FromDate = fromDate;
@@ -55,8 +77,14 @@ public sealed record DatasetRequest
     /// <summary>Gets the universe the instrument set comes from.</summary>
     public UniverseCode UniverseCode { get; }
 
-    /// <summary>Gets the date the constituent set is read at.</summary>
-    public DateOnly UniverseAsOf { get; }
+    /// <summary>Gets how rows are matched to membership.</summary>
+    public DatasetMembership Membership { get; }
+
+    /// <summary>
+    /// Gets the date the constituent set is read at, or null for a
+    /// point-in-time export, which reads membership on every session instead.
+    /// </summary>
+    public DateOnly? UniverseAsOf { get; }
 
     /// <summary>Gets the bar resolution.</summary>
     public BarInterval Interval { get; }
@@ -87,7 +115,53 @@ public sealed record DatasetRequest
     public string DatasetId => DatasetIdentity.Of(this);
 
     /// <summary>
-    /// Validates an export request.
+    /// Validates a point-in-time export request: each row is kept only when its
+    /// instrument was a member on that session.
+    /// </summary>
+    /// <param name="universeCode">The universe whose membership decides the rows.</param>
+    /// <param name="interval">The bar resolution.</param>
+    /// <param name="fromDate">The first session, inclusive.</param>
+    /// <param name="toDate">The last session, inclusive.</param>
+    /// <param name="request">The validated request when successful.</param>
+    /// <param name="problem">A caller-safe explanation when validation fails.</param>
+    /// <param name="adjusted">Whether to rescale for corporate actions.</param>
+    /// <param name="knownAsOfUtc">The observation instant, or null.</param>
+    /// <param name="announcementPolicy">What to do with an unknown announcement date.</param>
+    /// <returns><see langword="true"/> when the request is usable.</returns>
+    public static bool TryCreatePointInTime(
+        UniverseCode universeCode,
+        BarInterval interval,
+        DateOnly fromDate,
+        DateOnly toDate,
+        [NotNullWhen(true)] out DatasetRequest? request,
+        [NotNullWhen(false)] out string? problem,
+        bool adjusted = true,
+        DateTimeOffset? knownAsOfUtc = null,
+        AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict)
+    {
+        request = null;
+
+        if (!TryValidate(universeCode, interval, fromDate, toDate, announcementPolicy, out problem))
+        {
+            return false;
+        }
+
+        request = new DatasetRequest(
+            universeCode,
+            DatasetMembership.PointInTime,
+            universeAsOf: null,
+            interval,
+            fromDate,
+            toDate,
+            adjusted,
+            knownAsOfUtc?.ToUniversalTime(),
+            announcementPolicy);
+        return true;
+    }
+
+    /// <summary>
+    /// Validates an as-of export request: one constituent set, read on one
+    /// date, applied to the whole window.
     /// </summary>
     /// <param name="universeCode">The universe to take the instrument set from.</param>
     /// <param name="universeAsOf">The date to read the constituent set at.</param>
@@ -114,6 +188,44 @@ public sealed record DatasetRequest
     {
         request = null;
 
+        if (!TryValidate(universeCode, interval, fromDate, toDate, announcementPolicy, out problem))
+        {
+            return false;
+        }
+
+        // A constituent set read after the window it describes would export the
+        // membership of a later index against earlier prices, which is
+        // survivorship bias assembled by hand.
+        if (universeAsOf > toDate)
+        {
+            problem =
+                "The universe must be read on or before the window ends, or the export applies a "
+                + "later membership to earlier prices.";
+            return false;
+        }
+
+        request = new DatasetRequest(
+            universeCode,
+            DatasetMembership.AsOf,
+            universeAsOf,
+            interval,
+            fromDate,
+            toDate,
+            adjusted,
+            knownAsOfUtc?.ToUniversalTime(),
+            announcementPolicy);
+        problem = null;
+        return true;
+    }
+
+    private static bool TryValidate(
+        UniverseCode universeCode,
+        BarInterval interval,
+        DateOnly fromDate,
+        DateOnly toDate,
+        AnnouncementPolicy announcementPolicy,
+        [NotNullWhen(false)] out string? problem)
+    {
         if (universeCode is null)
         {
             problem = "A universe is required.";
@@ -144,26 +256,6 @@ public sealed record DatasetRequest
             return false;
         }
 
-        // A constituent set read after the window it describes would export the
-        // membership of a later index against earlier prices, which is
-        // survivorship bias assembled by hand.
-        if (universeAsOf > toDate)
-        {
-            problem =
-                "The universe must be read on or before the window ends, or the export applies a "
-                + "later membership to earlier prices.";
-            return false;
-        }
-
-        request = new DatasetRequest(
-            universeCode,
-            universeAsOf,
-            interval,
-            fromDate,
-            toDate,
-            adjusted,
-            knownAsOfUtc?.ToUniversalTime(),
-            announcementPolicy);
         problem = null;
         return true;
     }
@@ -193,10 +285,14 @@ public static class DatasetIdentity
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // The as-of token is a date, so a point-in-time request cannot collide
+        // with any as-of one. Rendering it this way rather than appending a mode
+        // field keeps every as-of dataset's identifier what it was before
+        // point-in-time existed.
         var canonical = string.Join(
             '|',
             request.UniverseCode.Value,
-            Format(request.UniverseAsOf),
+            Membership(request.UniverseAsOf),
             request.Interval.ToString(),
             Format(request.FromDate),
             Format(request.ToDate),
@@ -234,7 +330,13 @@ public static class DatasetIdentity
             .Append(manifest.Adjusted).Append('|')
             .Append(manifest.AnnouncementPolicy).Append('|')
             .Append(manifest.UniverseCode).Append('|')
-            .Append(Format(manifest.UniverseAsOf)).Append('|')
+            .Append(Membership(manifest.UniverseAsOf)).Append('|')
+            // The mode itself, not only what follows from it. A null as-of
+            // implies point-in-time, but a consumer reads the membership field,
+            // and flipping it alone must not verify. Appended only for
+            // point-in-time, so every as-of manifest - and every version 1
+            // manifest already on disk - hashes exactly as it did before.
+            .Append(manifest.Membership == DatasetMembership.PointInTime ? "point_in_time|" : string.Empty)
             .Append(manifest.Interval).Append('|')
             .Append(Format(manifest.FromDate)).Append('|')
             .Append(Format(manifest.ToDate)).Append('|')
@@ -245,6 +347,19 @@ public static class DatasetIdentity
         foreach (var instrument in manifest.Instruments)
         {
             builder.Append(instrument.InstrumentId).Append(',');
+
+            // Only a point-in-time manifest carries spells, and only then do
+            // they enter the hash, so an as-of manifest hashes exactly as it
+            // did before they existed. A spell is part of what the data is: the
+            // same rows with a different spell mean a different membership.
+            foreach (var spell in instrument.Spells ?? [])
+            {
+                builder
+                    .Append(Format(spell.From)).Append('~')
+                    .Append(spell.Until is { } until ? Format(until) : "open").Append('~')
+                    .Append(spell.AnnouncedOn is { } announced ? Format(announced) : "unannounced")
+                    .Append(';');
+            }
         }
 
         builder.Append('|');
@@ -266,6 +381,9 @@ public static class DatasetIdentity
 
     private static string Format(DateOnly date) =>
         date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static string Membership(DateOnly? universeAsOf) =>
+        universeAsOf is { } asOf ? Format(asOf) : "point-in-time";
 
     private static string Digest(string canonical) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));

@@ -156,6 +156,83 @@ public sealed class UniverseCatalogTests
         Assert.Equal(UniverseUnknownReason.OutsideCoverage, result.UnknownReason);
     }
 
+    [Fact]
+    public async Task A_window_inside_the_claim_returns_every_spell_overlapping_it()
+    {
+        var universe = Covered(Sourced, until: null);
+        var spell = new UniverseSpell(InstrumentId.New(), Sourced, new DateOnly(2024, 3, 1), null);
+        var repository = new FakeUniverseRepository(universe, spells: [spell]);
+
+        var result = await new UniverseCatalog(repository).MembershipOverAsync(
+            Vn30, Sourced, new DateOnly(2024, 6, 1), TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsKnown);
+        Assert.Equal(spell, Assert.Single(result.Spells));
+    }
+
+    [Fact]
+    public async Task A_window_that_starts_before_the_claim_is_unknown_rather_than_partial()
+    {
+        // The windowed form of the survivorship trap. The spells recorded from
+        // 2024 exist and would come back; a backtest from 2018 would then run
+        // six years against whichever names happened to be sourced later.
+        var universe = Covered(Sourced, until: null);
+        var repository = new FakeUniverseRepository(
+            universe, spells: [new UniverseSpell(InstrumentId.New(), Sourced, null, null)]);
+
+        var result = await new UniverseCatalog(repository).MembershipOverAsync(
+            Vn30, Unsourced, Sourced, TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsKnown);
+        Assert.Equal(UniverseUnknownReason.OutsideCoverage, result.UnknownReason);
+        Assert.Equal(0, repository.SpellReads);
+        Assert.Throws<InvalidOperationException>(() => result.Spells);
+    }
+
+    [Fact]
+    public async Task A_window_that_runs_past_a_closed_claim_is_unknown()
+    {
+        var universe = Covered(Sourced, new DateOnly(2026, 1, 2));
+        var repository = new FakeUniverseRepository(universe);
+
+        var result = await new UniverseCatalog(repository).MembershipOverAsync(
+            Vn30, new DateOnly(2025, 12, 1), new DateOnly(2026, 1, 2),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsKnown);
+        Assert.Equal(UniverseUnknownReason.OutsideCoverage, result.UnknownReason);
+    }
+
+    [Fact]
+    public async Task A_window_over_a_universe_that_claims_nothing_is_unknown()
+    {
+        var repository = new FakeUniverseRepository(Define());
+
+        var result = await new UniverseCatalog(repository).MembershipOverAsync(
+            Vn30, Sourced, Sourced, TestContext.Current.CancellationToken);
+
+        Assert.Equal(UniverseUnknownReason.NoCoverageDeclared, result.UnknownReason);
+    }
+
+    [Theory]
+    [InlineData("2024-01-02", true)]
+    [InlineData("2024-02-29", true)]
+    [InlineData("2024-03-01", false)]
+    [InlineData("2024-01-01", false)]
+    public void A_spell_includes_its_first_day_and_excludes_the_day_it_left(string date, bool included)
+    {
+        var spell = new UniverseSpell(InstrumentId.New(), Sourced, new DateOnly(2024, 3, 1), null);
+
+        Assert.Equal(included, spell.Includes(DateOnly.Parse(date, System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    private static Universe Covered(DateOnly from, DateOnly? until)
+    {
+        var universe = Define();
+        universe.DeclareCoverage(MembershipCoverage.Create(from, until), Source, DefinedAt);
+        return universe;
+    }
+
     private static Universe Define() => Universe.Define(
         UniverseId.New(),
         Vn30,
@@ -166,8 +243,21 @@ public sealed class UniverseCatalogTests
 
     private sealed class FakeUniverseRepository(
         Universe? universe,
-        IReadOnlyList<InstrumentId>? members = null) : IUniverseRepository
+        IReadOnlyList<InstrumentId>? members = null,
+        IReadOnlyList<UniverseSpell>? spells = null) : IUniverseRepository
     {
+        public int SpellReads { get; private set; }
+
+        public Task<IReadOnlyList<UniverseSpell>> ListSpellsOverlappingAsync(
+            UniverseId universeId,
+            DateOnly fromDate,
+            DateOnly toDate,
+            CancellationToken cancellationToken = default)
+        {
+            SpellReads++;
+            return Task.FromResult(spells ?? []);
+        }
+
         public Task<IReadOnlyList<Universe>> ListAsync(
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Universe>>(universe is null ? [] : [universe]);

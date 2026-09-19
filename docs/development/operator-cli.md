@@ -195,8 +195,9 @@ were raised as missing sessions. The claim now lives on the venue and comes from
 ### `dataset`
 
 ```bash
-pqt dataset export --universe DEMO_INDEX --from 2026-01-02 --to 2026-09-05 --as-of 2026-01-02
-pqt dataset verify 6a233e778e940860 --version 1
+pqt dataset export --universe VN30 --from 2026-07-01 --to 2026-09-17
+pqt dataset export --universe VN30 --from 2026-08-03 --to 2026-09-17 --as-of 2026-08-03
+pqt dataset verify 9d1609783db37729 --version 1
 ```
 
 Builds the canonical research dataset, and checks one still is what it claims to
@@ -214,16 +215,26 @@ a rebuild is a new version of it rather than a new dataset.
 | `--universe` | required | Where the instrument set comes from |
 | `--from` | required | First session, inclusive |
 | `--to` | today | Last session, inclusive |
-| `--as-of` | the window's end | When the constituent set is read |
+| `--as-of` | none: point-in-time | Read one constituent set on this date instead |
 | `--interval` | `1d` | Bar resolution |
 | `--raw` | off | Export what printed rather than the adjusted series |
 | `--known-as-of` | current series | Read the bars as this system believed them then |
 | `--policy` | `strict` | What to do with an unknown announcement date |
 
-`--as-of` defaults to the **end of the window**, not to today. A universe read
-today against a window that ended in 2018 exports the index as it now stands,
-which is survivorship bias assembled by hand — everything removed since is
-silently absent.
+**Without `--as-of` the export is point-in-time**: a bar is written only where
+its instrument was a member of the universe that session, and the manifest lists
+each instrument's spells. Over VN30 from July to September 2026 that is exactly
+30 members on each of 54 sessions, with PLX and TPB until 3 August and MCH and
+TCX from it. The whole window must lie inside the universe's declared coverage,
+or the export is refused rather than exporting only the names that happened to be
+sourced. See
+[ADR-024](../architecture/decisions/ADR-024-point-in-time-dataset-membership.md).
+
+`--as-of <date>` asks for the older reading instead: one constituent set, read on
+that date, with every bar its members have anywhere in the window. It is right
+for a window inside one basket and wrong across a review, which is why it has to
+be named. The date may not fall after the window's end, which would apply a
+later index to earlier prices.
 
 `--policy` defaults to `strict`, the opposite of the chart's default. A dataset
 is run against repeatedly by things nobody has written yet, so look-ahead baked
@@ -235,8 +246,9 @@ result, which nobody investigates. See
 empty one produces a backtest that reports no positions and no error:
 
 ```
-Membership of VN30 on 2016-12-31 is not known (NoSuchUniverse). Declare the
-universe's coverage and import its history before exporting a dataset over it.
+Membership of VN30 is not known on every session from 2025-07-01 to 2025-09-30
+(OutsideCoverage). Narrow the window to the universe's declared coverage, or
+source the rest of its history first.
 ```
 
 `verify` recomputes every file digest **and** the manifest's own content hash.

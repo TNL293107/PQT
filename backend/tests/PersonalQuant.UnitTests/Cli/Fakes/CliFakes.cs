@@ -218,6 +218,13 @@ internal sealed class FakeUniverseCatalog : IUniverseCatalog
 
         return Task.FromResult(answer(code, asOf));
     }
+
+    public Task<UniverseHistory> MembershipOverAsync(
+        UniverseCode code,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("No ingest command reads membership over a window.");
 }
 
 /// <summary>Holds findings in memory and closes them the way the aggregate does.</summary>

@@ -63,6 +63,25 @@ public interface IUniverseRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads every spell that overlaps a window, as read-only facts.
+    /// </summary>
+    /// <remarks>
+    /// A spell overlaps when it starts on or before the window's last day and
+    /// has not ended by its first: the same half-open rule as the as-of read,
+    /// applied to both ends.
+    /// </remarks>
+    /// <param name="universeId">The universe to read.</param>
+    /// <param name="fromDate">The first date, inclusive.</param>
+    /// <param name="toDate">The last date, inclusive.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The spells, ordered by security and then start.</returns>
+    Task<IReadOnlyList<UniverseSpell>> ListSpellsOverlappingAsync(
+        UniverseId universeId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads a security's spells in a universe, oldest first.
     /// </summary>
     /// <remarks>

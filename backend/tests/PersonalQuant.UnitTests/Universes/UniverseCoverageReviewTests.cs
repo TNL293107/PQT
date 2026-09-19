@@ -235,6 +235,13 @@ public sealed class UniverseCoverageReviewTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<InstrumentId>>([]);
 
+        public Task<IReadOnlyList<UniverseSpell>> ListSpellsOverlappingAsync(
+            UniverseId universeId,
+            DateOnly fromDate,
+            DateOnly toDate,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<UniverseSpell>>([]);
+
         public Task<IReadOnlyList<UniverseMembership>> ListSpellsForUpdateAsync(
             UniverseId universeId,
             InstrumentId instrumentId,

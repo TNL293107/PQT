@@ -32,6 +32,7 @@ reasoning at the time is preserved.
 | [021](ADR-021-raw-vietnamese-price-history.md)               | Raw Vietnamese price history, superseding ADR-015's source landscape | Accepted |
 | [022](ADR-022-announcement-aware-adjustment.md)              | Announcement-aware adjustment, closing ADR-018's stated gap | Accepted |
 | [023](ADR-023-canonical-dataset-contract.md)                 | The canonical dataset contract PQT owns | Accepted |
+| [024](ADR-024-point-in-time-dataset-membership.md)           | Point-in-time membership in the canonical dataset | Accepted |
 
 ## Format
 

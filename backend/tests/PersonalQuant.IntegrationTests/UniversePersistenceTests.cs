@@ -285,6 +285,49 @@ public sealed class UniversePersistenceTests(DependencyContainerFixture containe
         Assert.Equal(UniverseKind.Index, stored.Kind);
     }
 
+    [Fact]
+    public async Task A_window_reads_every_spell_that_overlaps_it_and_none_that_does_not()
+    {
+        // The half-open rule applied at both ends of a window. The first spell
+        // ends on the window's first day and so never overlaps it; the second
+        // spans it; the third starts on its last day and does.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var code = UniverseCode.Create("UMW");
+        var universe = await DefineAsync(scope, code, Joined, until: null);
+        var endedBefore = await AddInstrumentAsync(scope, "UMW", "UMWA");
+        var spanning = await AddInstrumentAsync(scope, "UMX", "UMXA");
+        var joinedLast = await AddInstrumentAsync(scope, "UMY", "UMYA");
+
+        var windowFrom = new DateOnly(2024, 7, 1);
+        var windowTo = new DateOnly(2024, 12, 31);
+
+        var ended = UniverseMembership.Admit(universe.Id, endedBefore, Joined, null, Source, RecordedAt);
+        ended.Remove(windowFrom);
+
+        scope.Universes.Add(ended);
+        scope.Universes.Add(UniverseMembership.Admit(
+            universe.Id, spanning, Joined, new DateOnly(2023, 12, 20), Source, RecordedAt));
+        scope.Universes.Add(UniverseMembership.Admit(
+            universe.Id, joinedLast, windowTo, null, Source, RecordedAt));
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await using var reader = await CreateScopeAsync();
+        var history = await reader.Catalog.MembershipOverAsync(
+            code, windowFrom, windowTo, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(history.IsKnown);
+        Assert.Equal(
+            new[] { spanning, joinedLast }.OrderBy(id => id.Value).ToList(),
+            history.Spells.Select(spell => spell.InstrumentId).OrderBy(id => id.Value).ToList());
+
+        var carried = history.Spells.Single(spell => spell.InstrumentId == spanning);
+        Assert.Equal(new UniverseSpell(spanning, Joined, null, new DateOnly(2023, 12, 20)), carried);
+    }
+
     private static async Task<UniverseConstituents> ReadAsync(
         UniverseScope scope,
         UniverseCode code,

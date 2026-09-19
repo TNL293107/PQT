@@ -1,6 +1,11 @@
 # ADR-023: The canonical dataset contract
 
-**Status:** Accepted · **Date:** 2026-09-06 · **Phase:** Research Foundation Upgrade (U5)
+**Status:** Accepted, amended by [ADR-024](ADR-024-point-in-time-dataset-membership.md) · **Date:** 2026-09-06 · **Phase:** Research Foundation Upgrade (U5)
+
+> ADR-024 makes membership a declared mode. A dataset is point-in-time by
+> default, reading membership on every session rather than on one date, and the
+> manifest is schema version 2. What follows describes version 1, which still
+> governs the as-of mode.
 
 ## Context
 
