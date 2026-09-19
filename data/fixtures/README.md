@@ -282,6 +282,12 @@ VN30 backfill is what surfaced them. Every one is left as an open
   and MWG on 2026-02-02) were dismissed with that reason. None is a corporate
   action.
 
+**CTG's 2025 stock dividend is rounded to six places.** VSD publishes it as
+"100 : 44,63658403", a ratio of 0.4463658403, and the import accepts at most
+six decimal places, refusing a longer one rather than rounding it silently. It
+is transcribed as 0.446366. The factor then differs by about 1×10⁻⁷, a
+fraction of a đồng on a 35,000 price, well under one tick.
+
 **BSR moved from UPCOM to HOSE.** The symbol list and the development seed had
 it on UPCOM, which made CafeF — which does not serve UPCOM — refuse it and
 judged its prices against the wrong band. Both now say HOSE. A database seeded
