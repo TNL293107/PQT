@@ -304,10 +304,10 @@ alternatives are in
 [`../architecture/decisions/ADR-020-universe-membership-and-coverage.md`](../architecture/decisions/ADR-020-universe-membership-and-coverage.md).
 
 **VN30 now has a real membership history, and it is short on purpose.** It
-was transcribed from HOSE's constituent tables for the July 2025, January 2026
-and July 2026 reviews, plus the extraordinary DGC→BSR swap of 13 May 2026. It
-declares coverage from **4 August 2025 up to 18 September 2026** and claims
-nothing outside that span: an as-of read for 2024 still answers *unknown*.
+was transcribed from HOSE's constituent tables for five semi-annual reviews,
+July 2024 to July 2026, plus the extraordinary DGC→BSR swap of 13 May 2026. It
+declares coverage from **5 August 2024 up to 18 September 2026** and claims
+nothing outside that span: an as-of read for 2023 still answers *unknown*.
 Earlier years need earlier review notices transcribed; today's set must not
 stand in for them. What was sourced primary and what secondary is recorded in
 [`../../data/fixtures/README.md`](../../data/fixtures/README.md).

@@ -45,7 +45,7 @@ recorded, and the engine accounts for the −13.68% gap they caused: the
 and the adjusted series agrees with CafeF's own to within its quoting precision.
 It cost one real bug, in a discontinuity check that read one action at a time.
 
-**VN30 membership is real** for August 2025 to September 2026, transcribed from
+**VN30 membership is real** for August 2024 to September 2026, transcribed from
 HOSE's review tables, and a real universe has been exported end to end: raw
 CafeF bars for its 32 names, five more entitlements found from price-limit
 breaches and explained, and a point-in-time dataset holding exactly 30 members
