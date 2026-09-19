@@ -50,6 +50,28 @@ public sealed class IngestCommandsTests
         Assert.Null(instruction.ToUtc);
     }
 
+    [Theory]
+    [InlineData("run")]
+    [InlineData("backfill")]
+    public async Task The_end_date_names_the_last_session_included(string verb)
+    {
+        // --to used to become midnight of that date, which the half-open range
+        // then excluded, so the named session was never fetched. dataset export
+        // reads --to as the last session included; the same flag meaning two
+        // things on two verbs dropped DGC's last day in VN30, 2026-05-12, with
+        // nothing to say so.
+        var harness = new Harness();
+        harness.Instruments.Add("FPT");
+        harness.Ingestion.Then(instruction => Succeeded(instruction, stored: 1));
+
+        await harness.RunAsync(
+            "ingest", verb, "--instrument", "FPT", "--from", "2021-12-27", "--to", "2022-01-07");
+
+        var instruction = harness.Ingestion.Instructions[0];
+
+        Assert.Equal(new DateTimeOffset(2022, 1, 8, 0, 0, 0, TimeSpan.Zero), instruction.ToUtc);
+    }
+
     [Fact]
     public async Task A_date_becomes_midnight_utc_rather_than_the_operators_own_zone()
     {

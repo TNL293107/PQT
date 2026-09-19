@@ -92,13 +92,25 @@ pqt ingest backfill --universe <CODE> --from yyyy-MM-dd [--as-of yyyy-MM-dd] ...
 `run` is one pass. With no `--from` it resumes from the checkpoint and stops at
 the last period that has finished, which is what the scheduled pass does.
 
-`backfill` is a loop over `run`, not a second pipeline. The service already
-truncates a range longer than one call may carry and advances the checkpoint to
-the newest bar actually stored, so repetition is all a backfill is. Only the
-first pass names a start; every pass after it leaves the range open so the
-checkpoint decides. The loop stops when a pass asks for the same range as the
-one before it — the honest signal that the source has nothing further — and
+`--to` names the **last session included**, on both verbs, as it does on
+`dataset export`. (It used to be the exclusive end, so the named day was never
+fetched; see below.)
+
+`backfill` is a loop over `run`, not a second pipeline. The service truncates a
+range longer than one call may carry (65 days from CafeF), so a backfill walks
+the range one window at a time: **each pass starts where the one before it
+stopped**, never at the checkpoint. The walk ends at `--to`, or, with none, when
+the pipeline skips a pass because no finished period is left. A window the
+source returned nothing for is walked past rather than ending the run, and
 `--max-passes` is a second stop for the case nobody predicted.
+
+Both rules were learned the hard way on the two-year VN30 backfill. Passes
+used to resume from the checkpoint. On a series that already held later bars,
+the second pass jumped past the gap it was asked to fill, and ACB stored 45 bars
+of ~480 while reporting success. And `--to` as an exclusive end silently dropped
+the last session of every spell it was used to close. The checkpoint itself
+still never moves backwards, so filling an old gap does not make the scheduled
+run re-ingest history.
 
 **Name `--source` whenever two registered sources could serve the request.**
 There is no fallback and no priority order: ambiguity is refused, and the run

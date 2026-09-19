@@ -221,7 +221,7 @@ internal sealed class IngestCommands(
         var revised = 0;
 
         var cursor = ToInstant(request.From);
-        var end = ToInstant(request.To);
+        var end = EndInstant(request.To);
 
         while (passes < maxPasses)
         {
@@ -290,7 +290,7 @@ internal sealed class IngestCommands(
                 request.Interval,
                 request.Source,
                 fromUtc ?? ToInstant(request.From),
-                ToInstant(request.To),
+                EndInstant(request.To),
                 out var instruction,
                 out var problem))
         {
@@ -492,6 +492,20 @@ internal sealed class IngestCommands(
     /// </remarks>
     private static DateTimeOffset? ToInstant(DateOnly? date) =>
         date is { } value ? new DateTimeOffset(value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) : null;
+
+    /// <summary>
+    /// Turns --to into the exclusive end of the range: midnight after the named
+    /// day, so the day itself is fetched.
+    /// </summary>
+    /// <remarks>
+    /// --to names the last session included, as it does on <c>dataset
+    /// export</c>. It used to become midnight of the named day, which the
+    /// half-open range then excluded; the same flag meant two things on two
+    /// verbs, and a backfill over a spell dropped the spell's last session with
+    /// nothing to say so.
+    /// </remarks>
+    private static DateTimeOffset? EndInstant(DateOnly? date) =>
+        date is { } value ? ToInstant(value.AddDays(1)) : null;
 
     /// <summary>What both verbs read from the command line in common.</summary>
     /// <param name="Interval">The resolution.</param>
