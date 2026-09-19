@@ -186,12 +186,28 @@ internal sealed class IngestCommands(
     /// Runs one instrument to the end of the requested range.
     /// </summary>
     /// <remarks>
-    /// The loop stops when a pass asks for the same range as the one before it.
-    /// That is the honest signal: the checkpoint advances only to the newest bar
-    /// actually stored, so a range that repeats means the source returned
-    /// nothing new and repeating it again would never terminate. Stopping on
-    /// "stored nothing" instead would end a backfill at the first long
-    /// suspension.
+    /// <para>
+    /// Every pass names its own start: where the pass before it stopped. The
+    /// pipeline truncates a range to what the source carries in one call, so a
+    /// backfill is a walk across the range one window at a time, and the walk
+    /// has to be steered by the range rather than by the checkpoint.
+    /// </para>
+    /// <para>
+    /// It once was steered by the checkpoint: passes after the first left the
+    /// start open. The checkpoint sits after the newest bar stored, so on a
+    /// series that already held later bars the second pass jumped straight past
+    /// the gap it was asked to fill. VN30 names backfilled for July 2026 and
+    /// then asked for August 2024 onwards stored 45 bars of the 480 due, and
+    /// reported success.
+    /// </para>
+    /// <para>
+    /// The walk ends at the requested end, or, with none, when the pipeline
+    /// skips a pass because no finished period is left. A window the source
+    /// returned nothing for is walked past: stopping on "stored nothing" would
+    /// end a backfill at the first long suspension. A pass that asks for the
+    /// same start as the one before it still ends the walk, as a guard against
+    /// a range that cannot advance.
+    /// </para>
     /// </remarks>
     private async Task<bool> BackfillOneAsync(
         InstrumentSearchResult instrument,
@@ -204,17 +220,16 @@ internal sealed class IngestCommands(
         var stored = 0;
         var revised = 0;
 
-        // The start is given to the first pass only. Every pass after it leaves
-        // the range open so the checkpoint decides, which is what makes this a
-        // resumption rather than a repeated request for the same window.
-        var from = request.From;
+        var cursor = ToInstant(request.From);
+        var end = ToInstant(request.To);
 
         while (passes < maxPasses)
         {
             var run = await IngestAsync(
                     instrument.InstrumentId,
-                    request with { From = from },
-                    cancellationToken)
+                    request,
+                    cancellationToken,
+                    cursor)
                 .ConfigureAwait(false);
 
             if (run is null)
@@ -241,14 +256,15 @@ internal sealed class IngestCommands(
             stored += run.BarsStored;
             revised += run.BarsRevised;
 
-            if (previous == run.RequestedFromUtc)
+            if (previous == run.RequestedFromUtc
+                || (end is { } last && run.RequestedToUtc >= last))
             {
                 Summarise(instrument.Ticker.Value, passes, stored, revised);
                 return true;
             }
 
             previous = run.RequestedFromUtc;
-            from = null;
+            cursor = run.RequestedToUtc;
         }
 
         Summarise(instrument.Ticker.Value, passes, stored, revised);
@@ -262,13 +278,18 @@ internal sealed class IngestCommands(
     private async Task<IngestionRun?> IngestAsync(
         InstrumentId instrumentId,
         IngestRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? fromUtc = null)
     {
+        // An instant rather than a date when a backfill is walking: a window
+        // can end part-way through a day at an intraday resolution, and
+        // rounding the next start down to the day would re-ask for what the
+        // pass before it already covered.
         if (!IngestionInstruction.TryCreate(
                 instrumentId,
                 request.Interval,
                 request.Source,
-                ToInstant(request.From),
+                fromUtc ?? ToInstant(request.From),
                 ToInstant(request.To),
                 out var instruction,
                 out var problem))

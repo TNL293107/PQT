@@ -103,48 +103,90 @@ public sealed class IngestCommandsTests
     }
 
     [Fact]
-    public async Task A_backfill_runs_until_a_pass_asks_for_the_range_before_it()
+    public async Task A_backfill_walks_to_the_end_of_its_range_one_window_at_a_time()
     {
-        // The termination rule. The checkpoint advances only to the newest bar
-        // actually stored, so a repeated range means the source returned nothing
-        // new — and asking again would never end.
+        // Each pass covers what the source allows in one call (a hundred days
+        // here) and the next starts where it stopped, until the end is reached.
         var harness = new Harness();
         harness.Instruments.Add("FPT");
 
         harness.Ingestion
-            .Then(instruction => Succeeded(instruction, stored: 100, from: Start))
-            .Then(instruction => Succeeded(instruction, stored: 100, from: Start.AddDays(100)))
-            .Then(instruction => Succeeded(instruction, stored: 0, from: Start.AddDays(200)))
-            .Then(instruction => Succeeded(instruction, stored: 0, from: Start.AddDays(200)));
+            .Then(instruction => Succeeded(instruction, stored: 100))
+            .Then(instruction => Succeeded(instruction, stored: 100))
+            .Then(instruction => Succeeded(instruction, stored: 50));
+
+        var code = await harness.RunAsync(
+            "ingest", "backfill", "--instrument", "FPT", "--from", "2021-12-27", "--to", "2022-10-04");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Equal(
+            [Start, Start.AddDays(100), Start.AddDays(200)],
+            harness.Ingestion.Instructions.Select(instruction => instruction.FromUtc));
+        Assert.Contains("250 bars stored", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Every_pass_starts_where_the_one_before_it_stopped_rather_than_at_the_checkpoint()
+    {
+        // The regression. Passes after the first used to leave the start open
+        // and let the checkpoint decide. When the series already held later
+        // bars - VN30 names backfilled for July 2026, then asked for August
+        // 2024 onwards - the checkpoint sat at September 2026, the second pass
+        // jumped straight to it, and twenty months were skipped with the run
+        // reporting success: 45 bars stored where 480 were due.
+        var harness = new Harness();
+        harness.Instruments.Add("ACB");
+
+        harness.Ingestion
+            .Then(instruction => Succeeded(instruction, stored: 45))
+            .Then(instruction => Succeeded(instruction, stored: 45))
+            .Then(instruction => Skipped(instruction, "No period has finished since the last run."));
+
+        await harness.RunAsync("ingest", "backfill", "--instrument", "ACB", "--from", "2021-12-27");
+
+        Assert.All(
+            harness.Ingestion.Instructions,
+            instruction => Assert.NotNull(instruction.FromUtc));
+        Assert.Equal(Start.AddDays(100), harness.Ingestion.Instructions[1].FromUtc);
+    }
+
+    [Fact]
+    public async Task Without_an_end_a_backfill_stops_when_the_source_has_nothing_left_to_give()
+    {
+        // With no --to the range runs to the last finished period, and the pass
+        // past it is skipped by the pipeline. That skip is how a completed
+        // backfill ends, not a failure.
+        var harness = new Harness();
+        harness.Instruments.Add("FPT");
+
+        harness.Ingestion
+            .Then(instruction => Succeeded(instruction, stored: 10))
+            .Then(instruction => Skipped(instruction, "No period has finished since the last run."));
 
         var code = await harness.RunAsync(
             "ingest", "backfill", "--instrument", "FPT", "--from", "2021-12-27");
 
         Assert.Equal(ExitCode.Ok, code);
-        Assert.Equal(4, harness.Ingestion.Instructions.Count);
-        Assert.Contains("200 bars stored", harness.Result, StringComparison.Ordinal);
+        Assert.Equal(2, harness.Ingestion.Instructions.Count);
     }
 
     [Fact]
-    public async Task Only_the_first_pass_of_a_backfill_names_a_start()
+    public async Task A_window_the_source_returned_nothing_for_does_not_end_the_backfill()
     {
-        // Every pass after the first leaves the range open so the checkpoint
-        // decides. Repeating the start would ask for the same window forever.
+        // A long suspension is a window with no bars in it, not the end of the
+        // series. Walking on is what keeps it from truncating a history there.
         var harness = new Harness();
         harness.Instruments.Add("FPT");
 
         harness.Ingestion
-            .Then(instruction => Succeeded(instruction, stored: 10, from: Start))
-            .Then(instruction => Succeeded(instruction, stored: 0, from: Start.AddDays(10)))
-            .Then(instruction => Succeeded(instruction, stored: 0, from: Start.AddDays(10)));
+            .Then(instruction => Succeeded(instruction, stored: 0))
+            .Then(instruction => Succeeded(instruction, stored: 30));
 
-        await harness.RunAsync(
-            "ingest", "backfill", "--instrument", "FPT", "--from", "2021-12-27");
+        var code = await harness.RunAsync(
+            "ingest", "backfill", "--instrument", "FPT", "--from", "2021-12-27", "--to", "2022-06-01");
 
-        Assert.Equal(Start, harness.Ingestion.Instructions[0].FromUtc);
-        Assert.All(
-            harness.Ingestion.Instructions.Skip(1),
-            instruction => Assert.Null(instruction.FromUtc));
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Contains("30 bars stored", harness.Result, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -161,6 +203,7 @@ public sealed class IngestCommandsTests
             "ingest", "backfill",
             "--instrument", "FPT",
             "--from", "2021-12-27",
+            "--to", "2023-12-31",
             "--max-passes", "2");
 
         Assert.Equal(ExitCode.Refused, code);
@@ -201,9 +244,8 @@ public sealed class IngestCommandsTests
 
         harness.Universes.Knows(instrument.InstrumentId);
         harness.Ingestion
-            .Then(instruction => Succeeded(instruction, stored: 5, from: Start))
-            .Then(instruction => Succeeded(instruction, stored: 0, from: Start.AddDays(5)))
-            .Then(instruction => Succeeded(instruction, stored: 0, from: Start.AddDays(5)));
+            .Then(instruction => Succeeded(instruction, stored: 5))
+            .Then(instruction => Skipped(instruction, "No period has finished since the last run."));
 
         var code = await harness.RunAsync(
             "ingest", "backfill", "--universe", "VN30", "--from", "2021-12-27");
