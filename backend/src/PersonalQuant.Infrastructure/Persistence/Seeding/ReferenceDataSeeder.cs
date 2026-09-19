@@ -211,11 +211,17 @@ internal sealed class ReferenceDataSeeder(
 
             var ticker = Ticker.Create(seed.Ticker);
 
-            var taken = await instruments
-                .IsTickerTakenAsync(exchangeId, ticker, cancellationToken)
+            // Any venue, not the seeded one. Issuers move from UPCOM to HNX to
+            // HOSE, and a security held on the venue it moved to is not missing:
+            // looking only where the seed first put it re-created a moved BSR on
+            // every start-up. A ticker is weak identity in general, but the seed
+            // only ever fills an empty master, so erring towards creating nothing
+            // is the safe side.
+            var holders = await instruments
+                .ListActiveByTickerAsync(ticker, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (taken)
+            if (holders.Count > 0)
             {
                 continue;
             }

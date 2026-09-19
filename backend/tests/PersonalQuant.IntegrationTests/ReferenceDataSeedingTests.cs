@@ -141,6 +141,41 @@ public sealed class ReferenceDataSeedingTests(DependencyContainerFixture contain
         Assert.Equal("Vinamilk", reloaded?.Name);
     }
 
+    [Fact]
+    public async Task Seeding_does_not_recreate_a_security_that_has_moved_venue()
+    {
+        // BSR was seeded on UPCOM and later moved to HOSE. The seeder looked
+        // for it on UPCOM only, found nothing there, and created a second BSR
+        // on the next start-up - two active records for one security, and
+        // every lookup by ticker ambiguous from then on.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync("seed_after_transfer");
+        await scope.Seeder.SeedAsync(TestContext.Current.CancellationToken);
+
+        var hnx = await scope.Exchanges.FindByCodeAsync(
+            ExchangeCode.Create("HNX"), TestContext.Current.CancellationToken);
+        var upcom = await scope.Exchanges.FindByCodeAsync(
+            ExchangeCode.Create("UPCOM"), TestContext.Current.CancellationToken);
+        var acv = await scope.Instruments.FindActiveByTickerAsync(
+            upcom!.Id, Ticker.Create("ACV"), TestContext.Current.CancellationToken);
+
+        acv!.TransferToExchange(hnx!.Id, acv.CreatedAtUtc.AddSeconds(1));
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await using var second = await CreateScopeAsync("seed_after_transfer");
+        var outcome = await second.Seeder.SeedAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, outcome.InstrumentsCreated);
+
+        var holders = await second.Instruments.ListActiveByTickerAsync(
+            Ticker.Create("ACV"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(acv.Id, Assert.Single(holders).InstrumentId);
+    }
+
     private static async Task<IReadOnlyList<InstrumentSearchResult>> SearchAsync(
         SeedScope scope,
         string query)

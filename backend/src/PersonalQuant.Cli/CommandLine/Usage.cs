@@ -19,6 +19,8 @@ internal static class Usage
         output.WriteLine("  pqt provider show <CODE>");
         output.WriteLine("  pqt provider check <CODE> --instrument <TICKER> [--interval 1d] [--from yyyy-MM-dd]");
         output.WriteLine();
+        output.WriteLine("  pqt instrument transfer --instrument <TICKER> --to <VENUE>");
+        output.WriteLine();
         output.WriteLine("  pqt ingest run      --instrument <TICKER> [--interval 1d] [--source <CODE>]");
         output.WriteLine("                      [--from yyyy-MM-dd] [--to yyyy-MM-dd]");
         output.WriteLine("  pqt ingest backfill --instrument <TICKER> --from yyyy-MM-dd [--to yyyy-MM-dd]");

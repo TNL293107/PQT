@@ -94,6 +94,13 @@ internal static class Dispatcher
                         output)
                     .RunAsync(command, cancellationToken);
 
+            case "instrument":
+                return new InstrumentCommands(
+                        Defer<IInstrumentTransferService>(services),
+                        Defer<IInstrumentResolver>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             case "adjust":
                 return new AdjustCommands(
                         Defer<IPriceAdjustmentService>(services),
@@ -103,8 +110,8 @@ internal static class Dispatcher
 
             default:
                 output.Problem(
-                    $"'{command.Group}' is not a command group. Try provider, ingest, quality, "
-                        + "adjust, dataset, schema or calendar.");
+                    $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
+                        + "quality, adjust, dataset, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

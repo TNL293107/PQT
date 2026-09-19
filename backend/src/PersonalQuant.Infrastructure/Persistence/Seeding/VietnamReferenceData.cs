@@ -140,6 +140,11 @@ internal static class VietnamReferenceData
         new("HOSE", "MSN", "Masan Group Corporation", AssetType.Equity, "CONSSTAP-FOOD"),
         new("HOSE", "MWG", "Mobile World Investment Corporation", AssetType.Equity, "CONSDISC-RETAIL"),
         new("HOSE", "SSI", "SSI Securities Corporation", AssetType.Equity, "FIN-SECURITIES"),
+        // Seeded on UPCOM until 2026: BSR moved to HOSE and joined VN30 there.
+        // A database seeded before the move is corrected with
+        // 'pqt instrument transfer --instrument BSR --to HOSE', not by this
+        // list, which only ever creates what is missing.
+        new("HOSE", "BSR", "Binh Son Refining and Petrochemical Joint Stock Company", AssetType.Equity, "ENERGY-OILGAS"),
         new("HOSE", "FUEVFVND", "DCVFM VNDIAMOND ETF", AssetType.Etf, null),
         new("HOSE", "VNINDEX", "VN-Index", AssetType.Index, null),
         new("HOSE", "VN30", "VN30 Index", AssetType.Index, null),
@@ -147,7 +152,6 @@ internal static class VietnamReferenceData
         new("HNX", "PVS", "PetroVietnam Technical Services Corporation", AssetType.Equity, "ENERGY-OILGAS"),
         new("HNX", "IDC", "IDICO Corporation", AssetType.Equity, null),
         new("HNX", "HNXINDEX", "HNX-Index", AssetType.Index, null),
-        new("UPCOM", "BSR", "Binh Son Refining and Petrochemical Joint Stock Company", AssetType.Equity, "ENERGY-OILGAS"),
         new("UPCOM", "ACV", "Airports Corporation of Vietnam", AssetType.Equity, "INDUSTRIALS-TRANSPORT"),
     ];
 
