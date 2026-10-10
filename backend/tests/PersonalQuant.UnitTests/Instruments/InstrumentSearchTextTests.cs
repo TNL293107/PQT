@@ -25,6 +25,8 @@ public sealed class InstrumentSearchTextTests
     [Theory]
     [InlineData("Công ty Cổ phần FPT", "CONG TY CO PHAN FPT")]
     [InlineData("Ngân hàng Thương mại", "NGAN HANG THUONG MAI")]
+    // Đ is a distinct Vietnamese letter rather than D plus a combining mark, so
+    // Unicode decomposition alone leaves it untouched; it is folded explicitly.
     [InlineData("Đầu tư", "DAU TU")]
     public void Vietnamese_diacritics_are_folded_away(string input, string expected)
     {
@@ -35,18 +37,6 @@ public sealed class InstrumentSearchTextTests
 
         // Assert
         Assert.Equal(expected, folded);
-    }
-
-    [Fact]
-    public void The_letter_D_with_stroke_is_folded_explicitly()
-    {
-        // Đ is a distinct Vietnamese letter rather than D plus a combining
-        // mark, so Unicode decomposition alone leaves it untouched.
-        // Act
-        var folded = InstrumentSearchText.Normalise("đầu");
-
-        // Assert
-        Assert.Equal("DAU", folded);
     }
 
     [Fact]

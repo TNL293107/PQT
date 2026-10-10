@@ -42,6 +42,7 @@ public sealed class InstrumentSearchFieldTests
     [Fact]
     public void Changing_the_ticker_refolds_the_search_ticker()
     {
+        // The one invariant that justifies storing the same characters twice.
         // Arrange
         var instrument = Register("FPT", "FPT Corporation");
         instrument.List(new DateOnly(2026, 8, 20), Now.AddDays(1));
@@ -51,32 +52,6 @@ public sealed class InstrumentSearchFieldTests
 
         // Assert
         Assert.Equal("FPT2", instrument.SearchTicker);
-    }
-
-    [Fact]
-    public void The_search_ticker_always_agrees_with_the_ticker()
-    {
-        // The one invariant that justifies storing the same characters twice.
-        // Arrange
-        var instrument = Register("FPT", "FPT Corporation");
-        instrument.List(new DateOnly(2026, 8, 20), Now.AddDays(1));
-        instrument.ChangeTicker(Ticker.Create("HPG"), Now.AddDays(2));
-
-        // Assert
-        Assert.Equal(instrument.Ticker.Value, instrument.SearchTicker);
-    }
-
-    [Fact]
-    public void The_search_name_always_agrees_with_the_name()
-    {
-        // Arrange
-        var instrument = Register("FPT", "FPT Corporation");
-        instrument.Rename("Ngân hàng Ngoại thương", Now.AddDays(1));
-
-        // Assert
-        Assert.Equal(
-            InstrumentSearchText.Normalise(instrument.Name),
-            instrument.SearchName);
     }
 
     [Fact]

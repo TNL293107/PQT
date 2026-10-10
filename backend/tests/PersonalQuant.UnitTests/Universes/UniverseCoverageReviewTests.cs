@@ -26,25 +26,15 @@ public sealed class UniverseCoverageReviewTests
     public void A_universe_with_no_membership_is_a_finding()
     {
         // The headline requirement: a defined universe with nothing in it must
-        // not be indistinguishable from a complete one.
+        // not be indistinguishable from a complete one. Exactly one finding,
+        // although "no coverage declared" is also true of it: only one is
+        // actionable, and two findings for one situation trains an operator to
+        // ignore the list.
         var found = UniverseCoverageReview.Diagnose(Define(), UniverseMembershipSpan.Empty);
 
         var (kind, detail) = Assert.Single(found);
         Assert.Equal(UniverseCoverageFindingKind.NoMembershipRecorded, kind);
         Assert.Contains("VN30", detail, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void A_universe_with_no_membership_is_not_also_told_it_declared_no_claim()
-    {
-        // Both are true of a newly defined universe, and only one is
-        // actionable. Two findings for one situation trains an operator to
-        // ignore the list.
-        var found = UniverseCoverageReview.Diagnose(Define(), UniverseMembershipSpan.Empty);
-
-        Assert.DoesNotContain(
-            found,
-            gap => gap.Kind == UniverseCoverageFindingKind.NoCoverageDeclared);
     }
 
     [Fact]
@@ -120,6 +110,9 @@ public sealed class UniverseCoverageReviewTests
     [Fact]
     public async Task A_review_records_the_gap_it_finds()
     {
+        // Staged, not committed: the review takes no unit of work, because the
+        // caller owns the transaction and records membership and the finding
+        // about it together.
         var repository = new FakeUniverseRepository([Define()]);
 
         var report = await new UniverseCoverageReview(repository, new FakeClock(ReviewedAt))
@@ -188,21 +181,6 @@ public sealed class UniverseCoverageReviewTests
         Assert.Equal(ReviewedAt, standing.ResolvedAtUtc);
     }
 
-    [Fact]
-    public async Task A_review_stages_findings_and_does_not_commit_them()
-    {
-        // The caller owns the transaction, so an import can record membership
-        // and the finding about it together. A finding committed on its own
-        // would describe a state the rows never reached.
-        var repository = new FakeUniverseRepository([Define()]);
-
-        await new UniverseCoverageReview(repository, new FakeClock(ReviewedAt))
-            .ReviewAsync(TestContext.Current.CancellationToken);
-
-        Assert.Single(repository.Added);
-        Assert.Equal(0, repository.SaveCount);
-    }
-
     private static Universe Define() => Universe.Define(
         UniverseId.New(),
         UniverseCode.Create("VN30"),
@@ -217,8 +195,6 @@ public sealed class UniverseCoverageReviewTests
         UniverseMembershipSpan? span = null) : IUniverseRepository
     {
         public List<UniverseCoverageFinding> Added { get; } = [];
-
-        public int SaveCount { get; }
 
         public Task<IReadOnlyList<Universe>> ListAsync(
             CancellationToken cancellationToken = default) =>

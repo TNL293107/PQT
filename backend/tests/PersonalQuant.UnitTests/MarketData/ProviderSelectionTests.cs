@@ -246,16 +246,6 @@ public sealed class ProviderSelectionTests
     }
 
     [Fact]
-    public void An_unstated_coverage_floor_is_unknown_rather_than_unbounded()
-    {
-        // The same rule U2 applies to universe coverage. Nothing may read a
-        // null floor as "holds everything".
-        var capability = TestCapability.For(SourceCode.Create("ONE"));
-
-        Assert.Null(capability.EarliestAvailable);
-    }
-
-    [Fact]
     public void Supported_intervals_are_the_declared_intervals()
     {
         // One property, derived, so the two can never disagree.

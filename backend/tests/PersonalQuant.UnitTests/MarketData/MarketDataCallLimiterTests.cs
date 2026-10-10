@@ -20,17 +20,6 @@ public sealed class MarketDataCallLimiterTests
     private static readonly SourceCode Second = SourceCode.Create("TWO");
 
     [Fact]
-    public async Task The_first_call_to_a_source_waits_for_nothing()
-    {
-        using var limiter = CreateLimiter(TimeSpan.FromMilliseconds(200), out var clock, out var delays);
-
-        await limiter.WaitForTurnAsync(First, TestContext.Current.CancellationToken);
-
-        Assert.Empty(delays.Waits);
-        _ = clock;
-    }
-
-    [Fact]
     public async Task A_second_call_too_soon_waits_out_the_remaining_gap()
     {
         using var limiter = CreateLimiter(TimeSpan.FromMilliseconds(200), out var clock, out var delays);

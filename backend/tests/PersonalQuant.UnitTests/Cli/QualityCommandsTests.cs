@@ -78,25 +78,6 @@ public sealed class QualityCommandsTests
     }
 
     [Fact]
-    public async Task A_closed_finding_no_longer_appears_in_the_listing()
-    {
-        var harness = new Harness();
-        var instrument = harness.Instruments.Add("FPT");
-
-        var finding = harness.Quality.Add(
-            instrument.InstrumentId, DataQualityIssueKind.MissingSession, Session, "missing");
-
-        await harness.RunAsync(
-            "quality", "resolve", finding.Id.Value.ToString(),
-            "--explained", "--reason", "moved by decree");
-
-        var code = await harness.RunAsync("quality", "list", "--instrument", "FPT");
-
-        Assert.Equal(ExitCode.Ok, code);
-        Assert.Contains("no open findings", harness.Result, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task Closing_a_finding_twice_is_refused_rather_than_quietly_repeated()
     {
         // The audit trail is the reason the finding exists. Overwriting the

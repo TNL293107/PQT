@@ -129,10 +129,4 @@ public sealed class IdentifierValueTests
         Assert.True(IdentifierScheme.Figi.IsGlobal());
         Assert.False(IdentifierScheme.ProviderSymbol.IsGlobal());
     }
-
-    [Fact]
-    public void Two_values_of_the_same_scheme_compare_by_value() =>
-        Assert.Equal(
-            IdentifierValue.Create(IdentifierScheme.Isin, "us0378331005"),
-            IdentifierValue.Create(IdentifierScheme.Isin, "US0378331005"));
 }

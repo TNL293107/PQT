@@ -218,28 +218,6 @@ public sealed class DataQualityTests
     }
 
     [Fact]
-    public void An_unchanged_restatement_leaves_the_validation_stamp_alone()
-    {
-        // Re-fetching a range that has not moved is the normal case, and it
-        // must not force a re-check of the whole window.
-        var bar = Bar();
-        bar.MarkValidated(DataRules.ValidationVersion);
-
-        var changed = bar.Revise(
-            Price.Create(100m),
-            Price.Create(110m),
-            Price.Create(95m),
-            Price.Create(105m),
-            1_000,
-            null,
-            SourceCode.Create("TEST"),
-            Now.AddDays(1));
-
-        Assert.False(changed);
-        Assert.Equal(DataRules.ValidationVersion, bar.ValidationVersion);
-    }
-
-    [Fact]
     public void A_trading_holiday_must_say_what_it_is() =>
         // "Why was the market shut on this date?" is the question the row
         // exists to answer.

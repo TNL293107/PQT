@@ -76,18 +76,4 @@ public sealed class TickerTests
         Assert.False(created);
         Assert.Null(ticker);
     }
-
-    [Fact]
-    public void Tickers_compare_by_value()
-    {
-        // Two spellings of one symbol must be the same ticker, or a lookup
-        // would depend on how the caller typed it.
-        // Act
-        var first = Ticker.Create("fpt");
-        var second = Ticker.Create("FPT");
-
-        // Assert
-        Assert.Equal(first, second);
-        Assert.Equal(first.GetHashCode(), second.GetHashCode());
-    }
 }

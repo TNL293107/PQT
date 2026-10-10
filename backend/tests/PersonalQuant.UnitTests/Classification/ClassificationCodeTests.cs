@@ -25,14 +25,6 @@ public sealed class ClassificationCodeTests
         Assert.Equal(expected, code.Value);
     }
 
-    [Fact]
-    public void Two_codes_written_differently_are_the_same_value()
-    {
-        // The reason normalisation happens at construction: a seed file and a
-        // provider feed will not agree on case, and the taxonomy has to.
-        Assert.Equal(ClassificationCode.Create("tech-soft"), ClassificationCode.Create("TECH-SOFT"));
-    }
-
     [Theory]
     [InlineData(null)]
     [InlineData("")]

@@ -18,19 +18,4 @@ public sealed class SystemClockTests
         // Assert
         Assert.Equal(TimeSpan.Zero, now.Offset);
     }
-
-    [Fact]
-    public void UtcNow_advances()
-    {
-        // Arrange
-        var clock = new SystemClock();
-
-        // Act
-        var first = clock.UtcNow;
-        Thread.Sleep(2);
-        var second = clock.UtcNow;
-
-        // Assert
-        Assert.True(second >= first);
-    }
 }

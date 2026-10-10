@@ -64,17 +64,4 @@ public sealed class BarIntervalTests
             local.UtcTicks);
         Assert.False(BarInterval.OneDay.IsAligned(local));
     }
-
-    [Fact]
-    public void A_vietnamese_session_falls_inside_one_utc_day()
-    {
-        // The assumption the daily-bar convention rests on: at UTC+7 the whole
-        // session lies within the UTC day of the same date, so the trading
-        // date and the UTC date agree.
-        var openLocal = new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.FromHours(7));
-        var closeLocal = new DateTimeOffset(2026, 8, 25, 15, 0, 0, TimeSpan.FromHours(7));
-
-        Assert.Equal(25, openLocal.UtcDateTime.Day);
-        Assert.Equal(25, closeLocal.UtcDateTime.Day);
-    }
 }

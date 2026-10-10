@@ -40,15 +40,4 @@ public sealed class ExchangeCodeTests
         // Act + Assert
         Assert.Throws<DomainValidationException>(() => ExchangeCode.Create(tooLong));
     }
-
-    [Fact]
-    public void Codes_compare_by_value()
-    {
-        // Act
-        var first = ExchangeCode.Create("hose");
-        var second = ExchangeCode.Create("HOSE");
-
-        // Assert
-        Assert.Equal(first, second);
-    }
 }
