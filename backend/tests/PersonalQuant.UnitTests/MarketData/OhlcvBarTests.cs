@@ -35,22 +35,25 @@ public sealed class OhlcvBarTests
         Assert.Null(bar.RevisedAtUtc);
     }
 
-    [Fact]
-    public void A_high_below_the_low_is_rejected() =>
+    [Theory]
+    [InlineData(100, 90, 95, 98, 1_000, null)]   // high below the low
+    // High below the close: the classic swapped-column failure. It produces a
+    // bar that looks ordinary and prices a period the market never traded at.
+    [InlineData(100, 104, 95, 105, 1_000, null)]
+    [InlineData(100, 110, 101, 105, 1_000, null)] // low above the open
+    [InlineData(100, 110, 95, 105, -1, null)]     // negative volume
+    // Turnover without volume: cash changing hands with nothing traded means
+    // the two fields came from different periods.
+    [InlineData(100, 100, 100, 100, 0, 5_000d)]
+    public void An_inconsistent_bar_is_rejected(
+        decimal open,
+        decimal high,
+        decimal low,
+        decimal close,
+        long volume,
+        double? turnover) =>
         Assert.Throws<DomainValidationException>(
-            () => Record(open: 100m, high: 90m, low: 95m, close: 98m));
-
-    [Fact]
-    public void A_high_below_the_close_is_rejected() =>
-        // The classic swapped-column failure: it produces a bar that looks
-        // ordinary and prices a period the market never traded at.
-        Assert.Throws<DomainValidationException>(
-            () => Record(open: 100m, high: 104m, low: 95m, close: 105m));
-
-    [Fact]
-    public void A_low_above_the_open_is_rejected() =>
-        Assert.Throws<DomainValidationException>(
-            () => Record(open: 100m, high: 110m, low: 101m, close: 105m));
+            () => Record(open, high, low, close, volume, (decimal?)turnover));
 
     [Fact]
     public void A_bar_with_no_volume_is_accepted()
@@ -63,18 +66,6 @@ public sealed class OhlcvBarTests
 
         Assert.Equal(0, bar.Volume);
     }
-
-    [Fact]
-    public void A_negative_volume_is_rejected() =>
-        Assert.Throws<DomainValidationException>(
-            () => Record(open: 100m, high: 110m, low: 95m, close: 105m, volume: -1));
-
-    [Fact]
-    public void Turnover_without_volume_is_rejected() =>
-        // Cash changing hands with nothing traded means the two fields came
-        // from different periods.
-        Assert.Throws<DomainValidationException>(
-            () => Record(open: 100m, high: 100m, low: 100m, close: 100m, volume: 0, turnover: 5_000m));
 
     [Fact]
     public void A_misaligned_opening_instant_is_rejected() =>

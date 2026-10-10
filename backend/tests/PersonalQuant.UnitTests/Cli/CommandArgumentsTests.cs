@@ -121,16 +121,10 @@ public sealed class CommandArgumentsTests
     [Theory]
     [InlineData("provider")]
     [InlineData("--help")]
-    public void A_line_with_no_verb_is_refused(string token)
+    [InlineData]
+    public void A_line_with_no_verb_is_refused(params string[] args)
     {
-        Assert.False(CommandArguments.TryParse([token], out _, out var problem));
-        Assert.NotNull(problem);
-    }
-
-    [Fact]
-    public void An_empty_line_is_refused()
-    {
-        Assert.False(CommandArguments.TryParse([], out _, out var problem));
+        Assert.False(CommandArguments.TryParse(args, out _, out var problem));
         Assert.NotNull(problem);
     }
 

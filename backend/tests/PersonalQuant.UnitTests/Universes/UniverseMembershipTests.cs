@@ -48,14 +48,17 @@ public sealed class UniverseMembershipTests
         Assert.Equal(RecordedAt, membership.RecordedAtUtc);
     }
 
-    [Fact]
-    public void The_interval_is_inclusive_on_the_day_it_opened()
+    [Theory]
+    // Inclusive on the day it opened: a security admitted at the January
+    // review is a constituent for the January session, not from the next one.
+    [InlineData(0, true)]
+    [InlineData(-1, false)]  // the day before is not membership
+    [InlineData(182, true)]  // a running membership covers every later day
+    public void A_running_membership_starts_on_the_day_it_opened(int daysFromAdmission, bool expected)
     {
-        // A security admitted at the January review is a constituent for the
-        // January session, not from the next one.
         var membership = Admit(January);
 
-        Assert.True(membership.WasMemberOn(January));
+        Assert.Equal(expected, membership.WasMemberOn(January.AddDays(daysFromAdmission)));
     }
 
     [Fact]
@@ -69,22 +72,6 @@ public sealed class UniverseMembershipTests
 
         Assert.True(membership.WasMemberOn(July.AddDays(-1)));
         Assert.False(membership.WasMemberOn(July));
-    }
-
-    [Fact]
-    public void A_day_before_the_interval_is_not_membership()
-    {
-        var membership = Admit(January);
-
-        Assert.False(membership.WasMemberOn(January.AddDays(-1)));
-    }
-
-    [Fact]
-    public void A_running_membership_covers_every_later_day()
-    {
-        var membership = Admit(January);
-
-        Assert.True(membership.WasMemberOn(July));
     }
 
     [Fact]
