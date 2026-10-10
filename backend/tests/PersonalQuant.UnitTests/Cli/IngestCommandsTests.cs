@@ -73,6 +73,40 @@ public sealed class IngestCommandsTests
     }
 
     [Fact]
+    public async Task A_run_reports_the_last_session_included_rather_than_the_exclusive_end()
+    {
+        // The run records its range half-open, so a --to of 7 January is stored
+        // as midnight on the 8th. Printed as is, the report named a day the
+        // operator never asked for and the run never fetched.
+        var harness = new Harness();
+        harness.Instruments.Add("FPT");
+        harness.Ingestion.Then(instruction => Succeeded(instruction, stored: 9, to: instruction.ToUtc));
+
+        await harness.RunAsync(
+            "ingest", "run", "--instrument", "FPT", "--from", "2021-12-27", "--to", "2022-01-07");
+
+        Assert.Contains("2021-12-27 to 2022-01-07", harness.Result, StringComparison.Ordinal);
+        Assert.DoesNotContain("2022-01-08", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_end_part_way_through_a_day_is_reported_as_the_instant_it_stops_before()
+    {
+        // An intraday window can stop mid-session. Rounding that to a date would
+        // claim either a session it did not finish or drop one it started.
+        var harness = new Harness();
+        harness.Instruments.Add("FPT");
+        harness.Ingestion.Then(instruction => Succeeded(
+            instruction,
+            stored: 4,
+            to: new DateTimeOffset(2022, 1, 7, 6, 30, 0, TimeSpan.Zero)));
+
+        await harness.RunAsync("ingest", "run", "--instrument", "FPT", "--from", "2021-12-27");
+
+        Assert.Contains("2021-12-27 to before 2022-01-07 06:30Z", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_date_becomes_midnight_utc_rather_than_the_operators_own_zone()
     {
         // A range boundary read in the shell's local zone would cover a
@@ -318,10 +352,11 @@ public sealed class IngestCommandsTests
     private static IngestionRun Succeeded(
         IngestionInstruction instruction,
         int stored,
-        DateTimeOffset? from = null)
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null)
     {
         var fromUtc = instruction.FromUtc ?? from ?? Start;
-        var run = Begin(instruction, fromUtc);
+        var run = Begin(instruction, fromUtc, to);
 
         run.Succeed(
             new IngestionCounts(stored, stored, 0, stored, 0),
@@ -341,13 +376,16 @@ public sealed class IngestCommandsTests
         return run;
     }
 
-    private static IngestionRun Begin(IngestionInstruction instruction, DateTimeOffset fromUtc) =>
+    private static IngestionRun Begin(
+        IngestionInstruction instruction,
+        DateTimeOffset fromUtc,
+        DateTimeOffset? toUtc = null) =>
         IngestionRun.Start(
             instruction.Source ?? Source,
             instruction.InstrumentId,
             instruction.Interval,
             fromUtc,
-            fromUtc.AddDays(100),
+            toUtc ?? fromUtc.AddDays(100),
             fromUtc);
 
     /// <summary>Wires the command class over in-memory services.</summary>

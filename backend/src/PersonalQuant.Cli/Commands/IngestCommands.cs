@@ -455,7 +455,7 @@ internal sealed class IngestCommands(
     {
         var range = string.Create(
             CultureInfo.InvariantCulture,
-            $"{run.RequestedFromUtc:yyyy-MM-dd} to {run.RequestedToUtc:yyyy-MM-dd}");
+            $"{run.RequestedFromUtc:yyyy-MM-dd} to {DescribeEnd(run.RequestedToUtc)}");
 
         output.Line(
             $"{ticker} {BarIntervalParser.Describe(run.Interval)} {run.Source} {range} "
@@ -506,6 +506,26 @@ internal sealed class IngestCommands(
     /// </remarks>
     private static DateTimeOffset? EndInstant(DateOnly? date) =>
         date is { } value ? ToInstant(value.AddDays(1)) : null;
+
+    /// <summary>
+    /// Names a run's exclusive end the way the operator typed it: as the last
+    /// day included.
+    /// </summary>
+    /// <remarks>
+    /// The inverse of <see cref="EndInstant"/>. A run stores its range
+    /// half-open, so the end printed as a date was the day after --to, a day
+    /// the run never fetched. An end that is not midnight UTC - an intraday
+    /// window stopping part-way through a session - has no last whole day, and
+    /// is printed as the instant it stops before instead of being rounded.
+    /// </remarks>
+    private static string DescribeEnd(DateTimeOffset exclusiveEnd)
+    {
+        var utc = exclusiveEnd.ToUniversalTime();
+
+        return utc.TimeOfDay == TimeSpan.Zero
+            ? utc.AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : utc.ToString("'before 'yyyy-MM-dd HH:mm'Z'", CultureInfo.InvariantCulture);
+    }
 
     /// <summary>What both verbs read from the command line in common.</summary>
     /// <param name="Interval">The resolution.</param>
