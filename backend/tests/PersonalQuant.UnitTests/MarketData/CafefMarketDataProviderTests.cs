@@ -32,6 +32,11 @@ public sealed class CafefMarketDataProviderTests
     [Fact]
     public async Task A_row_becomes_a_bar_with_prices_scaled_out_of_thousands()
     {
+        // The close is the raw one (47.7), not the adjusted one beside it
+        // (8.53): the single most important line in this adapter. Both columns
+        // are in every row; taking the adjusted one would store a series this
+        // system then adjusts a second time, and the result stays plausible
+        // while being wrong by the product of every factor since.
         var provider = Provider(Page(Row("24/05/2016", 47.9, 48, 47.7, 47.7, 8.53, 100, 20)));
 
         var result = await provider.FetchBarsAsync(Request(), TestContext.Current.CancellationToken);
@@ -43,20 +48,6 @@ public sealed class CafefMarketDataProviderTests
         Assert.Equal(48_000m, bar.High);
         Assert.Equal(47_700m, bar.Low);
         Assert.Equal(47_700m, bar.Close);
-    }
-
-    [Fact]
-    public async Task The_raw_close_is_taken_and_the_adjusted_one_beside_it_is_not()
-    {
-        // The single most important line in this adapter. Both columns are in
-        // every row; taking the adjusted one would store a series this system
-        // then adjusts a second time, and the result stays plausible while being
-        // wrong by the product of every factor since.
-        var provider = Provider(Page(Row("24/05/2016", 47.9, 48, 47.7, 47.7, 8.53, 100, 0)));
-
-        var result = await provider.FetchBarsAsync(Request(), TestContext.Current.CancellationToken);
-
-        Assert.Equal(47_700m, Assert.Single(result.Bars).Close);
     }
 
     [Fact]

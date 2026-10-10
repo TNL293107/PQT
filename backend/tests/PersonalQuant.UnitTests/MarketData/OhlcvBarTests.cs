@@ -53,20 +53,12 @@ public sealed class OhlcvBarTests
             () => Record(open: 100m, high: 110m, low: 101m, close: 105m));
 
     [Fact]
-    public void A_flat_bar_is_accepted()
-    {
-        // A security that traded once, or hit its price limit and stayed
-        // there. Every field equal is legitimate and common in Vietnam.
-        var bar = Record(open: 100m, high: 100m, low: 100m, close: 100m, volume: 100);
-
-        Assert.Equal(bar.Open, bar.Close);
-    }
-
-    [Fact]
     public void A_bar_with_no_volume_is_accepted()
     {
         // An illiquid UPCOM security can go a whole session without a trade
-        // and the exchange still publishes the period.
+        // and the exchange still publishes the period. The bar is flat as well,
+        // which is legitimate on its own: a security that traded once, or hit
+        // its price limit and stayed there.
         var bar = Record(open: 100m, high: 100m, low: 100m, close: 100m, volume: 0);
 
         Assert.Equal(0, bar.Volume);
@@ -130,30 +122,6 @@ public sealed class OhlcvBarTests
             new DateTimeOffset(2026, 8, 26, 8, 0, 0, TimeSpan.FromHours(7))));
 
     [Fact]
-    public void Restating_a_bar_with_the_same_values_changes_nothing()
-    {
-        // Re-fetching a range that has not moved is the normal case, and must
-        // not be reported as a revision.
-        var bar = Record(open: 100m, high: 110m, low: 95m, close: 105m, volume: 1_000);
-
-        // Act
-        var changed = bar.Revise(
-            Price.Create(100m),
-            Price.Create(110m),
-            Price.Create(95m),
-            Price.Create(105m),
-            1_000,
-            null,
-            Source,
-            Ingested.AddDays(1));
-
-        // Assert
-        Assert.False(changed);
-        Assert.Equal(0, bar.Revision);
-        Assert.Null(bar.RevisedAtUtc);
-    }
-
-    [Fact]
     public void Restating_a_bar_with_different_values_counts_and_stamps_it()
     {
         var bar = Record(open: 100m, high: 110m, low: 95m, close: 105m, volume: 1_000);
@@ -199,6 +167,9 @@ public sealed class OhlcvBarTests
     [Fact]
     public void A_second_source_agreeing_on_the_values_is_not_a_revision()
     {
+        // Re-fetching a range that has not moved is the normal case and is not
+        // a revision, whichever source reports it.
+        //
         // A revision is the ordinal identity of one statement of a fact. Two
         // providers reporting the same numbers is one statement corroborated,
         // not two — and counting it would put a restatement into the

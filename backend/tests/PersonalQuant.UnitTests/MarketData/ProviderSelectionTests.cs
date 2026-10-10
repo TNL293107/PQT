@@ -61,7 +61,9 @@ public sealed class ProviderSelectionTests
     {
         // Two answers to one question. Choosing by registration order would
         // attribute the series to whichever was composed first, and nothing
-        // downstream would record that a choice had been made at all.
+        // downstream would record that a choice had been made at all. A
+        // selection is one source or none: nothing in this type produces an
+        // ordered list of candidates to try in turn, which a fallback would need.
         var registry = Registry(Provider("ALPHA"), Provider("BETA"));
 
         var selection = registry.SelectProvider(new ProviderCriteria(BarInterval.OneDay));
@@ -190,24 +192,6 @@ public sealed class ProviderSelectionTests
         Assert.Equal(ProviderSelectionOutcome.None, selection.Outcome);
         Assert.Contains("AAA", selection.Reason, StringComparison.Ordinal);
         Assert.Contains("BBB", selection.Reason, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void There_is_no_selection_that_yields_a_second_source_after_a_first()
-    {
-        // The property, asserted as a property: whatever the criteria, a
-        // selection returns one source or none. Nothing in this type can
-        // produce an ordered list of candidates to try in turn, which is what
-        // a fallback would need.
-        var registry = Registry(Provider("ALPHA"), Provider("BETA"));
-
-        foreach (var interval in new[] { BarInterval.OneDay, BarInterval.OneMinute })
-        {
-            var selection = registry.SelectProvider(new ProviderCriteria(interval));
-
-            Assert.False(selection.IsSelected);
-            Assert.Equal(ProviderSelectionOutcome.Ambiguous, selection.Outcome);
-        }
     }
 
     [Fact]

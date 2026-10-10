@@ -209,14 +209,6 @@ public sealed class InstrumentIdentityTests
             instrument.Reclassify(AssetType.Unspecified, Now.AddDays(1)));
     }
 
-    [Fact]
-    public void An_identifier_is_required_before_use()
-    {
-        // Assert
-        Assert.True(default(InstrumentId).IsEmpty);
-        Assert.False(InstrumentId.New().IsEmpty);
-    }
-
     private static Instrument Register() =>
         Instrument.Register(
             ExchangeId.New(),

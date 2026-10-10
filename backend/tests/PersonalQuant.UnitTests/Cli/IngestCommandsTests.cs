@@ -48,6 +48,12 @@ public sealed class IngestCommandsTests
         Assert.Equal(Source, instruction.Source);
         Assert.Equal(Start, instruction.FromUtc);
         Assert.Null(instruction.ToUtc);
+
+        // Midnight UTC rather than the shell's own zone, which would cover a
+        // different set of sessions depending on where the operator sat.
+        // Asserted separately: DateTimeOffset equality compares instants and
+        // ignores the offset.
+        Assert.Equal(TimeSpan.Zero, instruction.FromUtc!.Value.Offset);
     }
 
     [Theory]
@@ -104,25 +110,6 @@ public sealed class IngestCommandsTests
         await harness.RunAsync("ingest", "run", "--instrument", "FPT", "--from", "2021-12-27");
 
         Assert.Contains("2021-12-27 to before 2022-01-07 06:30Z", harness.Result, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task A_date_becomes_midnight_utc_rather_than_the_operators_own_zone()
-    {
-        // A range boundary read in the shell's local zone would cover a
-        // different set of sessions depending on where the operator was sitting,
-        // and the run would record a range nobody asked for.
-        var harness = new Harness();
-        harness.Instruments.Add("FPT");
-        harness.Ingestion.Then(instruction => Succeeded(instruction, stored: 1));
-
-        await harness.RunAsync(
-            "ingest", "run", "--instrument", "FPT", "--from", "2021-12-27");
-
-        var instruction = Assert.Single(harness.Ingestion.Instructions);
-
-        Assert.Equal(TimeSpan.Zero, instruction.FromUtc!.Value.Offset);
-        Assert.Equal(new TimeOnly(0, 0), TimeOnly.FromDateTime(instruction.FromUtc.Value.DateTime));
     }
 
     [Fact]

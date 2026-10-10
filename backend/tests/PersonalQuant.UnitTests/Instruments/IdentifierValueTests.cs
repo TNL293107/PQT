@@ -46,6 +46,9 @@ public sealed class IdentifierValueTests
     [InlineData("1S0378331005")]   // country prefix is not two letters
     [InlineData("US03783310X5")]   // check position is not a digit
     [InlineData("US0378-331005")]  // punctuation
+    // A valid FIGI. The same twelve characters cannot say which scheme was
+    // intended, which is why a value and its scheme travel together.
+    [InlineData("BBG000BLNNH6")]
     [InlineData(null)]
     [InlineData("")]
     public void A_malformed_isin_is_rejected(string? value)
@@ -72,15 +75,6 @@ public sealed class IdentifierValueTests
     [InlineData("BBG000BLNNH")]   // too short
     public void A_malformed_figi_is_rejected(string value) =>
         Assert.False(IdentifierValue.TryCreate(IdentifierScheme.Figi, value, out _, out _));
-
-    [Fact]
-    public void A_figi_and_an_isin_are_not_interchangeable()
-    {
-        // The same twelve characters cannot say which scheme was intended,
-        // which is why the value and its scheme travel together.
-        Assert.True(IdentifierValue.TryCreate(IdentifierScheme.Figi, "BBG000BLNNH6", out _, out _));
-        Assert.False(IdentifierValue.TryCreate(IdentifierScheme.Isin, "BBG000BLNNH6", out _, out _));
-    }
 
     [Theory]
     [InlineData("FPT", "FPT")]

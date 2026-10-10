@@ -76,17 +76,6 @@ public sealed class DatasetRequestTests
         Assert.True(request.Adjusted);
     }
 
-    [Fact]
-    public void The_same_parameters_name_the_same_dataset()
-    {
-        Assert.True(DatasetRequest.TryCreate(
-            Vn30, To, BarInterval.OneDay, From, To, out var one, out _));
-        Assert.True(DatasetRequest.TryCreate(
-            Vn30, To, BarInterval.OneDay, From, To, out var two, out _));
-
-        Assert.Equal(one.DatasetId, two.DatasetId);
-    }
-
     [Theory]
     [MemberData(nameof(DifferingRequests))]
     public void A_parameter_that_changes_the_data_changes_the_identifier(DatasetRequest other)

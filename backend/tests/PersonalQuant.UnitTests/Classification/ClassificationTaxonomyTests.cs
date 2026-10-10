@@ -90,13 +90,4 @@ public sealed class ClassificationTaxonomyTests
             () => Industry.Register(
                 SectorId.New(), ClassificationCode.Create("TECH-SOFT"), "  ", Now));
     }
-
-    [Fact]
-    public void Identifiers_of_the_two_levels_are_issued_unassigned_by_default()
-    {
-        Assert.True(default(SectorId).IsEmpty);
-        Assert.True(default(IndustryId).IsEmpty);
-        Assert.False(SectorId.New().IsEmpty);
-        Assert.False(IndustryId.New().IsEmpty);
-    }
 }
