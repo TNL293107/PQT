@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using PersonalQuant.Application.MarketData;
 
 namespace PersonalQuant.IntegrationTests;
 
@@ -11,7 +14,12 @@ namespace PersonalQuant.IntegrationTests;
 /// environment.
 /// </summary>
 /// <param name="settings">Configuration entries to apply.</param>
-public sealed class PersonalQuantApiFactory(IReadOnlyDictionary<string, string?> settings)
+/// <param name="marketDataProvider">
+/// A source registered beside whatever the configuration names, or null.
+/// </param>
+public sealed class PersonalQuantApiFactory(
+    IReadOnlyDictionary<string, string?> settings,
+    IMarketDataProvider? marketDataProvider = null)
     : WebApplicationFactory<Program>
 {
     /// <summary>
@@ -95,6 +103,25 @@ public sealed class PersonalQuantApiFactory(IReadOnlyDictionary<string, string?>
         return new PersonalQuantApiFactory(settings);
     }
 
+    /// <summary>
+    /// Creates a factory pointed at real dependencies, with one more market data
+    /// source registered.
+    /// </summary>
+    /// <remarks>
+    /// The source goes in beside the configured ones, through the same
+    /// registration the provider registry reads, so the pipeline selects it by
+    /// code exactly as it would a vendor's. Nothing else is replaced.
+    /// </remarks>
+    /// <param name="postgres">PostgreSQL connection details.</param>
+    /// <param name="redis">Redis connection details.</param>
+    /// <param name="provider">The source to add.</param>
+    /// <returns>A configured factory.</returns>
+    public static PersonalQuantApiFactory WithMarketDataProvider(
+        (string Host, int Port, string Database, string Username, string Password) postgres,
+        (string Host, int Port) redis,
+        IMarketDataProvider provider) =>
+        new(BaseSettings(postgres, redis, applyMigrations: true), provider);
+
     /// <inheritdoc />
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -114,5 +141,10 @@ public sealed class PersonalQuantApiFactory(IReadOnlyDictionary<string, string?>
 
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(settings));
+
+        if (marketDataProvider is not null)
+        {
+            builder.ConfigureTestServices(services => services.AddSingleton(marketDataProvider));
+        }
     }
 }
