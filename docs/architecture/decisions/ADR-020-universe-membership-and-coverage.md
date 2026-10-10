@@ -119,6 +119,13 @@ so the history does not have to be re-sourced then. This mirrors
 `corporate_actions.announced_on`, which is in the same state for the same
 reason.
 
+*Amended 2026-10-10.* `announced_on` is the **admission** announcement. A
+removal's announcement is a second event and has its own column,
+`removal_announced_on`; one column for both let the departure's notice
+overwrite the admission's date. Both are recorded and not read. A later import
+may fill a blank date but not re-date a recorded one. See
+[`universe-csv.md`](../../../data/schemas/universe-csv.md).
+
 ## Alternatives
 
 **Membership as a column on the instrument** (`is_vn30`). Rejected outright: it

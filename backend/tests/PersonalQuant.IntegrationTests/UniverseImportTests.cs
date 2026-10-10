@@ -140,7 +140,9 @@ public sealed class UniverseImportTests(DependencyContainerFixture containers) :
     public async Task A_departure_reported_later_closes_the_open_spell()
     {
         // How a removal actually arrives: the security was a member with no end
-        // date, and the next review notice says when it left.
+        // date, and the next review notice says when it left and when that was
+        // published. The departure's notice date is its own column: written
+        // into announced_on, it used to stand in for the admission's.
         Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
 
         WriteUniverses("code,name,kind,coverage_from,coverage_until", "UID,Import D,Index,2026-01-02,");
@@ -149,12 +151,12 @@ public sealed class UniverseImportTests(DependencyContainerFixture containers) :
             "UID,UIE.HM,2026-01-02,,");
 
         await using var scope = await CreateScopeAsync();
-        await AddInstrumentAsync(scope, "UIE", "UIEE", "UIE.HM");
+        var instrumentId = await AddInstrumentAsync(scope, "UIE", "UIEE", "UIE.HM");
         await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
 
         WriteMemberships(
-            "universe_code,symbol,effective_from,effective_to,announced_on",
-            "UID,UIE.HM,2026-01-02,2026-07-01,2026-06-15");
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UID,UIE.HM,2026-01-02,2026-07-01,,2026-06-15");
 
         // Act
         await using var second = await CreateScopeAsync();
@@ -162,8 +164,13 @@ public sealed class UniverseImportTests(DependencyContainerFixture containers) :
 
         // Assert
         Assert.Equal(1, report.SpellsClosed);
+        Assert.Equal(0, report.Rejected);
 
         await using var reader = await CreateScopeAsync();
+        var spell = await ReadSpellAsync(reader, "UID", instrumentId);
+        Assert.Null(spell.AnnouncedOn);
+        Assert.Equal(new DateOnly(2026, 6, 15), spell.RemovalAnnouncedOn);
+
         var code = UniverseCode.Create("UID");
 
         var before = await reader.Catalog.ConstituentsAsOfAsync(
@@ -173,6 +180,240 @@ public sealed class UniverseImportTests(DependencyContainerFixture containers) :
 
         Assert.Single(before.Members);
         Assert.Empty(after.Members);
+    }
+
+    [Fact]
+    public async Task A_re_dated_admission_announcement_is_refused_rather_than_dropped()
+    {
+        // The import used to compare spells by their dates of effect alone, so
+        // a later file that moved the announcement was counted as unchanged and
+        // the new date vanished. Refused instead, with the row's other news:
+        // the close it carries is not applied either, because a row is applied
+        // whole or not at all.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAN,Import AN,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on",
+            "UAN,UAN.HM,2026-01-02,,2025-12-15");
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "UAN", "UANN", "UAN.HM");
+        await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on",
+            "UAN,UAN.HM,2026-01-02,2026-07-01,2025-12-18");
+
+        // Act
+        await using var second = await CreateScopeAsync();
+        var report = await second.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var rejection = Assert.Single(report.Rejections);
+        Assert.Equal(
+            UniverseMembershipRejectionReason.ContradictsRecordedAnnouncement,
+            rejection.Reason);
+        Assert.Contains("2025-12-15", rejection.Detail, StringComparison.Ordinal);
+        Assert.Equal(0, report.SpellsClosed);
+
+        await using var reader = await CreateScopeAsync();
+        var spell = await ReadSpellAsync(reader, "UAN", instrumentId);
+
+        Assert.Equal(new DateOnly(2025, 12, 15), spell.AnnouncedOn);
+        Assert.Null(spell.EffectiveTo);
+    }
+
+    [Fact]
+    public async Task An_announcement_sourced_later_fills_the_blank()
+    {
+        // A blank is "not sourced", not "never announced". Sourcing it later
+        // adds knowledge and contradicts nothing, so it is recorded and counted.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAO,Import AO,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on",
+            "UAO,UAO.HM,2026-01-02,2026-07-01,");
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "UAO", "UAOO", "UAO.HM");
+        await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UAO,UAO.HM,2026-01-02,2026-07-01,2025-12-15,2026-06-15");
+
+        // Act
+        await using var second = await CreateScopeAsync();
+        var report = await second.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, report.AnnouncementsRecorded);
+        Assert.Equal(0, report.Unchanged);
+        Assert.Equal(0, report.Rejected);
+
+        await using var reader = await CreateScopeAsync();
+        var spell = await ReadSpellAsync(reader, "UAO", instrumentId);
+
+        Assert.Equal(new DateOnly(2025, 12, 15), spell.AnnouncedOn);
+        Assert.Equal(new DateOnly(2026, 6, 15), spell.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public async Task A_row_that_omits_a_recorded_announcement_leaves_it_alone()
+    {
+        // An empty cell states nothing. Reading it as "no longer announced"
+        // would let a file that simply lacks the column erase what was sourced.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAP,Import AP,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on",
+            "UAP,UAP.HM,2026-01-02,,2025-12-15");
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "UAP", "UAPP", "UAP.HM");
+        await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        WriteMemberships(
+            "universe_code,symbol,effective_from",
+            "UAP,UAP.HM,2026-01-02");
+
+        // Act
+        await using var second = await CreateScopeAsync();
+        var report = await second.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.Unchanged);
+        Assert.Equal(0, report.Rejected);
+
+        await using var reader = await CreateScopeAsync();
+        var spell = await ReadSpellAsync(reader, "UAP", instrumentId);
+        Assert.Equal(new DateOnly(2025, 12, 15), spell.AnnouncedOn);
+    }
+
+    [Fact]
+    public async Task A_re_dated_removal_announcement_is_refused()
+    {
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAR,Import AR,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UAR,UAR.HM,2026-01-02,2026-07-01,,2026-06-15");
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "UAR", "UARR", "UAR.HM");
+        await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UAR,UAR.HM,2026-01-02,2026-07-01,,2026-06-18");
+
+        // Act
+        await using var second = await CreateScopeAsync();
+        var report = await second.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            UniverseMembershipRejectionReason.ContradictsRecordedAnnouncement,
+            Assert.Single(report.Rejections).Reason);
+
+        await using var reader = await CreateScopeAsync();
+        var spell = await ReadSpellAsync(reader, "UAR", instrumentId);
+
+        Assert.Equal(new DateOnly(2026, 6, 15), spell.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public async Task Restating_recorded_announcements_changes_nothing()
+    {
+        // Idempotence with both dates present: a second run of the same file is
+        // unchanged, and is not counted as recording anything.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAS,Import AS,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UAS,UAS.HM,2026-01-02,2026-07-01,2025-12-15,2026-06-15");
+
+        await using var scope = await CreateScopeAsync();
+        await AddInstrumentAsync(scope, "UAS", "UASS", "UAS.HM");
+        await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await using var second = await CreateScopeAsync();
+        var report = await second.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.Unchanged);
+        Assert.Equal(0, report.AnnouncementsRecorded);
+        Assert.Equal(0, report.Rejected);
+    }
+
+    [Fact]
+    public async Task A_close_that_also_sources_the_admission_date_counts_both()
+    {
+        // The close carries its own removal date, which belongs to the close.
+        // The admission date it fills in was a blank on a held spell, and is
+        // counted as recorded.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAT,Import AT,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on",
+            "UAT,UAT.HM,2026-01-02,,");
+
+        await using var scope = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(scope, "UAT", "UATT", "UAT.HM");
+        await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UAT,UAT.HM,2026-01-02,2026-07-01,2025-12-15,2026-06-15");
+
+        // Act
+        await using var second = await CreateScopeAsync();
+        var report = await second.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.SpellsClosed);
+        Assert.Equal(1, report.AnnouncementsRecorded);
+        Assert.Equal(0, report.Unchanged);
+
+        await using var reader = await CreateScopeAsync();
+        var spell = await ReadSpellAsync(reader, "UAT", instrumentId);
+
+        Assert.Equal(new DateOnly(2025, 12, 15), spell.AnnouncedOn);
+        Assert.Equal(new DateOnly(2026, 7, 1), spell.EffectiveTo);
+        Assert.Equal(new DateOnly(2026, 6, 15), spell.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public async Task A_removal_announced_for_a_spell_with_no_end_is_refused()
+    {
+        // Either the end is missing from the row or the date belongs in
+        // announced_on. Both are transcription errors, and guessing which would
+        // record a departure nobody sourced.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        WriteUniverses("code,name,kind,coverage_from,coverage_until", "UAQ,Import AQ,Index,2026-01-02,");
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,announced_on,removal_announced_on",
+            "UAQ,UAQ.HM,2026-01-02,,,2026-06-15");
+
+        await using var scope = await CreateScopeAsync();
+        await AddInstrumentAsync(scope, "UAQ", "UAQQ", "UAQ.HM");
+
+        // Act
+        var report = await scope.Import.ImportAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.SpellsCreated);
+        Assert.Equal(
+            UniverseMembershipRejectionReason.RemovalAnnouncedWithoutEnd,
+            Assert.Single(report.Rejections).Reason);
     }
 
     [Fact]
@@ -325,7 +566,21 @@ public sealed class UniverseImportTests(DependencyContainerFixture containers) :
     private void WriteMemberships(params string[] lines) =>
         File.WriteAllLines(Path.Combine(_directory, "universe-memberships.csv"), lines);
 
-    private static async Task AddInstrumentAsync(
+    private static async Task<UniverseMembership> ReadSpellAsync(
+        UniverseImportScope scope,
+        string universeCode,
+        InstrumentId instrumentId)
+    {
+        var universe = await scope.Universes.FindByCodeAsync(
+            UniverseCode.Create(universeCode), TestContext.Current.CancellationToken);
+
+        Assert.NotNull(universe);
+
+        return Assert.Single(await scope.Universes.ListSpellsForUpdateAsync(
+            universe.Id, instrumentId, TestContext.Current.CancellationToken));
+    }
+
+    private static async Task<InstrumentId> AddInstrumentAsync(
         UniverseImportScope scope,
         string venueCode,
         string ticker,
@@ -359,6 +614,8 @@ public sealed class UniverseImportTests(DependencyContainerFixture containers) :
             RecordedAt));
 
         await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return instrument.Id;
     }
 
     private async Task<UniverseImportScope> CreateScopeAsync()

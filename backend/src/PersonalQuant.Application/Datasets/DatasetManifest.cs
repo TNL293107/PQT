@@ -50,8 +50,10 @@ public sealed record DatasetInstrument(
 /// was still a member at the window's end.
 /// </param>
 /// <param name="AnnouncedOn">
-/// When the change was published, when known. A strategy that trades the
-/// inclusion before this date is looking ahead.
+/// When the admission was published, when known. A strategy that trades the
+/// inclusion before this date is looking ahead. The removal's announcement is
+/// recorded on the membership but not carried into the manifest: doing so
+/// changes the manifest and its hash, and is a decision of its own.
 /// </param>
 public sealed record DatasetSpell(DateOnly From, DateOnly? Until, DateOnly? AnnouncedOn);
 

@@ -249,6 +249,88 @@ public sealed class UniverseMembershipTests
             new DateTimeOffset(2026, 8, 30, 10, 0, 0, TimeSpan.FromHours(7))));
     }
 
+    [Fact]
+    public void A_removal_records_its_own_announcement_and_leaves_the_admissions_alone()
+    {
+        // Two events, two dates. The admission announcement of January says
+        // nothing about when the market was told of the July departure, and a
+        // single column holding both made one overwrite the other.
+        var membership = UniverseMembership.Admit(
+            Vn30, Security, January, announcedOn: new DateOnly(2025, 12, 20), Source, RecordedAt);
+
+        // Act
+        membership.Remove(July, announcedOn: new DateOnly(2026, 6, 20));
+
+        // Assert
+        Assert.Equal(new DateOnly(2025, 12, 20), membership.AnnouncedOn);
+        Assert.Equal(new DateOnly(2026, 6, 20), membership.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public void A_removal_without_an_announcement_leaves_it_unknown()
+    {
+        var membership = Admit(January);
+
+        membership.Remove(July);
+
+        Assert.Null(membership.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public void An_announcement_that_was_unknown_can_be_recorded_once_it_is_sourced()
+    {
+        // A blank means nobody had sourced the date, not that there was none.
+        // Filling it in adds knowledge and contradicts nothing.
+        var membership = Admit(January);
+        membership.Remove(July);
+
+        // Act
+        var admission = membership.RecordAdmissionAnnouncement(new DateOnly(2025, 12, 20));
+        var removal = membership.RecordRemovalAnnouncement(new DateOnly(2026, 6, 20));
+
+        // Assert
+        Assert.True(admission);
+        Assert.True(removal);
+        Assert.Equal(new DateOnly(2025, 12, 20), membership.AnnouncedOn);
+        Assert.Equal(new DateOnly(2026, 6, 20), membership.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public void Restating_the_recorded_announcement_changes_nothing()
+    {
+        var membership = UniverseMembership.Admit(
+            Vn30, Security, January, announcedOn: new DateOnly(2025, 12, 20), Source, RecordedAt);
+
+        Assert.False(membership.RecordAdmissionAnnouncement(new DateOnly(2025, 12, 20)));
+    }
+
+    [Fact]
+    public void A_recorded_announcement_is_not_rewritten()
+    {
+        // The date decides whether trading the change was possible. A strict
+        // as-of read already given one date would silently get another, so a
+        // different date is a contradiction to report, not an update to apply.
+        var membership = UniverseMembership.Admit(
+            Vn30, Security, January, announcedOn: new DateOnly(2025, 12, 20), Source, RecordedAt);
+        membership.Remove(July, announcedOn: new DateOnly(2026, 6, 20));
+
+        Assert.Throws<DomainStateException>(
+            () => membership.RecordAdmissionAnnouncement(new DateOnly(2025, 12, 22)));
+        Assert.Throws<DomainStateException>(
+            () => membership.RecordRemovalAnnouncement(new DateOnly(2026, 6, 22)));
+        Assert.Equal(new DateOnly(2025, 12, 20), membership.AnnouncedOn);
+        Assert.Equal(new DateOnly(2026, 6, 20), membership.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public void A_running_membership_has_no_removal_to_announce()
+    {
+        var membership = Admit(January);
+
+        Assert.Throws<DomainStateException>(
+            () => membership.RecordRemovalAnnouncement(new DateOnly(2026, 6, 20)));
+    }
+
     private static UniverseMembership Admit(DateOnly effectiveFrom) =>
         UniverseMembership.Admit(Vn30, Security, effectiveFrom, announcedOn: null, Source, RecordedAt);
 }

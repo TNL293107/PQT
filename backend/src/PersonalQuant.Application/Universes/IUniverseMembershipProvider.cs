@@ -89,7 +89,8 @@ public sealed record ProviderUniverseMembership(
     string Symbol,
     DateOnly EffectiveFrom,
     DateOnly? EffectiveTo = null,
-    DateOnly? AnnouncedOn = null);
+    DateOnly? AnnouncedOn = null,
+    DateOnly? RemovalAnnouncedOn = null);
 
 /// <summary>
 /// Why a membership row could not be recorded.
@@ -129,6 +130,20 @@ public enum UniverseMembershipRejectionReason
 
     /// <summary>The same spell appeared more than once in one import.</summary>
     DuplicateWithinImport = 6,
+
+    /// <summary>
+    /// The row dates an admission or removal announcement differently from the
+    /// date already recorded for it.
+    /// </summary>
+    /// <remarks>
+    /// The date decides whether trading the change was possible, so a strict
+    /// as-of read already given one date must not silently be given another.
+    /// A blank in the row states nothing and contradicts nothing.
+    /// </remarks>
+    ContradictsRecordedAnnouncement = 7,
+
+    /// <summary>The row dates a removal announcement for a spell it does not end.</summary>
+    RemovalAnnouncedWithoutEnd = 8,
 }
 
 /// <summary>One membership row that was refused, and why.</summary>
@@ -150,6 +165,12 @@ public sealed record UniverseMembershipRejection(
 /// <param name="SpellsCreated">Spells recorded for the first time.</param>
 /// <param name="SpellsClosed">Open spells the source reported as ended.</param>
 /// <param name="Unchanged">Spells already held exactly as reported.</param>
+/// <param name="AnnouncementsRecorded">
+/// Blank announcement dates on a held spell that are now recorded. A removal
+/// announcement that arrives with the close it announces is part of that
+/// close, counted under <paramref name="SpellsClosed"/>: until the close, the
+/// spell had no removal for the date to be missing from.
+/// </param>
 /// <param name="Rejections">Rows that were refused, with reasons.</param>
 /// <param name="Coverage">What the coverage review found afterwards.</param>
 public sealed record UniverseImportReport(
@@ -160,6 +181,7 @@ public sealed record UniverseImportReport(
     int SpellsCreated,
     int SpellsClosed,
     int Unchanged,
+    int AnnouncementsRecorded,
     IReadOnlyList<UniverseMembershipRejection> Rejections,
     UniverseCoverageReport Coverage)
 {

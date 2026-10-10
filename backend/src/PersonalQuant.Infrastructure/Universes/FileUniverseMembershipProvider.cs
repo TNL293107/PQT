@@ -53,6 +53,7 @@ internal sealed class FileUniverseMembershipProvider(string directoryPath)
     private const string EffectiveFromColumn = "effective_from";
     private const string EffectiveToColumn = "effective_to";
     private const string AnnouncedOnColumn = "announced_on";
+    private const string RemovalAnnouncedOnColumn = "removal_announced_on";
 
     private static readonly string[] RequiredUniverseColumns = [CodeColumn, NameColumn, KindColumn];
 
@@ -118,7 +119,8 @@ internal sealed class FileUniverseMembershipProvider(string directoryPath)
                 Read(header, fields, SymbolColumn) ?? string.Empty,
                 from,
                 ReadDate(header, fields, EffectiveToColumn, lineNumber, MembershipFileName),
-                ReadDate(header, fields, AnnouncedOnColumn, lineNumber, MembershipFileName)));
+                ReadDate(header, fields, AnnouncedOnColumn, lineNumber, MembershipFileName),
+                ReadDate(header, fields, RemovalAnnouncedOnColumn, lineNumber, MembershipFileName)));
         }
 
         return rows;

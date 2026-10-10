@@ -64,7 +64,8 @@ restates — sourcing older history widens it.
 | `symbol`         | yes      | The source's own spelling of the symbol                         |
 | `effective_from` | yes      | First date of membership. **Inclusive**                         |
 | `effective_to`   | no       | First date of non-membership. **Exclusive**; blank = still a member |
-| `announced_on`   | no       | When the change was published                                   |
+| `announced_on`   | no       | When the **admission** was published                            |
+| `removal_announced_on` | no | When the **removal** was published; only on a row with `effective_to` |
 
 ```csv
 universe_code,symbol,effective_from,effective_to,announced_on
@@ -95,12 +96,23 @@ Two rows for one security whose intervals **overlap** are refused — by the
 import, which names the security, and by an exclusion constraint on the table,
 which is what makes the rule true regardless of who is writing.
 
-### `announced_on` is recorded and not yet read
+### Announcement dates are recorded and not yet read
 
 An index review is published before it takes effect, so a strategy acting on
 the announcement earlier than its publication date would be looking ahead.
-Filtering on it is U4's work. The column is collected now so the history does
+Filtering on it is U4's work. The columns are collected now so the history does
 not have to be re-sourced then.
+
+A spell has two announcements, and each has its own column: `announced_on` for
+the admission, `removal_announced_on` for the removal. One column used to serve
+both, and the departure's notice overwrote the date that says whether trading
+the inclusion was possible. A security already in the universe when its
+sourced coverage begins has no admission in that history, and leaves
+`announced_on` blank.
+
+A blank means *not sourced*, never *not announced*. A later file may fill a
+blank; it may not re-date one already recorded. A blank in a later file states
+nothing, so it does not erase a recorded date.
 
 ## What the import does
 
@@ -111,7 +123,10 @@ Additive and idempotent:
 | Spell not recorded | Created |
 | Spell recorded exactly as reported | Unchanged |
 | Open spell the source now reports as ended | Closed |
+| Held spell whose blank announcement date the row now supplies | Announcement recorded |
 | Spell already recorded as ended, reported with a different ending | **Rejected** |
+| Announcement date different from the one recorded | **Rejected**, the whole row |
+| `removal_announced_on` on a row with no `effective_to` | **Rejected** |
 | Spell overlapping one already recorded | **Rejected** |
 | Symbol that resolves to no instrument | **Rejected** |
 | Interval covering no session | **Rejected** |

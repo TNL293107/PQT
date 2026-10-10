@@ -238,8 +238,11 @@ its announcement is known. The first transcription started every continuing
 member on the old coverage start and gave it that review's date, which told a
 point-in-time consumer an inclusion had been announced that never happened. The
 six real inclusions (LPB, DGC, VPL, BSR, MCH, TCX) carry their dates.
-`announced_on` means the admission announcement throughout; a removal's
-announcement is not modelled (see the handoff's known gap).
+`announced_on` means the admission announcement throughout. A removal's
+announcement has its own optional column, `removal_announced_on`, which this
+file does not carry yet: every closed spell's removal date is blank, meaning
+not transcribed, not unannounced. A later file may fill a blank; it may not
+re-date one already recorded, and the import refuses such a row whole.
 
 Where the record is weaker than the membership itself:
 

@@ -94,6 +94,7 @@ internal sealed class UniverseImportService(
             state.Created,
             state.Closed,
             state.Unchanged,
+            state.AnnouncementsRecorded,
             state.Rejections,
             coverage);
 
@@ -104,6 +105,7 @@ internal sealed class UniverseImportService(
             report.SpellsCreated,
             report.SpellsClosed,
             report.Unchanged,
+            report.AnnouncementsRecorded,
             report.Rejected,
             coverage.StillOpen);
 
@@ -211,6 +213,19 @@ internal sealed class UniverseImportService(
             return;
         }
 
+        if (row.RemovalAnnouncedOn is { } removalAnnounced && row.EffectiveTo is null)
+        {
+            // Either the end is missing from the row or the date belongs in the
+            // admission's column. Guessing which would record a departure
+            // nobody sourced.
+            state.Reject(
+                row,
+                UniverseMembershipRejectionReason.RemovalAnnouncedWithoutEnd,
+                $"'{row.Symbol}' has a removal announced on {removalAnnounced:yyyy-MM-dd} but no end date.");
+
+            return;
+        }
+
         if (!state.Seen.Add((universe.Id, instrumentId.Value, row.EffectiveFrom)))
         {
             state.Reject(
@@ -251,7 +266,7 @@ internal sealed class UniverseImportService(
 
         if (row.EffectiveTo is { } closesAt)
         {
-            candidate.Remove(closesAt);
+            candidate.Remove(closesAt, row.RemovalAnnouncedOn);
         }
 
         // Checked here so the rejection can name the security and both spells.
@@ -291,13 +306,7 @@ internal sealed class UniverseImportService(
         ProviderUniverseMembership row,
         ImportState state)
     {
-        if (existing.EffectiveTo == row.EffectiveTo)
-        {
-            state.Unchanged++;
-            return;
-        }
-
-        if (existing.EffectiveTo is not null)
+        if (existing.EffectiveTo is not null && existing.EffectiveTo != row.EffectiveTo)
         {
             state.Reject(
                 row,
@@ -309,24 +318,83 @@ internal sealed class UniverseImportService(
             return;
         }
 
-        if (row.EffectiveTo is not { } closesAt)
+        // Checked before anything is applied, so a row is taken whole or not at
+        // all: a re-dated announcement must not let the close riding with it
+        // through.
+        if (Contradiction(existing.AnnouncedOn, row.AnnouncedOn, "admission", row) is { } admission)
         {
-            // Open here, open there. Cannot happen — the equality above caught
-            // it — but stated so the branch is not silently a fall-through.
-            state.Unchanged++;
+            state.Reject(row, UniverseMembershipRejectionReason.ContradictsRecordedAnnouncement, admission);
             return;
         }
 
-        try
+        if (Contradiction(existing.RemovalAnnouncedOn, row.RemovalAnnouncedOn, "removal", row) is { } removal)
         {
-            existing.Remove(closesAt);
+            state.Reject(row, UniverseMembershipRejectionReason.ContradictsRecordedAnnouncement, removal);
+            return;
+        }
+
+        var closed = false;
+
+        if (existing.EffectiveTo is null && row.EffectiveTo is { } closesAt)
+        {
+            try
+            {
+                existing.Remove(closesAt, row.RemovalAnnouncedOn);
+                closed = true;
+            }
+            catch (DomainValidationException exception)
+            {
+                state.Reject(row, UniverseMembershipRejectionReason.EmptyInterval, exception.Message);
+                return;
+            }
+        }
+
+        var recorded = 0;
+
+        if (row.AnnouncedOn is { } admitted && existing.RecordAdmissionAnnouncement(admitted))
+        {
+            recorded++;
+        }
+
+        // A spell closed just now took its removal announcement with it.
+        if (!closed
+            && existing.EffectiveTo is not null
+            && row.RemovalAnnouncedOn is { } removed
+            && existing.RecordRemovalAnnouncement(removed))
+        {
+            recorded++;
+        }
+
+        state.AnnouncementsRecorded += recorded;
+
+        if (closed)
+        {
             state.Closed++;
         }
-        catch (DomainValidationException exception)
+        else if (recorded == 0)
         {
-            state.Reject(row, UniverseMembershipRejectionReason.EmptyInterval, exception.Message);
+            state.Unchanged++;
         }
     }
+
+    /// <summary>
+    /// Describes a row that dates an announcement differently from the record.
+    /// </summary>
+    /// <remarks>
+    /// A blank on either side is not a contradiction. A blank recorded date was
+    /// never sourced, and a blank in the row states nothing — reading it as "no
+    /// longer announced" would let a file that lacks the column erase what was
+    /// sourced.
+    /// </remarks>
+    private static string? Contradiction(
+        DateOnly? recorded,
+        DateOnly? reported,
+        string change,
+        ProviderUniverseMembership row) =>
+        recorded is { } known && reported is { } stated && known != stated
+            ? $"'{row.Symbol}' has its {change} recorded as announced on {known:yyyy-MM-dd}, "
+                + $"and the source now says {stated:yyyy-MM-dd}."
+            : null;
 
     private async Task<InstrumentId?> ResolveAsync(
         Dictionary<string, InstrumentId?> cache,
@@ -400,6 +468,8 @@ internal sealed class UniverseImportService(
         public int Closed { get; set; }
 
         public int Unchanged { get; set; }
+
+        public int AnnouncementsRecorded { get; set; }
 
         /// <summary>Records a spell this run has staged but not yet committed.</summary>
         public void Stage(UniverseMembership membership)

@@ -87,6 +87,34 @@ public sealed class FileUniverseMembershipProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task The_removal_announcement_is_read_from_its_own_column()
+    {
+        // Two adjacent dates of the same type on a positional record. Swapped,
+        // the admission would carry the departure's notice date and every check
+        // on either would still compile.
+        WriteMemberships(
+            "universe_code,symbol,effective_from,effective_to,removal_announced_on,announced_on",
+            "VN30,VNM.HM,2024-01-02,2024-07-01,2024-06-17,2023-12-15");
+
+        var spell = Assert.Single(await Provider().ListMembershipsAsync(
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(new DateOnly(2023, 12, 15), spell.AnnouncedOn);
+        Assert.Equal(new DateOnly(2024, 6, 17), spell.RemovalAnnouncedOn);
+    }
+
+    [Fact]
+    public async Task Without_the_column_a_removal_announcement_is_unknown()
+    {
+        WriteMemberships(MembershipHeader, "VN30,VNM.HM,2024-01-02,2024-07-01,2023-12-15");
+
+        var spell = Assert.Single(await Provider().ListMembershipsAsync(
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(spell.RemovalAnnouncedOn);
+    }
+
+    [Fact]
     public async Task Blank_lines_are_skipped()
     {
         WriteMemberships(MembershipHeader, string.Empty, "VN30,FPT.HM,2024-01-02,,", string.Empty);

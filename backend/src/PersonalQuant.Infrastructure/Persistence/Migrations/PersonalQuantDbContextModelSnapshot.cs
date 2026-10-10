@@ -1002,6 +1002,10 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("recorded_at_utc");
 
+                    b.Property<DateOnly?>("RemovalAnnouncedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("removal_announced_on");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasMaxLength(32)

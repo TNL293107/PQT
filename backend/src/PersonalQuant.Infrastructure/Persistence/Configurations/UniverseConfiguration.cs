@@ -168,6 +168,11 @@ internal sealed class UniverseMembershipConfiguration : IEntityTypeConfiguration
         builder.Property(membership => membership.AnnouncedOn)
             .HasColumnName("announced_on");
 
+        // The departure's own announcement. One column for both events let the
+        // removal notice overwrite the admission's date.
+        builder.Property(membership => membership.RemovalAnnouncedOn)
+            .HasColumnName("removal_announced_on");
+
         builder.Property(membership => membership.Source)
             .HasColumnName("source")
             .HasConversion(source => source.Value, value => SourceCode.Create(value))

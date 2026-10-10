@@ -9,7 +9,10 @@ namespace PersonalQuant.Application.Universes;
 /// <param name="InstrumentId">The security.</param>
 /// <param name="EffectiveFrom">The first date of membership, inclusive.</param>
 /// <param name="EffectiveTo">The date it left, exclusive; null while it is still a member.</param>
-/// <param name="AnnouncedOn">When the change was published, when known.</param>
+/// <param name="AnnouncedOn">
+/// When the admission was published, when known. Not the removal's: that is
+/// recorded on the membership and not yet carried here.
+/// </param>
 public sealed record UniverseSpell(
     InstrumentId InstrumentId,
     DateOnly EffectiveFrom,

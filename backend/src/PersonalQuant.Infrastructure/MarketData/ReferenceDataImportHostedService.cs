@@ -178,6 +178,7 @@ public sealed class ReferenceDataImportHostedService(
                 report.UniversesDefined,
                 report.SpellsCreated,
                 report.SpellsClosed,
+                report.AnnouncementsRecorded,
                 report.Rejected,
                 report.Coverage.StillOpen);
         }

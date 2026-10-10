@@ -9,9 +9,10 @@ namespace PersonalQuant.Domain.Universes;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Append-only. A membership is never updated except to close its interval, and
-/// never deleted — a security removed from an index in July was a constituent
-/// in June, and a row that can be edited cannot be trusted to say so.
+/// Append-only. A membership is never updated except to close its interval or
+/// to record an announcement date that was not known, and never deleted — a
+/// security removed from an index in July was a constituent in June, and a row
+/// that can be edited cannot be trusted to say so.
 /// </para>
 /// <para>
 /// The interval is half-open, <c>[EffectiveFrom, EffectiveTo)</c>. A review
@@ -27,7 +28,10 @@ namespace PersonalQuant.Domain.Universes;
 /// between them is precisely what a backtest must not be allowed to skip over.
 /// </para>
 /// <para>
-/// <see cref="AnnouncedOn"/> is recorded and not read. An index review is
+/// <see cref="AnnouncedOn"/> and <see cref="RemovalAnnouncedOn"/> are two
+/// events, and are recorded separately: when the market was told the security
+/// would join, and when it was told it would leave. Both are recorded and not
+/// read. An index review is
 /// published before it takes effect, so a strategy rebalancing on the effective
 /// date could legitimately have known — but one acting on the announcement
 /// earlier could not have known before it was published. Filtering on that is
@@ -84,13 +88,27 @@ public sealed class UniverseMembership
     public DateOnly? EffectiveTo { get; private set; }
 
     /// <summary>
-    /// Gets the date the change was made public, when it is known.
+    /// Gets the date the admission was made public, when it is known.
     /// </summary>
     /// <remarks>
     /// Announcement time. Stored now so that the history does not have to be
-    /// re-sourced when U4 starts filtering on it; unread until then.
+    /// re-sourced when U4 starts filtering on it; unread until then. It is the
+    /// admission's date only. A security present before a history's sourced
+    /// coverage begins has no admission in that history, and leaves it blank.
     /// </remarks>
     public DateOnly? AnnouncedOn { get; private set; }
+
+    /// <summary>
+    /// Gets the date the removal was made public, when it is known.
+    /// </summary>
+    /// <remarks>
+    /// Always <see langword="null"/> while the membership is running: there is
+    /// no removal to have announced. Kept apart from <see cref="AnnouncedOn"/>
+    /// because one column holding both let the departure notice overwrite the
+    /// admission's date, which is the date that says whether trading the
+    /// inclusion was possible.
+    /// </remarks>
+    public DateOnly? RemovalAnnouncedOn { get; private set; }
 
     /// <summary>Gets where this membership fact came from.</summary>
     /// <remarks>
@@ -165,9 +183,10 @@ public sealed class UniverseMembership
     /// The first date the security was no longer a member. Exclusive, so it is
     /// the removal date itself rather than the last day held.
     /// </param>
+    /// <param name="announcedOn">The date the removal was published, when known.</param>
     /// <exception cref="DomainValidationException">The date is not usable.</exception>
     /// <exception cref="DomainStateException">The interval is already closed.</exception>
-    public void Remove(DateOnly effectiveTo)
+    public void Remove(DateOnly effectiveTo, DateOnly? announcedOn = null)
     {
         if (EffectiveTo is not null)
         {
@@ -184,6 +203,55 @@ public sealed class UniverseMembership
         }
 
         EffectiveTo = effectiveTo;
+        RemovalAnnouncedOn = announcedOn;
+    }
+
+    /// <summary>
+    /// Records when the admission was published, where that was not known.
+    /// </summary>
+    /// <param name="announcedOn">The date it was published.</param>
+    /// <returns>
+    /// <see langword="true"/> when the date was recorded; <see langword="false"/>
+    /// when the same date already was.
+    /// </returns>
+    /// <exception cref="DomainStateException">A different date is recorded.</exception>
+    public bool RecordAdmissionAnnouncement(DateOnly announcedOn)
+    {
+        if (!CanRecord(AnnouncedOn, announcedOn, "admission"))
+        {
+            return false;
+        }
+
+        AnnouncedOn = announcedOn;
+        return true;
+    }
+
+    /// <summary>
+    /// Records when the removal was published, where that was not known.
+    /// </summary>
+    /// <param name="announcedOn">The date it was published.</param>
+    /// <returns>
+    /// <see langword="true"/> when the date was recorded; <see langword="false"/>
+    /// when the same date already was.
+    /// </returns>
+    /// <exception cref="DomainStateException">
+    /// The membership has not ended, or a different date is recorded.
+    /// </exception>
+    public bool RecordRemovalAnnouncement(DateOnly announcedOn)
+    {
+        if (EffectiveTo is null)
+        {
+            throw new DomainStateException(
+                "This membership has not ended, so there is no removal to have announced.");
+        }
+
+        if (!CanRecord(RemovalAnnouncedOn, announcedOn, "removal"))
+        {
+            return false;
+        }
+
+        RemovalAnnouncedOn = announcedOn;
+        return true;
     }
 
     /// <summary>
@@ -223,5 +291,29 @@ public sealed class UniverseMembership
         // next begins.
         return EffectiveFrom < (other.EffectiveTo ?? DateOnly.MaxValue)
             && other.EffectiveFrom < (EffectiveTo ?? DateOnly.MaxValue);
+    }
+
+    /// <summary>
+    /// Decides whether an announcement date may be written.
+    /// </summary>
+    /// <remarks>
+    /// Filling a blank adds knowledge. Changing a recorded date is refused: the
+    /// date decides whether trading the change was possible, and a strict
+    /// as-of read already given one date would silently be given another.
+    /// </remarks>
+    private static bool CanRecord(DateOnly? recorded, DateOnly announcedOn, string change)
+    {
+        if (recorded is not { } known)
+        {
+            return true;
+        }
+
+        if (known == announcedOn)
+        {
+            return false;
+        }
+
+        throw new DomainStateException(
+            $"The {change} is recorded as announced on {known:O}; it is not re-dated to {announcedOn:O}.");
     }
 }
