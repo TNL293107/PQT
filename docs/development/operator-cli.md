@@ -250,6 +250,7 @@ were raised as missing sessions. The claim now lives on the venue and comes from
 ```bash
 pqt dataset export --universe VN30 --from 2026-07-01 --to 2026-09-17
 pqt dataset export --universe VN30 --from 2026-08-03 --to 2026-09-17 --as-of 2026-08-03
+pqt dataset export --universe VN30 --from 2026-07-01 --to 2026-09-17 --history 253
 pqt dataset verify 9d1609783db37729 --version 1
 ```
 
@@ -273,6 +274,7 @@ a rebuild is a new version of it rather than a new dataset.
 | `--raw` | off | Export what printed rather than the adjusted series |
 | `--known-as-of` | current series | Read the bars as this system believed them then |
 | `--policy` | `strict` | What to do with an unknown announcement date |
+| `--history` | `0` | Bars to write before each name's first membership session (at most 1000) |
 
 **Without `--as-of` the export is point-in-time**: a bar is written only where
 its instrument was a member of the universe that session, and the manifest lists
@@ -282,6 +284,18 @@ TCX from it. The whole window must lie inside the universe's declared coverage,
 or the export is refused rather than exporting only the names that happened to be
 sourced. See
 [ADR-024](../architecture/decisions/ADR-024-point-in-time-dataset-membership.md).
+
+**`--history N` gives each series the past a lookback needs.** Without it a name
+admitted mid-window has no bar before its admission, so a factor reading a year
+of prices cannot score it for a year. With it the export also writes the N bars
+before each instrument's first membership session (before the window, for
+`--as-of`) and every bar between two of its spells, so the series is continuous
+up to its last membership session. Those rows are **data, never membership**:
+the spells still say who belonged when, and a reader refuses any row outside them
+that is not history. The manifest records `history_sessions` and each
+instrument's `history_from`; a request with history names a different dataset
+from the same window without it. See
+[ADR-025](../architecture/decisions/ADR-025-dataset-history-rows.md).
 
 `--as-of <date>` asks for the older reading instead: one constituent set, read on
 that date, with every bar its members have anywhere in the window. It is right

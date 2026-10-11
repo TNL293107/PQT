@@ -1,6 +1,10 @@
 # ADR-024: Point-in-time membership in the canonical dataset
 
-**Status:** Accepted · **Date:** 2026-09-19 · **Phase:** Research Foundation Upgrade (U2 × U5)
+**Status:** Accepted, extended by [ADR-025](ADR-025-dataset-history-rows.md) · **Date:** 2026-09-19 · **Phase:** Research Foundation Upgrade (U2 × U5)
+
+> ADR-025 lets an export carry history: bars before each name's admission and
+> between its spells, written as data and never as membership. Membership is
+> exactly as decided here; the manifest is schema version 3.
 
 ## Context
 
