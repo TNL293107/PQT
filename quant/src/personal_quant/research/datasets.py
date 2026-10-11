@@ -377,6 +377,21 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
                 f"{bar.instrument_id} has a row for {bar.session}, outside its membership."
             )
 
+    # History looks back at most the declared number of sessions before an
+    # instrument's first membership session; more is an exporter over-read.
+    before: dict[str, int] = {}
+
+    for bar in bars:
+        if bar.session < _first_membership(manifest, listed[bar.instrument_id]):
+            before[bar.instrument_id] = before.get(bar.instrument_id, 0) + 1
+
+    for instrument_id, count in before.items():
+        if count > manifest.history_sessions:
+            raise DatasetIntegrityError(
+                f"{instrument_id} has {count} rows before its first membership session; the "
+                f"manifest declares {manifest.history_sessions} sessions of history."
+            )
+
     for instrument in listed.values():
         start = instrument.history_from
 
@@ -385,6 +400,13 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
                 f"{instrument.instrument_id}'s history is recorded from {start}, but its rows "
                 f"begin on {first.get(instrument.instrument_id)}."
             )
+
+
+def _first_membership(manifest: DatasetManifest, instrument: DatasetInstrument) -> date:
+    if manifest.membership == "as_of" or not instrument.spells:
+        return manifest.from_date
+
+    return min(spell.start for spell in instrument.spells)
 
 
 def _is_history(manifest: DatasetManifest, instrument: DatasetInstrument, session: date) -> bool:

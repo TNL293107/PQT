@@ -210,3 +210,26 @@ def test_one_period_has_no_deviation_to_divide_by() -> None:
 
     assert summary.mean == pytest.approx(0.1)
     assert summary.information_ratio is None
+
+
+def test_a_name_that_leaves_and_returns_is_valued_only_while_it_was_held(
+    tmp_path: Path,
+) -> None:
+    # With history the bars between its spells are in the file. It left on
+    # the third session, so a portfolio formed on the first held it through
+    # the second; the gap after that is data a feature may read, not a
+    # position anyone held.
+    bars = [SyntheticBar("aaa", SESSIONS[index], Decimal(100 + 10 * index)) for index in range(8)]
+    write_dataset(
+        tmp_path,
+        SyntheticDataset(
+            bars=bars,
+            spells={"aaa": [(SESSIONS[0], SESSIONS[2]), (SESSIONS[5], None)]},
+            history_sessions=1,
+        ),
+    )
+    dataset = LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+    returns = forward_returns(dataset, SESSIONS[0], SESSIONS[4], {"aaa"})
+
+    assert returns == {"aaa": pytest.approx(0.1)}

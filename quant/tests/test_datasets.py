@@ -299,3 +299,19 @@ def test_a_manifest_without_history_that_names_a_history_start_is_refused(tmp_pa
 
     with pytest.raises(DatasetIntegrityError, match="no history"):
         LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_more_history_than_the_manifest_declares_is_refused(tmp_path: Path) -> None:
+    # Three rows before the first membership session against a declared
+    # history of one: an exporter that over-read would otherwise verify.
+    write_dataset(
+        tmp_path,
+        SyntheticDataset(
+            bars=[SyntheticBar("aaa", session, Decimal(10)) for session in SESSIONS],
+            spells={"aaa": [(SESSIONS[3], None)]},
+            history_sessions=1,
+        ),
+    )
+
+    with pytest.raises(DatasetIntegrityError, match="declares 1"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")

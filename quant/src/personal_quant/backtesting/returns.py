@@ -27,12 +27,14 @@ def forward_returns(
 ) -> dict[str, float]:
     """Return each instrument's return from one session's close to a later one's.
 
-    An instrument whose bars stop inside the period — it left a point-in-time
-    universe, whose rows end with the spell — is valued at the last close it
-    has, which is the entry close itself when it left the very next session,
-    rather than dropped: dropping would quietly remove the leavers from every
-    portfolio holding them. What it earned after leaving is not in the dataset
-    and is not counted; the export's spell-bounded rows set that limit.
+    An instrument that leaves the universe inside the period is valued at its
+    last close while still a member — the entry close itself when it left the
+    very next session — rather than dropped, which would quietly remove the
+    leavers from every portfolio holding them. Its bars after leaving are not
+    used even when the dataset has them: a build exported with history holds a
+    re-admitted name's bars between its spells, and those are data a feature
+    may read, not a position anyone held. A name that left for good and one
+    that came back are valued the same way.
 
     Entry is at the close of the session the signal was computed at, which a
     factor skipping no sessions has just read; a factor that needs a gap
@@ -56,7 +58,14 @@ def forward_returns(
         if entry is None or entry.close <= 0:
             continue
 
-        last = max(session for session in bars if start <= session <= end)
+        last = start
+
+        for session in sorted(day for day in bars if start < day <= end):
+            if instrument not in dataset.members_on(session):
+                break
+
+            last = session
+
         returns[instrument] = float(bars[last].close / entry.close) - 1.0
 
     return returns
