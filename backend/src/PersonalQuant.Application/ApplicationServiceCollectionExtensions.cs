@@ -102,5 +102,6 @@ public static class ApplicationServiceCollectionExtensions
         // contract is PQT's, and where the files land is Infrastructure's.
         services.AddScoped<Datasets.IDatasetExportService, Datasets.DatasetExportService>();
         services.AddScoped<Research.IResearchJobService, Research.ResearchJobService>();
+        services.AddScoped<Terminal.IWatchlistService, Terminal.WatchlistService>();
     }
 }

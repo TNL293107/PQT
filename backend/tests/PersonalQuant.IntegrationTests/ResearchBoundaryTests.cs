@@ -60,6 +60,25 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
         Assert.Equal(PermissionDenied, refusal.SqlState);
     }
 
+    [Theory]
+    [InlineData("SELECT count(*) FROM terminal.watchlists")]
+    [InlineData("DELETE FROM terminal.watchlist_entries")]
+    public async Task The_research_role_has_no_access_to_operator_state(string sql)
+    {
+        // Watchlists are the operator's, not research input or output
+        // (ADR-027): the role is granted nothing in the terminal schema.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        var database = await MigrateAsync("rb_terminal");
+        await using var connection = await ConnectAsResearchAsync(database);
+        await using var command = new NpgsqlCommand(sql, connection);
+
+        var refusal = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(PermissionDenied, refusal.SqlState);
+    }
+
     [Fact]
     public async Task The_research_role_can_work_a_job_through_its_life()
     {

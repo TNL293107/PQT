@@ -6,6 +6,7 @@ using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Domain.Research;
+using PersonalQuant.Domain.Terminal;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Infrastructure.Persistence;
@@ -100,6 +101,9 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the runs the quant worker recorded.</summary>
     public DbSet<ResearchRun> ResearchRuns => Set<ResearchRun>();
+
+    /// <summary>Gets the operator's watchlists, in the <c>terminal</c> schema.</summary>
+    public DbSet<Watchlist> Watchlists => Set<Watchlist>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

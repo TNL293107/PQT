@@ -1195,6 +1195,69 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                     b.ToTable("run_metrics", "research");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Terminal.Watchlist", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_watchlists");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_watchlists_name");
+
+                    b.ToTable("watchlists", "terminal", t =>
+                        {
+                            t.HasCheckConstraint("ck_watchlists_name", "name ~ '^[a-z0-9][a-z0-9_-]*$'");
+                        });
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Terminal.WatchlistEntry", b =>
+                {
+                    b.Property<Guid>("WatchlistId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("watchlist_id");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<DateTimeOffset>("AddedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at_utc");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.HasKey("WatchlistId", "InstrumentId")
+                        .HasName("pk_watchlist_entries");
+
+                    b.HasIndex("InstrumentId")
+                        .HasDatabaseName("ix_watchlist_entries_instrument_id");
+
+                    b.ToTable("watchlist_entries", "terminal", t =>
+                        {
+                            t.HasCheckConstraint("ck_watchlist_entries_position", "position >= 0");
+                        });
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Universes.Universe", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1537,6 +1600,23 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_run_metrics_runs");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Terminal.WatchlistEntry", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Instruments.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_watchlist_entries_instrument");
+
+                    b.HasOne("PersonalQuant.Domain.Terminal.Watchlist", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("WatchlistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_watchlist_entries_watchlists");
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Universes.Universe", b =>
                 {
                     b.OwnsOne("PersonalQuant.Domain.Universes.MembershipCoverage", "Coverage", b1 =>
@@ -1595,6 +1675,11 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                     b.Navigation("Artifacts");
 
                     b.Navigation("Metrics");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Terminal.Watchlist", b =>
+                {
+                    b.Navigation("Entries");
                 });
 #pragma warning restore 612, 618
         }

@@ -103,6 +103,31 @@ public sealed class PersonalQuantApiFactory(
     /// <param name="redis">Redis connection details.</param>
     /// <param name="universeDirectory">Directory holding the universe CSV files.</param>
     /// <returns>A configured factory.</returns>
+    /// <summary>
+    /// Creates a factory against live dependencies with extra settings layered
+    /// over the defaults.
+    /// </summary>
+    /// <param name="postgres">The PostgreSQL container.</param>
+    /// <param name="redis">The Redis container.</param>
+    /// <param name="extra">Settings to add or override.</param>
+    /// <returns>The factory.</returns>
+    public static PersonalQuantApiFactory WithSettings(
+        (string Host, int Port, string Database, string Username, string Password) postgres,
+        (string Host, int Port) redis,
+        IReadOnlyDictionary<string, string?> extra)
+    {
+        ArgumentNullException.ThrowIfNull(extra);
+
+        var settings = BaseSettings(postgres, redis, applyMigrations: true);
+
+        foreach (var (key, value) in extra)
+        {
+            settings[key] = value;
+        }
+
+        return new PersonalQuantApiFactory(settings);
+    }
+
     public static PersonalQuantApiFactory WithUniverseDirectory(
         (string Host, int Port, string Database, string Username, string Password) postgres,
         (string Host, int Port) redis,
