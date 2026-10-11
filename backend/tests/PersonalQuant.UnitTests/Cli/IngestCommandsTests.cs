@@ -113,6 +113,24 @@ public sealed class IngestCommandsTests
     }
 
     [Fact]
+    public async Task A_start_part_way_through_a_day_is_reported_as_an_instant_too()
+    {
+        // A run the pipeline never attempted records its start instant as the
+        // range. Printing that start as a bare date beside an end printed as an
+        // instant read as a range running into the next day.
+        var harness = new Harness();
+        harness.Instruments.Add("FPT");
+        var started = new DateTimeOffset(2026, 10, 11, 4, 47, 0, TimeSpan.Zero);
+        harness.Ingestion.Then(instruction => Succeeded(
+            instruction, stored: 0, from: started, to: started.AddDays(1)));
+
+        await harness.RunAsync("ingest", "run", "--instrument", "FPT");
+
+        Assert.Contains(
+            "2026-10-11 04:47Z to before 2026-10-12 04:47Z", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_skipped_run_is_reported_and_exits_non_zero()
     {
         // The refusal a scheduled pass would only write to a table. A script

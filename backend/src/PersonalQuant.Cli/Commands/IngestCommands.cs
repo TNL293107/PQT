@@ -459,7 +459,7 @@ internal sealed class IngestCommands(
     {
         var range = string.Create(
             CultureInfo.InvariantCulture,
-            $"{run.RequestedFromUtc:yyyy-MM-dd} to {DescribeEnd(run.RequestedToUtc)}");
+            $"{DescribeStart(run.RequestedFromUtc)} to {DescribeEnd(run.RequestedToUtc)}");
 
         output.Line(
             $"{ticker} {BarIntervalParser.Describe(run.Interval)} {run.Source} {range} "
@@ -510,6 +510,25 @@ internal sealed class IngestCommands(
     /// </remarks>
     private static DateTimeOffset? EndInstant(DateOnly? date) =>
         date is { } value ? ToInstant(value.AddDays(1)) : null;
+
+    /// <summary>
+    /// Names a run's start: a date when it falls on midnight UTC, as every
+    /// start the operator types does, and the instant otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A run the pipeline never attempted — a busy series, a missing
+    /// instrument — records the instant it started as its range. Cut to a date,
+    /// that start sat beside an end printed as an instant and read as a range
+    /// running into the next day.
+    /// </remarks>
+    private static string DescribeStart(DateTimeOffset start)
+    {
+        var utc = start.ToUniversalTime();
+
+        return utc.TimeOfDay == TimeSpan.Zero
+            ? utc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : utc.ToString("yyyy-MM-dd HH:mm'Z'", CultureInfo.InvariantCulture);
+    }
 
     /// <summary>
     /// Names a run's exclusive end the way the operator typed it: as the last
