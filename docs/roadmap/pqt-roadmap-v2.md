@@ -900,6 +900,7 @@ own work is done, because U9 now records `trial_count`.
 | Document | Owns |
 | --- | --- |
 | This file | Phases, workstreams, gates, statuses, ownership, definition of done |
+| [`sprint-plan.md`](sprint-plan.md) | Which sprint does what, and in what order — scheduling only, never scope |
 | [`../architecture/data-architecture.md`](../architecture/data-architecture.md) | Temporal model, universe model, adjustment rules, dataset contract, storage tiers |
 | [`../architecture/quant-research-architecture.md`](../architecture/quant-research-architecture.md) | Research protocols, pipeline, Python/.NET boundary, experiment schema, reproducibility |
 | [`../architecture/qlib-integration.md`](../architecture/qlib-integration.md) | Qlib adapter boundary, ownership split, removal procedure |
