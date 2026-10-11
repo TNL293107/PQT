@@ -12,7 +12,9 @@ import pytest
 from personal_quant.factors.momentum import Momentum
 from personal_quant.research.datasets import CanonicalDataset, LocalDatasetProvider
 from personal_quant.research.momentum_slice import (
+    SlicePeriod,
     SliceRefusedError,
+    SliceResult,
     render,
     run_momentum_slice,
 )
@@ -202,3 +204,93 @@ def test_the_slice_runs_over_a_real_export() -> None:
     assert result.information.periods == len(result.periods)
     assert all(period.members == len(dataset.members_on(period.start)) for period in result.periods)
     assert all(len(period.bucket_returns) == result.quantiles for period in result.periods)
+
+
+# Fifteen sessions before the window, for builds exported with history.
+BEFORE = weekdays(date(2024, 12, 9), 20)[-15:]
+ADMITTED = 15
+
+
+def _write_with_a_late_joiner(tmp_path: Path, *, history: int) -> CanonicalDataset:
+    # NAMES are members for the whole window; "late" is admitted at
+    # SESSIONS[15], a rebalance. With history each name also carries the
+    # `history` sessions before its first membership session - before the
+    # window for NAMES, before its admission for "late" - as an export with
+    # --history writes them.
+    timeline = [*BEFORE, *SESSIONS]
+    window_start = timeline.index(SESSIONS[0])
+    admitted = timeline.index(SESSIONS[ADMITTED])
+
+    def written(first: int) -> list[tuple[int, date]]:
+        return list(enumerate(timeline))[first - history :]
+
+    bars = [
+        SyntheticBar(name, session, _price(rank, step))
+        for rank, name in enumerate(NAMES)
+        for step, session in written(window_start)
+    ] + [
+        SyntheticBar("late", session, _price(len(NAMES), step))
+        for step, session in written(admitted)
+    ]
+
+    write_dataset(
+        tmp_path,
+        SyntheticDataset(
+            bars=bars,
+            spells={
+                **{name: [(SESSIONS[0], None)] for name in NAMES},
+                "late": [(SESSIONS[ADMITTED], None)],
+            },
+            history_sessions=history,
+            window=(SESSIONS[0], SESSIONS[-1]),
+        ),
+    )
+    return LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def _period_at(result: SliceResult, start: date) -> SlicePeriod:
+    return next(period for period in result.periods if period.start == start)
+
+
+def test_a_name_admitted_mid_window_is_scored_at_its_first_rebalance_with_history(
+    tmp_path: Path,
+) -> None:
+    # The fix the history export exists for. With ten sessions of history the
+    # late joiner has a close at both ends of its formation window on the day
+    # it is admitted, so it is scored then - as a strategy that day could have
+    # scored it, from prices printed before the decision.
+    result = run_momentum_slice(
+        _write_with_a_late_joiner(tmp_path, history=10), FACTOR, quantiles=5, rebalance_every=5
+    )
+
+    admitted = _period_at(result, SESSIONS[ADMITTED])
+
+    assert (admitted.members, admitted.scored) == (11, 11)
+
+
+def test_without_history_a_name_admitted_mid_window_is_not_scored_at_its_admission(
+    tmp_path: Path,
+) -> None:
+    # The gap this closes: a point-in-time export holds nothing before the
+    # admission, so the formation window has no start close, and the name is
+    # a member nobody can score.
+    result = run_momentum_slice(
+        _write_with_a_late_joiner(tmp_path, history=0), FACTOR, quantiles=5, rebalance_every=5
+    )
+
+    admitted = _period_at(result, SESSIONS[ADMITTED])
+
+    assert (admitted.members, admitted.scored) == (11, 10)
+
+
+def test_with_history_rebalances_start_at_the_window_and_never_before_it(tmp_path: Path) -> None:
+    # Fifteen history sessions put a full lookback behind the window's first
+    # session, so the first rebalance is that session. Rebalancing on a
+    # history session would score a universe that was not yet defined.
+    result = run_momentum_slice(
+        _write_with_a_late_joiner(tmp_path, history=15), FACTOR, quantiles=5, rebalance_every=5
+    )
+
+    assert result.periods[0].start == SESSIONS[0]
+    assert (result.periods[0].members, result.periods[0].scored) == (10, 10)
+    assert all(period.start >= SESSIONS[0] for period in result.periods)

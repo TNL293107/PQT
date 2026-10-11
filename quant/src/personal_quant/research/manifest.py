@@ -11,6 +11,11 @@ by hand — a window widened, an as-of export relabelled point-in-time — no
 longer matches, and a reader that recomputes it refuses the dataset instead of
 trusting the edit. The rendering below follows the C# one detail for detail,
 including .NET's spelling of booleans, enum names and round-trip instants.
+
+Schema 3 adds history (ADR-025): ``history_sessions``, each instrument's
+``history_from`` and each spell's ``removal_announced_on``. They enter the hash
+only from schema 3, so a schema 1 or 2 manifest hashes exactly as it was
+written; read from one, they are zero and ``None``.
 """
 
 from __future__ import annotations
@@ -35,7 +40,10 @@ __all__ = [
 
 Membership = Literal["as_of", "point_in_time"]
 
-SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3})
+
+HISTORY_SCHEMA_VERSION = 3
+"""The first schema whose manifests carry history and removal announcements."""
 
 # The manifest spells policies the way the API and CLI do; the hash uses the
 # C# enum name, which is what StringBuilder.Append(enum) writes.
@@ -57,12 +65,15 @@ class DatasetSpell:
     """A spell of membership, clipped to the dataset's window.
 
     ``until`` is exclusive and ``None`` when the instrument was still a member
-    at the window's end. ``announced_on`` is the admission's announcement.
+    at the window's end. ``announced_on`` is the admission's announcement and
+    ``removal_announced_on`` the removal's, when it was published by the
+    window's last day; trading either before it is look-ahead.
     """
 
     start: date
     until: date | None
     announced_on: date | None
+    removal_announced_on: date | None = None
 
     def includes(self, session: date) -> bool:
         """Report whether the instrument was a member on a session.
@@ -82,12 +93,18 @@ class DatasetInstrument:
 
     The ticker is a label valid at the export's as-of date, not an identity:
     tickers change, and rows are keyed by ``instrument_id``.
+
+    ``history_from`` is the first session of the instrument's rows when the
+    export carried history, and ``None`` otherwise. Rows from it up to the
+    instrument's last membership session are data a feature may read — before
+    its first spell, or between two — and never membership.
     """
 
     instrument_id: str
     ticker_at_as_of: str
     exchange: str
     spells: tuple[DatasetSpell, ...] | None
+    history_from: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +141,7 @@ class DatasetManifest:
     adjustment_version: int
     sources: tuple[str, ...]
     files: tuple[DatasetFile, ...]
+    history_sessions: int = 0
 
     @staticmethod
     def from_json(raw: Mapping[str, Any]) -> DatasetManifest:
@@ -160,6 +178,7 @@ class DatasetManifest:
             raise UnsupportedManifestError(f"Membership mode '{membership}' is not known.")
 
         known_as_of_text = raw.get("known_as_of_utc")
+        with_history = version >= HISTORY_SCHEMA_VERSION
 
         return DatasetManifest(
             dataset_id=str(raw["dataset_id"]),
@@ -173,7 +192,7 @@ class DatasetManifest:
             universe_code=str(raw["universe_code"]),
             universe_as_of=_date(raw.get("universe_as_of")),
             membership="point_in_time" if membership == "point_in_time" else "as_of",
-            instruments=tuple(_instrument(item) for item in raw["instruments"]),
+            instruments=tuple(_instrument(item, with_history) for item in raw["instruments"]),
             interval=str(raw["interval"]),
             from_date=_required_date(raw["from_date"]),
             to_date=_required_date(raw["to_date"]),
@@ -182,6 +201,9 @@ class DatasetManifest:
             adjustment_version=int(raw["adjustment_version"]),
             sources=tuple(str(source["code"]) for source in raw["sources"]),
             files=tuple(_file(item) for item in raw["files"]),
+            history_sessions=(
+                _count(raw["history_sessions"], "history_sessions") if with_history else 0
+            ),
         )
 
 
@@ -232,7 +254,16 @@ def content_hash_of(manifest: DatasetManifest) -> str:
         ]
     )
     canonical += "|"
-    canonical += "".join(_instrument_part(instrument) for instrument in manifest.instruments)
+
+    # Schema 3 only, so earlier manifests hash exactly as they were written.
+    with_history = manifest.schema_version >= HISTORY_SCHEMA_VERSION
+
+    if with_history:
+        canonical += f"{manifest.history_sessions}|"
+
+    canonical += "".join(
+        _instrument_part(instrument, with_history) for instrument in manifest.instruments
+    )
     canonical += "|"
     canonical += "".join(f"{source}," for source in manifest.sources)
     canonical += "|"
@@ -268,20 +299,36 @@ def dotnet_round_trip(text: str) -> str:
     return f"{match['stamp']}.{fraction}{offset}"
 
 
-def _instrument_part(instrument: DatasetInstrument) -> str:
+def _instrument_part(instrument: DatasetInstrument, with_history: bool) -> str:
     rendered = f"{instrument.instrument_id},"
+
+    if with_history:
+        history_from = instrument.history_from
+        rendered += f"{'none' if history_from is None else _format(history_from)},"
 
     for spell in instrument.spells or ():
         until = "open" if spell.until is None else _format(spell.until)
-        announced = "unannounced" if spell.announced_on is None else _format(spell.announced_on)
-        rendered += f"{_format(spell.start)}~{until}~{announced};"
+        announced = _announcement(spell.announced_on)
+        rendered += f"{_format(spell.start)}~{until}~{announced}"
+
+        if with_history:
+            rendered += f"~{_announcement(spell.removal_announced_on)}"
+
+        rendered += ";"
 
     return rendered
 
 
-def _instrument(raw: Mapping[str, Any]) -> DatasetInstrument:
+def _announcement(value: date | None) -> str:
+    return "unannounced" if value is None else _format(value)
+
+
+def _instrument(raw: Mapping[str, Any], with_history: bool) -> DatasetInstrument:
     spells: Sequence[Mapping[str, Any]] | None = raw.get("spells")
 
+    # Fields a schema did not have are not read from it, even if present: the
+    # hash of an older manifest does not cover them, so trusting one would
+    # let an edit through unverified.
     return DatasetInstrument(
         instrument_id=str(raw["instrument_id"]),
         ticker_at_as_of=str(raw["ticker_at_as_of"]),
@@ -293,9 +340,13 @@ def _instrument(raw: Mapping[str, Any]) -> DatasetInstrument:
                 start=_required_date(spell["from"]),
                 until=_date(spell.get("until")),
                 announced_on=_date(spell.get("announced_on")),
+                removal_announced_on=(
+                    _date(spell.get("removal_announced_on")) if with_history else None
+                ),
             )
             for spell in spells
         ),
+        history_from=_date(raw.get("history_from")) if with_history else None,
     )
 
 
@@ -323,6 +374,14 @@ def _boolean(value: object, field: str) -> bool:
     # bool("false") is True; a manifest's booleans are JSON booleans or nothing.
     if not isinstance(value, bool):
         raise UnsupportedManifestError(f"'{field}' must be true or false, not {value!r}.")
+
+    return value
+
+
+def _count(value: object, field: str) -> int:
+    # bool is an int in Python; a manifest's counts are JSON integers or nothing.
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise UnsupportedManifestError(f"'{field}' must be a whole number, not {value!r}.")
 
     return value
 

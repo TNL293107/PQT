@@ -14,7 +14,7 @@ the connection with DuckDB's file system access switched off and its
 configuration locked. Nothing on the connection can read a file — not the
 build, not another — so every row a query sees is a verified one.
 
-Three views:
+Four views:
 
 * ``bars`` — one row per instrument and session. ``session`` is the UTC date
   of ``opened_at_utc``, as the Python loader takes it. Prices are cast from the
@@ -23,8 +23,12 @@ Three views:
   holding one is refused instead. The exporter writes at most six, so the
   refusal guards a future change, not today's builds.
 * ``membership`` — the spells of a point-in-time build, half-open as the
-  manifest states them; an as-of build has one open spell per instrument from
-  the window's start, since it holds one constituent set throughout.
+  manifest states them, with both announcements; an as-of build has one open
+  spell per instrument from the window's start, since it holds one constituent
+  set throughout.
+* ``history`` — where each instrument's rows begin, for a build exported with
+  history: rows of ``bars`` outside ``membership`` from that session on are
+  prices a feature may read, never membership (ADR-025). Empty without history.
 * ``manifest`` — one row naming the build, so every query can be tied to the
   dataset version and content hash it was computed from.
 """
@@ -70,6 +74,7 @@ _PRICES = ("open", "high", "low", "close")
 # price columns to PRICE_TYPE.
 _BARS = "verified_bars"
 _MEMBERSHIP = "verified_membership"
+_HISTORY = "verified_history"
 _MANIFEST = "verified_manifest"
 
 _VIEWS = (
@@ -87,8 +92,13 @@ _VIEWS = (
     """,
     """
     CREATE VIEW membership AS
-    SELECT instrument_id, "start", "until", announced_on
+    SELECT instrument_id, "start", "until", announced_on, removal_announced_on
     FROM verified_membership
+    """,
+    """
+    CREATE VIEW history AS
+    SELECT instrument_id, history_from
+    FROM verified_history
     """,
     """
     CREATE VIEW manifest AS
@@ -107,7 +117,7 @@ def connect(
 ) -> duckdb.DuckDBPyConnection:
     """Verify a build and open an in-memory DuckDB connection over it.
 
-    The connection holds the ``bars``, ``membership`` and ``manifest`` views
+    The connection holds the ``bars``, ``membership``, ``history`` and ``manifest`` views
     and cannot read or write a file; its configuration is locked, so that
     cannot be undone with ``SET``. Results leave through Python — ``fetchall``,
     ``arrow``, ``df`` — not through ``COPY``. Close it when done.
@@ -141,6 +151,7 @@ def connect(
     try:
         connection.register(_BARS, read_bars_table(build.files[BARS_FILE]))
         connection.register(_MEMBERSHIP, _membership_table(build))
+        connection.register(_HISTORY, _history_table(build))
         connection.register(_MANIFEST, _manifest_table(build))
 
         for view in _VIEWS:
@@ -189,6 +200,24 @@ def _membership_table(build: VerifiedBuild) -> Any:  # noqa: ANN401 - pyarrow sh
             "start": pa.array([spell.start for _, spell in spells], type=pa.date32()),
             "until": pa.array([spell.until for _, spell in spells], type=pa.date32()),
             "announced_on": pa.array([spell.announced_on for _, spell in spells], type=pa.date32()),
+            "removal_announced_on": pa.array(
+                [spell.removal_announced_on for _, spell in spells], type=pa.date32()
+            ),
+        }
+    )
+
+
+def _history_table(build: VerifiedBuild) -> Any:  # noqa: ANN401 - pyarrow ships no types.
+    started = [
+        (instrument.instrument_id, instrument.history_from)
+        for instrument in build.manifest.instruments
+        if instrument.history_from is not None
+    ]
+
+    return pa.table(
+        {
+            "instrument_id": pa.array([held for held, _ in started], type=pa.string()),
+            "history_from": pa.array([start for _, start in started], type=pa.date32()),
         }
     )
 
@@ -215,5 +244,6 @@ def _manifest_table(build: VerifiedBuild) -> Any:  # noqa: ANN401 - pyarrow ship
             "known_as_of_utc": pa.array([known_as_of], type=pa.timestamp("us")),
             "from_date": pa.array([manifest.from_date], type=pa.date32()),
             "to_date": pa.array([manifest.to_date], type=pa.date32()),
+            "history_sessions": pa.array([manifest.history_sessions], type=pa.int32()),
         }
     )

@@ -190,3 +190,112 @@ def test_a_build_that_is_not_daily_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(UnsupportedManifestError, match="1h"):
         LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+# Two sessions before the window, then the window itself. aaa is a member
+# throughout except on SESSIONS[2]; bbb is admitted on SESSIONS[2].
+BEFORE = weekdays(date(2025, 12, 29), 5)[-2:]
+
+
+def _history_spec(**changes: object) -> SyntheticDataset:
+    spec = SyntheticDataset(
+        bars=[SyntheticBar("aaa", session, Decimal(100)) for session in [*BEFORE, *SESSIONS]]
+        + [SyntheticBar("bbb", session, Decimal(20)) for session in SESSIONS],
+        spells={
+            "aaa": [(SESSIONS[0], SESSIONS[2]), (SESSIONS[3], None)],
+            "bbb": [(SESSIONS[2], None)],
+        },
+        history_sessions=2,
+        window=(SESSIONS[0], SESSIONS[-1]),
+    )
+
+    for name, value in changes.items():
+        setattr(spec, name, value)
+
+    return spec
+
+
+def test_history_rows_load_as_data_and_never_as_membership(tmp_path: Path) -> None:
+    # aaa's two bars before the window and its bar in the gap between spells,
+    # and bbb's two bars before its admission, are all history: readable as
+    # prices, and none of them makes the instrument a member that session.
+    write_dataset(tmp_path, _history_spec())
+
+    dataset = LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+    by_id = {instrument.instrument_id: instrument for instrument in dataset.manifest.instruments}
+
+    assert by_id["aaa"].history_from == BEFORE[0]
+    assert by_id["bbb"].history_from == SESSIONS[0]
+    assert list(dataset.sessions) == [*BEFORE, *SESSIONS]
+    assert BEFORE[0] in dataset.bars_of("aaa")
+    assert SESSIONS[2] in dataset.bars_of("aaa")
+    assert dataset.members_on(BEFORE[0]) == frozenset()
+    assert dataset.members_on(SESSIONS[1]) == {"aaa"}
+    assert dataset.members_on(SESSIONS[2]) == {"bbb"}
+
+
+def test_an_as_of_build_may_carry_history_before_its_window(tmp_path: Path) -> None:
+    write_dataset(tmp_path, _history_spec(spells=None))
+
+    dataset = LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+    assert BEFORE[0] in dataset.bars_of("aaa")
+    assert dataset.manifest.from_date == SESSIONS[0]
+
+
+def test_a_row_before_where_history_starts_is_refused(tmp_path: Path) -> None:
+    spec = _history_spec(history_from={"aaa": BEFORE[1]})
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="outside the window"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_a_row_after_the_last_spell_is_refused_even_with_history(tmp_path: Path) -> None:
+    # History looks backwards only; the exporter writes nothing after a name
+    # leaves, so a build with such a row was not written by it.
+    spec = _history_spec(spells={"aaa": [(SESSIONS[0], SESSIONS[4])], "bbb": [(SESSIONS[2], None)]})
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="outside its membership"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_without_history_a_row_before_the_window_is_refused(tmp_path: Path) -> None:
+    write_dataset(tmp_path, _history_spec(history_sessions=0))
+
+    with pytest.raises(DatasetIntegrityError, match="outside the window"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_without_history_a_row_between_spells_is_refused(tmp_path: Path) -> None:
+    spec = _history_spec(history_sessions=0)
+    spec.bars = [bar for bar in spec.bars if bar.session not in BEFORE]
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="outside its membership"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_a_history_start_no_row_begins_on_is_refused(tmp_path: Path) -> None:
+    # history_from is where the rows begin; one set earlier than that would
+    # vouch for rows nobody wrote, and is a manifest describing another build.
+    write_dataset(tmp_path, _history_spec(history_from={"aaa": date(2025, 12, 29)}))
+
+    with pytest.raises(DatasetIntegrityError, match="history"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_a_manifest_without_history_that_names_a_history_start_is_refused(tmp_path: Path) -> None:
+    spec = _history_spec(history_sessions=0, history_from={"aaa": SESSIONS[0]})
+    spec.bars = [
+        bar
+        for bar in spec.bars
+        if bar.session not in BEFORE
+        and (bar.instrument_id, bar.session) != ("aaa", SESSIONS[2])
+        and (bar.instrument_id == "aaa" or bar.session >= SESSIONS[2])
+    ]
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="no history"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")

@@ -202,6 +202,7 @@ def test_the_manifest_view_names_the_build(tmp_path: Path) -> None:
         "known_as_of_utc": None,
         "from_date": SESSIONS[0],
         "to_date": SESSIONS[-1],
+        "history_sessions": 0,
     }
 
 
@@ -279,3 +280,35 @@ def test_a_build_that_is_not_daily_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(UnsupportedManifestError, match="1h"):
         connect(LocalDatasetProvider(tmp_path), DATASET)
+
+
+def test_history_rows_are_the_bars_outside_membership_from_where_history_starts(
+    tmp_path: Path,
+) -> None:
+    # ccc is admitted on SESSIONS[3]; exported with history, its two bars
+    # before that are in the file. In SQL they are the rows of bars that no
+    # spell covers, and the history view says where they begin.
+    spec = _spec()
+    spec.bars += [SyntheticBar("ccc", session, Decimal(24_000)) for session in SESSIONS[1:3]]
+    spec.history_sessions = 2
+    write_dataset(tmp_path, spec)
+
+    with connect(LocalDatasetProvider(tmp_path), DATASET) as connection:
+        started = connection.sql("SELECT * FROM history ORDER BY instrument_id").fetchall()
+        outside = connection.sql(
+            "SELECT b.instrument_id, b.session FROM bars b "
+            "WHERE NOT EXISTS (SELECT 1 FROM membership m WHERE m.instrument_id = b.instrument_id "
+            "AND m.start <= b.session AND (m.until IS NULL OR b.session < m.until)) "
+            "ORDER BY 1, 2"
+        ).fetchall()
+        sessions = connection.sql("SELECT history_sessions FROM manifest").fetchone()
+
+    assert started == [("aaa", SESSIONS[0]), ("bbb", SESSIONS[1]), ("ccc", SESSIONS[1])]
+    assert outside == [("ccc", SESSIONS[1]), ("ccc", SESSIONS[2])]
+    assert sessions == (2,)
+
+
+def test_without_history_the_history_view_is_empty(
+    point_in_time: duckdb.DuckDBPyConnection,
+) -> None:
+    assert point_in_time.sql("SELECT count(*) FROM history").fetchone() == (0,)

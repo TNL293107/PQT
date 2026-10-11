@@ -47,6 +47,12 @@ class SyntheticDataset:
     adjusted: bool = True
     # The exporter's timestamps carry no zone; a reader must cope if one does.
     opened_at_zone: str | None = None
+    # History, as a schema 3 export with --history writes it. With a count
+    # above zero each instrument's history_from is its first row unless
+    # given here; the window is the bars' first and last session unless given.
+    history_sessions: int = 0
+    history_from: Mapping[str, date | None] | None = None
+    window: tuple[date, date] | None = None
 
 
 def weekdays(start: date, count: int) -> list[date]:
@@ -93,17 +99,24 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
     payload = (build / "bars.parquet").read_bytes()
     instruments = list(spec.instruments) or sorted({bar.instrument_id for bar in spec.bars})
     sessions = [bar.session for bar in spec.bars]
+    from_date, to_date = spec.window or (min(sessions), max(sessions))
+    first_rows = {
+        instrument: min(
+            (bar.session for bar in spec.bars if bar.instrument_id == instrument), default=None
+        )
+        for instrument in instruments
+    }
 
     raw: dict[str, Any] = {
         "dataset_id": spec.dataset_id,
         "dataset_version": spec.version,
-        "schema_version": 2,
+        "schema_version": 3,
         "content_hash": "",
         "known_as_of_utc": None,
         "adjusted": spec.adjusted,
         "announcement_policy": "strict",
         "universe_code": "TEST30",
-        "universe_as_of": None if spec.spells is not None else min(sessions).isoformat(),
+        "universe_as_of": None if spec.spells is not None else from_date.isoformat(),
         "membership": "point_in_time" if spec.spells is not None else "as_of",
         "instruments": [
             {
@@ -117,15 +130,17 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
                         "from": start.isoformat(),
                         "until": None if until is None else until.isoformat(),
                         "announced_on": None,
+                        "removal_announced_on": None,
                     }
                     for start, until in spec.spells.get(instrument, ())
                 ],
+                "history_from": _history_from(spec, instrument, first_rows[instrument]),
             }
             for instrument in instruments
         ],
         "interval": "1d",
-        "from_date": min(sessions).isoformat(),
-        "to_date": max(sessions).isoformat(),
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
         "transformation_version": 1,
         "validation_version": 1,
         "adjustment_version": 2,
@@ -138,6 +153,7 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
                 "sha256": hashlib.sha256(payload).hexdigest(),
             }
         ],
+        "history_sessions": spec.history_sessions,
         "row_count": len(ordered),
         "created_at_utc": "2026-10-11T00:00:00+00:00",
         "created_by_commit": None,
@@ -147,3 +163,14 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
     (build / "manifest.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
 
     return build
+
+
+def _history_from(spec: SyntheticDataset, instrument: str, first_row: date | None) -> str | None:
+    if spec.history_from is not None and instrument in spec.history_from:
+        given = spec.history_from[instrument]
+        return None if given is None else given.isoformat()
+
+    if spec.history_sessions == 0 or first_row is None:
+        return None
+
+    return first_row.isoformat()

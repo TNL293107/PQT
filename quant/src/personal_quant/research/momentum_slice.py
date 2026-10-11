@@ -22,6 +22,12 @@ build scores every bonus issue as a crash. The result records the build's
 membership mode, adjustment and announcement policy beside its IC, so the two
 can never be read apart.
 
+A build exported with history (``pqt dataset export --history N``, ADR-025)
+holds prices from before each name's admission. The factor reads them through
+the harness like any other session, so a name admitted mid-window is scored at
+its first rebalance when its history covers the lookback; rebalances still
+happen only inside the window, where membership is defined.
+
 Returns are close-to-close with no costs, price-band or lot limits — see
 :mod:`personal_quant.backtesting.returns` — and the IC statistics do not
 account for how many factors were tried before this one, which needs the
@@ -32,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import math
+from bisect import bisect_left
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -155,8 +162,11 @@ def run_momentum_slice(
 ) -> SliceResult:
     """Run the vertical slice over a dataset.
 
-    Rebalances start at the first session with a full lookback behind it and
-    repeat every ``rebalance_every`` sessions while a whole period follows.
+    Rebalances start at the first session of the window with a full lookback
+    behind it and repeat every ``rebalance_every`` sessions while a whole
+    period follows. A build with history may hold sessions before its window;
+    they are read as lookback and never rebalanced on, since no universe is
+    defined there.
 
     Args:
         dataset: The verified dataset.
@@ -197,7 +207,7 @@ def run_momentum_slice(
     signal_engine = signal_engine or CrossSectionalRank()
     portfolio = portfolio or TopQuantile(quantiles)
     sessions = list(dataset.sessions)
-    first = factor.lookback.sessions - 1
+    first = max(factor.lookback.sessions - 1, bisect_left(sessions, manifest.from_date))
     periods: list[SlicePeriod] = []
 
     for index in range(first, len(sessions) - rebalance_every, rebalance_every):

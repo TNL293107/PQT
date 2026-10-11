@@ -12,6 +12,13 @@ instrument's spells, which the exporter never writes. Any mismatch is a hard
 error. A result computed from a silently changed input is not reproducible, and
 the point of a dataset version is that it is.
 
+The one exception is a history row (schema 3, ADR-025): a build exported with
+history may hold rows before an instrument's first spell, before the window,
+or between two spells, from the instrument's ``history_from`` up to its last
+membership session. Those are data a feature may read and never membership —
+:meth:`CanonicalDataset.members_on` still reads only the spells — and a row
+outside those bounds is refused like any other.
+
 :meth:`LocalDatasetProvider.verify` does all of that once and hands back what it
 checked, as a :class:`VerifiedBuild`. Every reader is built on it —
 :meth:`LocalDatasetProvider.open` for Python,
@@ -39,6 +46,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from personal_quant.research.manifest import (
+    DatasetInstrument,
     DatasetManifest,
     UnsupportedManifestError,
     content_hash_of,
@@ -328,7 +336,15 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
     if point_in_time and any(instrument.spells is None for instrument in listed.values()):
         raise DatasetIntegrityError("A point-in-time manifest lists an instrument with no spells.")
 
+    if manifest.history_sessions == 0 and any(
+        instrument.history_from is not None for instrument in listed.values()
+    ):
+        raise DatasetIntegrityError(
+            "A manifest with no history says where an instrument's history starts."
+        )
+
     seen: set[tuple[str, date]] = set()
+    first: dict[str, date] = {}
 
     for bar in bars:
         key = (bar.instrument_id, bar.session)
@@ -341,6 +357,12 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
 
         if key in seen:
             raise DatasetIntegrityError(f"{bar.instrument_id} has two rows for {bar.session}.")
+
+        seen.add(key)
+        first[bar.instrument_id] = min(bar.session, first.get(bar.instrument_id, bar.session))
+
+        if _is_history(manifest, instrument, bar.session):
+            continue
 
         if not manifest.from_date <= bar.session <= manifest.to_date:
             raise DatasetIntegrityError(
@@ -355,7 +377,34 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
                 f"{bar.instrument_id} has a row for {bar.session}, outside its membership."
             )
 
-        seen.add(key)
+    for instrument in listed.values():
+        start = instrument.history_from
+
+        if start is not None and first.get(instrument.instrument_id) != start:
+            raise DatasetIntegrityError(
+                f"{instrument.instrument_id}'s history is recorded from {start}, but its rows "
+                f"begin on {first.get(instrument.instrument_id)}."
+            )
+
+
+def _is_history(manifest: DatasetManifest, instrument: DatasetInstrument, session: date) -> bool:
+    """Report whether a row is one a history export may hold outside membership.
+
+    From the instrument's ``history_from`` up to its last membership session:
+    the window's end for an as-of build, the last spell's exclusive end for a
+    point-in-time one. Nothing after it, because history looks backwards only.
+    """
+    start = instrument.history_from
+
+    if start is None or session < start or session > manifest.to_date:
+        return False
+
+    if instrument.spells is None:
+        return True
+
+    last = max(instrument.spells, key=lambda spell: spell.start, default=None)
+
+    return last is not None and (last.until is None or session < last.until)
 
 
 def read_bars_table(payload: bytes) -> Any:  # noqa: ANN401 - pyarrow ships no types.
