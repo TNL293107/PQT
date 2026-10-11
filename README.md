@@ -260,6 +260,13 @@ Everything in this list is implemented and covered by tests.
   PostgreSQL and a `PING` against Redis, and reports each separately. Returns
   503 when a dependency is unavailable, and discloses no host, port, user or
   driver detail while doing so.
+- **Ingestion series lock (U7)** — Redis's job, and why it gates readiness.
+  Every ingestion pass holds its instrument and resolution in Redis for the
+  length of the pass, so the scheduled host and `pqt ingest` cannot race on one
+  checkpoint and one set of bars. A pass that finds the series held is recorded
+  as skipped; one that cannot reach Redis does not ingest and is recorded as
+  failed. See the amendment to
+  [ADR-003](docs/architecture/decisions/ADR-003-redis.md).
 - **EF Core migration pipeline** — a baseline migration creates the `quant`
   schema and the migrations history table.
 - **Instrument master (Phase 1, workstream 1)** — `Exchange` and `Instrument`

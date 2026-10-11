@@ -368,7 +368,7 @@ range and writes to the deployment's own disk.
 | **Research store** | Parquet files | Immutable, versioned, hashed datasets |
 | **Analytical store** | DuckDB, embedded | Queries over Parquet; no server, no operations |
 | **Experiment store** | PostgreSQL, `research` schema | Experiments, runs, metrics, artifacts, jobs |
-| **Cache** | Redis | Distributed ingestion lock, manifest cache |
+| **Cache** | Redis | Distributed ingestion lock (done); manifest cache (not yet) |
 
 The research store is deliberately files rather than a database. A dataset
 version that is a file with a hash can be copied, archived and verified; a
@@ -382,9 +382,14 @@ roughly 150 million rows — or when a range query on `quant.bars` exceeds about
 second. Adding an analytical database before then would be infrastructure
 without a workload.
 
-Redis is currently provisioned, health-checked, gating readiness, and used by
-nothing. U7 either gives it a real job or removes it from the readiness gate. A
-dependency that can fail a deployment while contributing nothing is a liability.
+Redis was provisioned, health-checked and gating readiness while used by
+nothing, and U7 required it to be given a real job or removed from the gate. It
+now holds the ingestion series lock: every pass holds its instrument and
+resolution in Redis for the length of the pass, so the scheduled host and the
+operator CLI cannot race on one checkpoint and one set of bars. A pass that
+finds the series held is skipped; one that cannot reach Redis fails closed. That
+is what keeps Redis in the readiness gate — see the 2026-10-11 amendment to
+[ADR-003](decisions/ADR-003-redis.md).
 
 ---
 

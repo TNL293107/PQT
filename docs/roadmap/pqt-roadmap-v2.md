@@ -548,7 +548,7 @@ was added, `pyarrow`.
 | Research store | Parquet — immutable, versioned, hashed | A dataset version becomes a file with a hash, not a database state |
 | Analytical store | DuckDB, embedded ✅ | Reads Parquet natively; no server, no operations |
 | Experiment store | PostgreSQL, `research` schema | Must be transactional and joinable to instruments |
-| Cache | Redis | Given a real job — a distributed ingestion lock and manifest caching — or removed from the readiness gate |
+| Cache | Redis | **Has its job:** a distributed lock per ingestion series, held by every pass and failing closed when Redis is down — which is what keeps it in the readiness gate. Manifest caching not done. See [ADR-003](../architecture/decisions/ADR-003-redis.md#amendment--2026-10-11-u7-redis-holds-the-ingestion-series-lock) |
 
 **Rejected, with the trigger that would reverse it.** TimescaleDB and
 ClickHouse. Daily bars for roughly 400 Vietnamese tickers across fifteen years
@@ -799,6 +799,7 @@ Phase 5 and Gate B may both proceed.
 
 - **U6** — quant abstraction with one factor end to end
 - **U7** — research storage working; Redis given a job or removed from readiness
+  (the Redis half is done: it holds the ingestion series lock)
 - **U8** — Qlib adapter working **and provably optional**
 - **U9** — experiment provenance complete, including `trial_count`
 - **U10** — boundary working, with Python write access to `quant.*` **provably denied**

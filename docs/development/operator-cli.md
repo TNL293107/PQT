@@ -35,6 +35,25 @@ the environment — the same variables the API host reads, documented in
 `.env.example`. A command that needs configuration the environment did not
 supply says which settings are missing and stops; it does not guess.
 
+**`ingest` needs Redis as well as PostgreSQL.** Every pass holds its series in
+Redis so it cannot race the scheduled host — see [`ingest`](#ingest). Inside
+the deployment that is already arranged. On the host, point the CLI at the
+ports Compose publishes, which are the `*_HOST_PORT` values in `.env`:
+
+```bash
+export Postgres__Host=localhost Postgres__Port=5432        # POSTGRES_HOST_PORT
+export Postgres__Database=personal_quant Postgres__Username=quant_user
+export Postgres__Password=...                              # POSTGRES_PASSWORD
+export Redis__Host=localhost Redis__Port=6379              # REDIS_HOST_PORT
+export Redis__Password=                                    # REDIS_PASSWORD, if set
+```
+
+PowerShell: `$env:Redis__Host = 'localhost'`, and so on. A Redis the CLI cannot
+reach does not stop the command from starting, and does not let it ingest
+unlocked either: each pass is recorded as failed, naming the lock store, and the
+command exits 1. The commands that never ingest — `provider`, `quality`,
+`schema`, `calendar`, `dataset` — do not touch Redis.
+
 Nothing about the CLI starts the API's hosted services. It never migrates, never
 seeds and never begins a scheduled pass.
 
@@ -115,6 +134,28 @@ run re-ingest history.
 **Name `--source` whenever two registered sources could serve the request.**
 There is no fallback and no priority order: ambiguity is refused, and the run
 records both candidates rather than picking by registration order.
+
+**One pass per series at a time, across processes.** Each pass holds its
+instrument and resolution under a lock in Redis until it ends, so an `ingest`
+started while the scheduled host is working the same series does nothing and
+says so:
+
+```
+FPT 1d CAFEF ... skipped fetched 0 accepted 0 rejected 0 stored 0 revised 0
+FPT: Another ingestion of this series is in progress, so this pass did not run. ...
+```
+
+That is a refusal, exit 1, and on `backfill` it stops the instrument rather than
+being read as the end of the range. Re-run once the other pass has finished; it
+resumes from the checkpoint that pass leaves. A different resolution of the same
+instrument is a different series and is not excluded.
+
+If Redis cannot be reached the pass does not ingest at all — it is recorded as
+**failed**, with a reason naming the lock store, rather than proceeding unlocked.
+A lock whose holder died is released by its expiry,
+`MarketData__IngestionLockTtlSeconds` (ten minutes by default); the setting is
+validated to outlast the longest pass the retry policy permits, so raise it if
+you raise `MaxAttempts` or `ProviderTimeoutSeconds` far enough to need it.
 
 A universe backfill reads membership **as of the day the range starts**, not
 today. Backfilling today's constituents over an earlier decade is the

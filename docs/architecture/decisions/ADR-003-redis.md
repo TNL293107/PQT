@@ -1,6 +1,6 @@
 # ADR-003: Redis for cache, ephemeral state and realtime fan-out
 
-**Status:** Accepted · **Date:** 2026-08-13 · **Phase:** 0
+**Status:** Accepted, amended 2026-10-11 (U7) · **Date:** 2026-08-13 · **Phase:** 0
 
 ## Context
 
@@ -79,3 +79,45 @@ dependency, which inverts the intended failure model.
   Redis is not reachable outside the Compose network.
 - Revisit if a durable, replayable event log becomes a requirement — most
   likely alongside the OMS in Phase 13.
+
+## Amendment — 2026-10-11 (U7): Redis holds the ingestion series lock
+
+Until U7, Redis was provisioned, health-checked and gating readiness while
+nothing used it — a dependency that could fail a deployment and contributed
+nothing. U7 required it to be given a real job or removed from the readiness
+gate. It has been given one.
+
+**The job.** Every ingestion pass holds its series — one instrument at one
+resolution — under a lock in Redis for the length of the pass. The scheduled
+host and the operator CLI are separate processes running the same pipeline, and
+two passes over one series read one checkpoint, fetch one range and race to
+commit the same bars. Nothing in either process can see the other.
+
+- The key is `pqt:ingest:lock:{instrumentId}:{interval}`, taken with
+  `SET … NX` and an expiry, released by a Lua compare-and-delete so that only
+  the owner's random token can delete it.
+- The expiry is `MarketData:IngestionLockTtlSeconds`, ten minutes by default,
+  and is validated to exceed the longest pass the retry policy permits. It
+  exists for the process that dies holding the lock.
+- A pass that finds the series held is recorded as **skipped**, saying another
+  ingestion of the series is in progress.
+- A pass that cannot reach Redis **fails closed**: it does not ingest, and is
+  recorded as **failed** with a reason naming the lock store.
+
+**What this changes in the decision above.** "Redis is allowed to be down" now
+has an exception: while Redis is down, ingestion is refused. The API still
+starts, every read still serves, and readiness still reports Redis separately —
+which is now the justification for keeping it in the readiness gate, since a
+deployment reporting ready with Redis down would be reporting ready while
+refusing every ingestion pass it ran. The CLI's `ingest` verbs need Redis
+reachable for the same reason.
+
+**What it does not change.** Nothing durable lives in Redis: a lock that is lost
+costs at most one expiry of exclusion, and every fact it guards is in
+PostgreSQL. Manifest caching, the other job U7 named, is not done; the lock is
+enough to justify the dependency on its own.
+
+PostgreSQL advisory locks were the alternative and were rejected: an advisory
+lock belongs to one connection, and the pipeline's connection is EF Core's,
+pooled and retried by the execution strategy beneath it. A lock that disappears
+when the strategy reconnects is not a lock.
