@@ -56,7 +56,16 @@ const MILESTONES: readonly Milestone[] = [
         phase: "Phase 3",
         status: "COMPLETE",
       },
-      { name: "Corporate actions & adjusted data", phase: "Phase 4" },
+      {
+        name: "Corporate actions & adjusted data",
+        phase: "Phase 4",
+        status: "COMPLETE",
+      },
+      {
+        name: "Research foundation upgrade",
+        phase: "U1–U10",
+        status: "COMPLETE",
+      },
     ],
   },
   {
@@ -64,12 +73,18 @@ const MILESTONES: readonly Milestone[] = [
     name: "Quant Platform",
     summary: "Turn data into signals, and test whether the signals hold.",
     capabilities: [
-      { name: "Market intelligence terminal", phase: "Phase 5" },
+      {
+        name: "Market intelligence terminal",
+        phase: "Phase 5",
+        status: "IN PROGRESS",
+      },
       { name: "Fundamental & financial data", phase: "Phase 6" },
-      { name: "News & alternative data", phase: "Phase 7" },
-      { name: "Quant research framework", phase: "Phase 8" },
-      { name: "Backtesting engine", phase: "Phase 9" },
-      { name: "Risk engine", phase: "Phase 10" },
+      { name: "Factor research & features", phase: "Phase 7" },
+      { name: "Backtesting & research validation", phase: "Phase 8" },
+      { name: "Risk engine", phase: "Phase 9" },
+      { name: "Portfolio management", phase: "Phase 10" },
+      { name: "News, events & alternative data", phase: "Phase 11" },
+      { name: "Advanced quant research", phase: "Phase 12" },
     ],
   },
   {
@@ -77,11 +92,10 @@ const MILESTONES: readonly Milestone[] = [
     name: "Trading System",
     summary: "Route orders deterministically, and prove the books agree.",
     capabilities: [
-      { name: "Portfolio management", phase: "Phase 11" },
-      { name: "Paper trading", phase: "Phase 12" },
-      { name: "Order management system", phase: "Phase 13" },
-      { name: "Broker integration", phase: "Phase 14" },
-      { name: "Reconciliation", phase: "Phase 15" },
+      { name: "Paper trading", phase: "Phase 13" },
+      { name: "Order management system", phase: "Phase 14" },
+      { name: "Broker integration", phase: "Phase 15" },
+      { name: "Reconciliation", phase: "Phase 16" },
     ],
   },
   {
@@ -89,10 +103,10 @@ const MILESTONES: readonly Milestone[] = [
     name: "Advanced Engineering",
     summary: "Make the hot path fast, and the research loop assisted.",
     capabilities: [
-      { name: "C++ performance engine", phase: "Phase 16" },
-      { name: "AI research analyst", phase: "Phase 17" },
-      { name: "Production hardening", phase: "Phase 18" },
-      { name: "Portfolio / public demonstration", phase: "Phase 19" },
+      { name: "C++ performance engine", phase: "Phase 17" },
+      { name: "AI research analyst", phase: "Phase 18" },
+      { name: "Production hardening", phase: "Phase 19" },
+      { name: "Public demonstration", phase: "Phase 20" },
     ],
   },
 ];
@@ -104,9 +118,10 @@ export function CapabilitiesPage() {
       <div className="page__intro">
         <h1 className="page__title">Capability Map</h1>
         <p className="page__lede">
-          The intended shape of the system, targeting the Vietnam market. The
-          foundation and part of the instrument master are built; everything
-          else on this page is planned.
+          The intended shape of the system, targeting the Vietnam market, in
+          the canonical roadmap's numbering. The data foundation and the
+          research foundation are built, the terminal is under way, and
+          everything else on this page is planned.
         </p>
       </div>
 

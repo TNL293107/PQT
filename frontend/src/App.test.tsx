@@ -19,7 +19,7 @@ describe("App shell", () => {
     renderAt("/");
 
     expect(screen.getByText("Personal Quant Terminal")).toBeInTheDocument();
-    expect(screen.getByText("PHASE 1")).toBeInTheDocument();
+    expect(screen.getByText("PHASE 5")).toBeInTheDocument();
   });
 
   it("states plainly that trading is not enabled", () => {
@@ -67,20 +67,22 @@ describe("App shell", () => {
     expect(badges.length).toBeGreaterThan(10);
   });
 
-  it("marks the delivered data-foundation phases as complete", () => {
-    // The instrument master, ingestion and data quality all ship. A badge may
-    // only claim it because the behaviour genuinely exists.
+  it("marks the delivered foundation as complete", () => {
+    // Phases 1–4 and the Research Foundation Upgrade ship. A badge may only
+    // claim it because the behaviour genuinely exists.
     renderAt("/capabilities");
 
-    expect(screen.getAllByText("COMPLETE")).toHaveLength(3);
+    expect(screen.getAllByText("COMPLETE")).toHaveLength(5);
   });
 
-  it("claims nothing is under way while nothing is", () => {
+  it("marks only the phase being built as under way", () => {
     // The in-progress badge is reserved for a phase actually being built, so
-    // it is absent between phases rather than left on the last one finished.
+    // it moves with the work rather than staying on the last one finished.
     renderAt("/capabilities");
 
-    expect(screen.queryAllByText("IN PROGRESS")).toHaveLength(0);
+    const underWay = screen.getAllByText("IN PROGRESS");
+    expect(underWay).toHaveLength(1);
+    expect(underWay[0]!.closest("li")).toHaveTextContent("Phase 5");
   });
 
   it("shows a not-found view for an unknown route", () => {

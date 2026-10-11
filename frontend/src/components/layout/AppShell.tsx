@@ -57,7 +57,7 @@ export function AppShell() {
             PQ
           </span>
           <span className="shell__name">Personal Quant Terminal</span>
-          <span className="shell__phase numeric">PHASE 1</span>
+          <span className="shell__phase numeric">PHASE 5</span>
         </div>
 
         <nav className="shell__nav" aria-label="Primary">
