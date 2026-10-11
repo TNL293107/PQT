@@ -48,6 +48,11 @@ internal static class Usage
         output.WriteLine("  pqt research run <RUN-ID>");
         output.WriteLine("  pqt research reproduce <RUN-ID>");
         output.WriteLine();
+        output.WriteLine("  pqt watchlist list");
+        output.WriteLine("  pqt watchlist show|create|delete <NAME>");
+        output.WriteLine("  pqt watchlist rename <NAME> <NEW-NAME>");
+        output.WriteLine("  pqt watchlist add|remove <NAME> <TICKER> [<TICKER>...]");
+        output.WriteLine();
         output.WriteLine("  pqt schema status");
         output.WriteLine("  pqt calendar status");
         output.WriteLine();

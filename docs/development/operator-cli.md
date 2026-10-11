@@ -358,6 +358,29 @@ Start the worker with `docker compose --profile research up -d quant-worker`;
 it needs `RESEARCH_DB_PASSWORD` in `.env`, the same value the backend uses to
 give the role its login.
 
+### `watchlist`
+
+The operator's watchlists (ADR-026), the same ones the console shows. Stored by
+canonical instrument, so a ticker change leaves a list pointing at the same
+security.
+
+```bash
+pqt watchlist list
+pqt watchlist create core
+pqt watchlist add core FPT VCB HPG
+pqt watchlist remove core HPG
+pqt watchlist show core
+pqt watchlist rename core vn30-core
+pqt watchlist delete vn30-core
+```
+
+Names are lowercase letters, digits, `_` and `-`. `add` and `remove` resolve
+every ticker before writing anything, so a typo leaves the list untouched;
+adding what is already there and removing what is not are reported, not
+refused. The CLI needs no operator key — it writes with the deployment's
+database credentials — but the browser does: set `PQT_OPERATOR_KEY` in `.env`
+for the API to accept writes at all (ADR-027).
+
 ## Exit codes
 
 | Code | Meaning |
