@@ -30,6 +30,9 @@ internal static class Usage
         output.WriteLine("  pqt quality list    --instrument <TICKER> [--interval 1d] [--limit 50] [--status open]");
         output.WriteLine("  pqt quality resolve <ID> --explained|--dismissed --reason \"<text>\"");
         output.WriteLine();
+        output.WriteLine("  pqt coverage <TICKER|INSTRUMENT-ID> [--exchange <VENUE>]");
+        output.WriteLine("                      (what PQT holds for it: prices, actions, universes)");
+        output.WriteLine();
         output.WriteLine("  pqt adjust recompute --instrument <TICKER>");
         output.WriteLine();
         output.WriteLine("  pqt dataset export --universe <CODE> --from yyyy-MM-dd [--to yyyy-MM-dd]");
