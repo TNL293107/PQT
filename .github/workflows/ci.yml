@@ -192,6 +192,49 @@ jobs:
         run: pytest --cov=personal_quant --cov-report=term-missing
 
   # ---------------------------------------------------------------------------
+  # Quant research extra — the Qlib adapter against the real engine (U8).
+  #
+  # The job above runs without Qlib, which is what proves it optional; the
+  # import guard runs there too, as a test. This one installs the `research`
+  # extra and runs the adapter's tests, which skip anywhere Qlib is absent.
+  # pyqlib 0.9.7 has wheels for CPython 3.12 at the newest.
+  #
+  # Deliberately not required by the `ci` gate below (ADR-017): Qlib is an
+  # optional research engine, and an upstream break in it, or in the MLflow it
+  # pulls in unpinned, must not block a change that does not touch it.
+  # ---------------------------------------------------------------------------
+  quant-research:
+    name: Quant research extra (Qlib)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    defaults:
+      run:
+        working-directory: quant
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: quant/pyproject.toml
+
+      - name: Install
+        run: python -m pip install --upgrade pip && pip install -e ".[dev,research]"
+
+      # A failed install would otherwise read as a run of skipped tests.
+      - name: Qlib is importable
+        run: python -c "from personal_quant.integrations.qlib import engine_version; print('qlib', engine_version())"
+
+      - name: Test the adapter
+        env:
+          MLFLOW_DISABLE_AGENT_HINT: "1"
+        run: pytest tests/test_qlib_adapter.py tests/test_qlib_optional.py tests/test_qlib_confinement.py
+
+  # ---------------------------------------------------------------------------
   # C++ engine — configure, build, test.
   #
   # Runs on Linux and Windows: the code compiles under both GCC and MSVC, and
