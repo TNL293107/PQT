@@ -4,6 +4,7 @@ import type {
   DataQualityReport,
   IngestionHistory,
 } from "../../types/marketData";
+import type { InstrumentCoverage } from "../../types/coverage";
 import { apiUrl } from "./config";
 
 /** Milliseconds before a market data request is abandoned. */
@@ -158,6 +159,25 @@ export async function fetchIngestionHistory(
   if (interval) params.set("interval", interval);
 
   return getJson<IngestionHistory>(path(instrumentId, "ingestion", params), signal);
+}
+
+/**
+ * Reads what PQT holds for an instrument, dataset by dataset.
+ *
+ * Every state in the answer was decided by the server, which the CLI also
+ * calls, so the console and the operator read the same verdict.
+ *
+ * @param instrumentId The canonical identifier.
+ * @param signal Aborts the request.
+ */
+export async function fetchCoverage(
+  instrumentId: string,
+  signal?: AbortSignal,
+): Promise<InstrumentCoverage> {
+  return getJson<InstrumentCoverage>(
+    path(instrumentId, "coverage", new URLSearchParams()),
+    signal,
+  );
 }
 
 function path(instrumentId: string, resource: string, params: URLSearchParams): string {

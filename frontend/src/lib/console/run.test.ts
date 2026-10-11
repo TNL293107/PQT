@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Instrument } from "../../types/instrument";
 import type { BarSeries, DataQualityReport } from "../../types/marketData";
+import type { InstrumentCoverage } from "../../types/coverage";
 import { runEntry, type ConsoleServices } from "./run";
 
 const FPT: Instrument = {
@@ -57,6 +58,25 @@ const REPORT: DataQualityReport = {
   calendarIsComplete: true,
 };
 
+const COVERAGE: InstrumentCoverage = {
+  instrumentId: FPT.instrumentId,
+  ticker: "FPT",
+  name: "FPT Corporation",
+  exchange: "HOSE",
+  prices: [],
+  corporateActions: {
+    state: "NotHeld",
+    count: 0,
+    cancelled: 0,
+    withoutAnnouncementDate: 0,
+    firstExDate: null,
+    lastExDate: null,
+    note: "No corporate action is recorded for this instrument.",
+  },
+  universes: [],
+  fundamentals: { state: "NotCollected", note: "Phase 6" },
+};
+
 /**
  * Services that answer without a network.
  *
@@ -86,6 +106,7 @@ function stubServices(overrides: Partial<ConsoleServices> = {}): ConsoleServices
       count: 0,
       runs: [],
     })),
+    coverage: vi.fn(async () => COVERAGE),
     health: vi.fn(async () => ({
       services: [],
       checkedAt: new Date("2026-09-05T00:00:00Z"),
@@ -350,6 +371,42 @@ describe("runEntry — QLTY and ING", () => {
     const record = (await runEntry("FPT ING", stubServices())).record;
 
     expect(record).toMatchObject({ kind: "ingestion", runs: [] });
+  });
+});
+
+describe("runEntry — COV", () => {
+  it("reads the coverage of the resolved security and hands it back untouched", async () => {
+    const services = stubServices();
+
+    const record = (await runEntry("FPT COV", services)).record;
+
+    expect(record).toEqual({ kind: "coverage", instrument: FPT, coverage: COVERAGE });
+    expect(services.coverage).toHaveBeenCalledWith(FPT.instrumentId, undefined);
+  });
+
+  it("reads coverage only once the security has resolved", async () => {
+    const services = stubServices({
+      resolve: vi.fn(async () => ({
+        query: "ZZZ",
+        outcome: "NotFound" as const,
+        instrument: null,
+        candidates: [],
+      })),
+    });
+
+    const record = (await runEntry("ZZZ COV", services)).record;
+
+    expect(record.kind).toBe("error");
+    expect(services.coverage).not.toHaveBeenCalled();
+  });
+
+  it("passes the abort signal through to the coverage read", async () => {
+    const services = stubServices();
+    const controller = new AbortController();
+
+    await runEntry("FPT COV", services, controller.signal);
+
+    expect(services.coverage).toHaveBeenCalledWith(FPT.instrumentId, controller.signal);
   });
 });
 

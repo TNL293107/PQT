@@ -2,6 +2,7 @@ import type { Instrument } from "../../types/instrument";
 import type { Bar, DataQualityIssue, IngestionRun } from "../../types/marketData";
 import { FUNCTIONS, VERBS } from "../../lib/console/entry";
 import type { ConsoleRecord } from "../../lib/console/records";
+import { CoverageView } from "./CoverageView";
 import { Sparkline } from "./Sparkline";
 
 /** Renders whatever a command produced. */
@@ -66,6 +67,9 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
 
     case "ingestion":
       return <IngestionView instrument={record.instrument} runs={record.runs} />;
+
+    case "coverage":
+      return <CoverageView coverage={record.coverage} />;
 
     default:
       return null;

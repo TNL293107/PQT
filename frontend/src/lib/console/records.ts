@@ -6,6 +6,7 @@ import type {
   IngestionRun,
 } from "../../types/marketData";
 import type { SystemHealth } from "../../types/health";
+import type { InstrumentCoverage } from "../../types/coverage";
 
 /**
  * What a command produced.
@@ -45,6 +46,11 @@ export type ConsoleRecord =
       readonly kind: "ingestion";
       readonly instrument: Instrument;
       readonly runs: readonly IngestionRun[];
+    }
+  | {
+      readonly kind: "coverage";
+      readonly instrument: Instrument;
+      readonly coverage: InstrumentCoverage;
     };
 
 /** One exchange in the transcript: what was typed, and what came back. */

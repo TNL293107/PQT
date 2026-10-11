@@ -3,6 +3,7 @@ import { fetchSystemHealth } from "../api/health";
 import { resolveInstrument, searchInstruments } from "../api/instruments";
 import {
   fetchBars,
+  fetchCoverage,
   fetchIngestionHistory,
   fetchQuality,
   fetchQualityIssues,
@@ -21,6 +22,7 @@ export interface ConsoleServices {
   readonly quality: typeof fetchQuality;
   readonly issues: typeof fetchQualityIssues;
   readonly ingestion: typeof fetchIngestionHistory;
+  readonly coverage: typeof fetchCoverage;
   readonly health: typeof fetchSystemHealth;
 }
 
@@ -32,6 +34,7 @@ export const liveServices: ConsoleServices = {
   quality: fetchQuality,
   issues: fetchQualityIssues,
   ingestion: fetchIngestionHistory,
+  coverage: fetchCoverage,
   health: fetchSystemHealth,
 };
 
@@ -107,6 +110,9 @@ export async function runEntry(
 
       case "ING":
         return { record: await ingestion(instrument, entry.options, services, signal) };
+
+      case "COV":
+        return { record: await coverage(instrument, services, signal) };
 
       default:
         return { record: { kind: "description", instrument } };
@@ -311,4 +317,21 @@ async function ingestion(
   const history = await services.ingestion(instrument.instrumentId, interval, signal);
 
   return { kind: "ingestion", instrument, runs: history.runs };
+}
+
+/**
+ * Reads what PQT holds for the security.
+ *
+ * Takes no options and computes nothing: every state, count and sentence in the
+ * answer was decided by the server, which the operator CLI calls too, so the
+ * console cannot come to a different verdict about what is missing.
+ */
+async function coverage(
+  instrument: Instrument,
+  services: ConsoleServices,
+  signal?: AbortSignal,
+): Promise<ConsoleRecord> {
+  const answer = await services.coverage(instrument.instrumentId, signal);
+
+  return { kind: "coverage", instrument, coverage: answer };
 }
