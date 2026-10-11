@@ -580,7 +580,7 @@ second store actually wanted (object storage for archive).
 
 ---
 
-### U8 — Qlib Research Adapter · Gate B
+### U8 — Qlib Research Adapter · Gate B ✅
 
 **Posture: research-only, optional, outside the production runtime,
 replaceable.** Recorded in
@@ -591,6 +591,29 @@ detailed in
 PQT remains the owner of data lineage, revisions, PIT semantics, instrument
 identity, adjustment rules, canonical datasets and research contracts. Qlib is
 an adapter and must be removable without redesigning PQT.
+
+**Complete, 11 October 2026.** `personal_quant.integrations.qlib.QlibLightGBM`
+satisfies PQT's `Model` with Qlib's `LGBModel`, fed rows PQT built through the
+point-in-time harness; Qlib's data layer is never imported, and predictions,
+training curve and `describe()` — `research_engine`, `research_engine_version`
+— come back as builtins. Qlib is the `research` extra, pinned `pyqlib==0.9.7`,
+which publishes wheels up to CPython 3.12 only. **Working:** with the extra
+installed on 3.12 (LightGBM 4.7.0, MLflow 3.17.0) the quant suite passes —
+186 tests, the adapter's nine included, with only the database and real-export
+tests skipping — it learns a planted relationship,
+refits to identical predictions and writes nothing outside its scratch — and a
+walk-forward run over the real VN30 export (three momentum windows as
+features, the 21-session forward return as label) trained on 168 rows and
+predicted all six test periods: IC −0.08, t −0.74, the plumbing proven and no
+claim about the model. **Provably optional:** the default suite runs without
+Qlib, adapter tests skipping with the install command; in a fresh interpreter
+with Qlib made unimportable every module of the package imports, and with it
+installed none of them loads Qlib, MLflow or LightGBM. **Confined:** an AST
+guard run in CI fails on `import qlib` or `import mlflow` anywhere outside the
+adapter package, and is shown to fire on eleven planted imports. A separate,
+non-required CI job installs the extra and runs the adapter. Not built:
+Alpha158/Alpha360 behind `FeatureEngine`, and mapping a run into the experiment
+store, which is U9's.
 
 ---
 

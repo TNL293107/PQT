@@ -48,7 +48,9 @@ should not have to inherit from PQT to satisfy PQT.
 All twelve are declared in `personal_quant.research.protocols`. The ones on the
 vertical slice have implementations — `DataProvider` and `Dataset`
 (`research.datasets`), `FactorEngine` (`factors.momentum`), `SignalEngine`
-(`strategies.signals`) and `PortfolioConstructor` (`strategies.portfolio`). The
+(`strategies.signals`) and `PortfolioConstructor` (`strategies.portfolio`).
+`Model` has one, off the slice: Qlib's LightGBM behind an adapter
+(`integrations.qlib`, U8), installed only with the `research` extra. The
 rest are shapes decided once, implemented by the workstreams that own them:
 `Backtester` and `ResearchValidator` by Phase 8, `ExperimentTracker` by U9.
 
@@ -269,6 +271,17 @@ Phase 7.
 
 Optional extras: `research` — `qlib`, `mlflow`, `lightgbm`; `notebook` —
 `jupyterlab`, `matplotlib`, `plotly`.
+
+**U8 added the `research` extra, and only it: `pyqlib==0.9.7`**
+([ADR-017](decisions/ADR-017-qlib-research-adapter.md)). It is never a base
+dependency. LightGBM, MLflow and pandas arrive with it transitively rather than
+pinned beside it, because PQT uses each only through Qlib, inside
+`personal_quant.integrations.qlib` — the one package allowed to import `qlib`
+or `mlflow`, by a guard test in CI. pyqlib 0.9.7 publishes wheels for CPython
+3.12 at the newest, so the extra needs a 3.12 interpreter while the package
+itself runs on 3.12 and later. Without the extra the package and its tests run
+unchanged; the adapter's engine tests skip. The `notebook` extra does not exist
+yet.
 
 **Deliberately not adopted.** Financial-semantics libraries stay out. Indicators,
 trading calendars, performance metrics and backtest mechanics are PQT-owned,

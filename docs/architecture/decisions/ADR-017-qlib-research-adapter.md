@@ -106,3 +106,33 @@ one observation.
 - Removal, if Qlib is abandoned upstream, is three steps: delete the adapter package, remove the optional extra, delete the guard and its test. **If removal ever takes more than that, the boundary has been breached and the breach is the bug.**
 - Existing experiment records stay valid and interpretable after removal, because each records the engine and version that produced it.
 - Detail and the removal procedure are in [`../qlib-integration.md`](../qlib-integration.md).
+
+## Implementation — 11 October 2026
+
+Implemented as decided for the model zoo, with these specifics:
+
+- **One adapter, `QlibLightGBM`**, in `personal_quant.integrations.qlib`,
+  satisfies PQT's `Model` with `qlib.contrib.model.gbdt.LGBModel`. Qlib is not
+  handed a dataset: an in-memory stand-in answers the two things `LGBModel`
+  asks of a `DatasetH` (`segments`, `prepare`) from rows PQT built through its
+  point-in-time harness. The calendar-and-instrument export this ADR's
+  trade-offs anticipate is therefore not needed for models; it will be for
+  Alpha158/Alpha360, which are not built yet.
+- **Pinned `pyqlib==0.9.7`** in the `research` extra — the newest release for
+  CPython 3.12, and the last ABI it publishes wheels for, so the extra needs a
+  3.12 interpreter. `describe()` returns `research_engine` and
+  `research_engine_version` (and the LightGBM version) for U9's run record.
+- **The guard** is `quant/tests/test_qlib_confinement.py`, an AST scan run by
+  `pytest` in the default CI job, proven by eleven planted imports. It guards
+  `mlflow` as well as `qlib`, since MLflow is contained in the adapter too.
+- **Optional, proven in fresh interpreters**: with Qlib made unimportable every
+  module imports, and with it installed importing every module loads none of
+  Qlib, MLflow or LightGBM. Absent Qlib the engine tests skip; a separate,
+  non-required CI job installs the extra and runs them.
+- **MLflow is contained in scratch, which took more than the ADR assumed.**
+  `LGBModel.fit` logs through Qlib's Recorder, which needs `qlib.init`; the
+  adapter initialises Qlib once per process with an unused, empty
+  `provider_uri` and MLflow on SQLite in its scratch directory (MLflow 3
+  refuses its file store), and creates the experiment itself with its
+  artifact location there, because a Qlib-created one writes the recorder's
+  `git diff` of the working directory into `./mlruns`.

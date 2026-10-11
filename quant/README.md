@@ -30,6 +30,18 @@ connection cannot read files, so `read_parquet` on the build's path is refused
 by design. Prices are `DECIMAL(38,10)`, never `DOUBLE`. Take results out
 through Python (`fetchall`, `arrow`, `df`), not `COPY`.
 
+And the U8 Qlib adapter: Qlib's LightGBM behind PQT's `Model` protocol, fed
+rows PQT built, never Qlib's data layer (ADR-017). It needs the `research`
+extra — see [The research extra](#the-research-extra-qlib).
+
+```python
+from personal_quant.integrations.qlib import LightGBMSettings, QlibLightGBM
+
+model = QlibLightGBM(LightGBMSettings(seed=7)).fit(train_rows, train_labels)
+predictions = model.predict(test_rows)    # tuple[float, ...]
+model.describe()                          # research_engine, research_engine_version, settings
+```
+
 ## Layout
 
 ```
@@ -42,7 +54,8 @@ quant/
 │   ├── factors/                factor definitions — momentum (U6)
 │   ├── strategies/             signals and portfolio construction (U6)
 │   ├── backtesting/            close-to-close returns (U6); the backtester (Phase 8)
-│   └── analytics/              information coefficient (U6); performance (Phase 8)
+│   ├── analytics/              information coefficient (U6); performance (Phase 8)
+│   └── integrations/qlib/      Qlib behind PQT's protocols (U8); the only place qlib is imported
 └── tests/
 ```
 
@@ -83,6 +96,31 @@ considerably faster:
 ```bash
 uv venv && uv pip install -e ".[dev]"
 ```
+
+### The research extra (Qlib)
+
+Qlib is optional and never a base dependency. Everything above, the test suite
+included, works without it; the adapter's engine tests skip and say why.
+`pyqlib==0.9.7` publishes wheels for CPython 3.12 at the newest, so install the
+extra into a separate 3.12 environment:
+
+```bash
+uv python install 3.12
+uv venv --python 3.12 .venv-qlib
+uv pip install --python .venv-qlib -e ".[dev,research]"
+```
+
+Then run the suite with that interpreter (`.venv-qlib\Scripts\python -m pytest`
+on Windows, `.venv-qlib/bin/python -m pytest` elsewhere). It brings LightGBM,
+pandas and MLflow, used only inside `personal_quant.integrations.qlib`. Qlib's
+recorder writes to MLflow in the adapter's scratch directory — a temporary
+directory unless one is given — never under the working directory. Its first
+use in a process takes most of a minute (Qlib and MLflow start up, and MLflow
+creates its database); later fits take about a second. Set
+`MLFLOW_DISABLE_AGENT_HINT=1` to quiet an MLflow start-up message.
+
+`import qlib` and `import mlflow` anywhere outside that package fail
+`tests/test_qlib_confinement.py`.
 
 ## Checks
 
