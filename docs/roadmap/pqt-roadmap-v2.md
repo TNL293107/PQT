@@ -788,6 +788,24 @@ schedule or health-manage providers, and it owns no state of its own.
 It also carries the honesty rule U2 established — an absent dataset and an
 unmeasured one must never render identically.
 
+**Built, 11 October 2026**, as `GET /instruments/{id}/coverage`, `pqt coverage`
+and the console's `COV`, with four states — held, not held, not measured, not
+collected — decided in one application query
+([ADR-026](../architecture/decisions/ADR-026-market-intelligence-terminal.md)).
+
+### Phase 5 — where it stands
+
+Every capability the phase names has a first slice, each reachable from the
+API, the CLI and the console alike: the console and its command language, the
+`GP` candlestick chart, the coverage registry, market breadth over a universe's
+point-in-time members (`breadth VN30`), watchlists and saved workspaces. The
+last two are the API's first writes, behind an operator key until Phase 19
+([ADR-027](../architecture/decisions/ADR-027-operator-write-path.md)).
+
+The phase stays `IN PROGRESS`. A watchlist shows its instruments but not their
+prices; breadth covers a universe, not the whole market; there is no intraday
+view; and the terminal's real-data reach is VN30 since August 2024.
+
 ### Phase 7 — declarative labelled-dataset specification
 
 U5 defines the canonical dataset, U6 the feature and factor protocols, U9 the

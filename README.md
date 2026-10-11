@@ -22,7 +22,7 @@ Phase 6–20                    PLANNED
 | **Complete** | Phases 0–4, and the Research Foundation Upgrade (U1–U10)      |
 | **Current**  | Phase 5 — Market Intelligence Terminal ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 946 unit, 162 integration, 262 Python + 91 Qlib (2026-10-11); React and C++ green in CI |
+| **Tests**    | 1,058 unit, 194 integration, 289 React, 262 Python + 91 Qlib (2026-10-11); C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
@@ -68,24 +68,27 @@ read, so the raw series is never rewritten; an append-only observation history
 for bars and a `knownAsOf` read over it, so a series can be read as this system
 believed it at a past instant; append-only universe membership with an as-of
 constituent read, where a date nobody sourced answers *unknown* rather than
-returning an empty index; a terminal with Ctrl+K security search and a
-current-security context. All of it covered by tests that run against real
-containers, not mocks.
+returning an empty index; the canonical dataset export with manifests and
+hashes, and a Python research layer that runs point-in-time factor research
+as queued jobs and records every run reproducibly. And a terminal (Phase 5,
+[ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)):
+a console speaking the CLI's command language, with a candlestick price chart
+(`FPT GP`), a coverage registry that tells *held* from *not held* from *not
+measured* (`FPT COV`), market breadth over a universe's point-in-time members on
+adjusted closes (`breadth VN30`), and watchlists and saved workspaces (`wl`,
+`ws`). Every one of them is the same application-layer query the API and the
+CLI call. All of it covered by tests that run against real containers, not
+mocks.
 
-**What does not exist.** Real market data, fundamentals, news, screening,
-factors, backtesting, portfolio, risk, orders, broker integration, AI. Two
-qualifications matter more than the list. Point-in-time reads exist for prices
-only: an adjusted series read as of a past instant is point-in-time in its
-prices and not in its adjustments, and closing that is U4's. And the universe
-model exists while a real membership history does not — **no VN30 constituents
-are recorded**, every universe carries an open coverage finding saying so, and
-every constituent read of one answers *unknown*. The `quant/` and `cpp-engine/`
-layers contain packaging, tooling and tests but **no financial code**. There is
-also no write surface over HTTP at all: reference data arrives through the
-import pipelines and bars through ingestion, both driven by the host on a
-schedule the operator configures, and a trigger endpoint waits for
-authentication. None of these are stubbed or half-built; they are simply not
-written.
+**What does not exist.** Fundamentals, news, screening, a backtester, portfolio,
+risk, orders, broker integration, AI. Two qualifications matter more than the
+list. Real data is narrow: daily CafeF bars for the VN30 names, VN30 membership
+from August 2024, and the entitlements found so far — history before a name's
+admission is mostly absent. And the API writes nothing but the operator's own
+watchlists and workspaces, behind an operator key
+([ADR-027](docs/architecture/decisions/ADR-027-operator-write-path.md)); market
+data still changes only through the CLI and the host's scheduled ingestion,
+until authentication arrives in Phase 19.
 
 ## Current work — Research Foundation Upgrade
 

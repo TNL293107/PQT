@@ -79,10 +79,13 @@ public sealed class InstrumentMasterPersistenceTests(DependencyContainerFixture 
 
         // The database, not the application, is the last line of defence
         // against a duplicate arriving through a concurrent import.
-        var failure = await Assert.ThrowsAsync<DbUpdateException>(() =>
+        // Surfaced as the application's own conflict type, so a service can
+        // answer it without knowing the driver; the database's error is kept.
+        var failure = await Assert.ThrowsAsync<UniqueConstraintException>(() =>
             scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken));
 
-        var postgres = Assert.IsType<PostgresException>(failure.InnerException);
+        var update = Assert.IsType<DbUpdateException>(failure.InnerException);
+        var postgres = Assert.IsType<PostgresException>(update.InnerException);
         Assert.Equal(PostgresErrorCodes.UniqueViolation, postgres.SqlState);
     }
 
@@ -267,10 +270,13 @@ public sealed class InstrumentMasterPersistenceTests(DependencyContainerFixture 
         scope.Exchanges.Add(Exchange.Register(
             ExchangeCode.Create("VENF"), "Duplicate", "Asia/Ho_Chi_Minh", Now));
 
-        var failure = await Assert.ThrowsAsync<DbUpdateException>(() =>
+        // Surfaced as the application's own conflict type, so a service can
+        // answer it without knowing the driver; the database's error is kept.
+        var failure = await Assert.ThrowsAsync<UniqueConstraintException>(() =>
             scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken));
 
-        var postgres = Assert.IsType<PostgresException>(failure.InnerException);
+        var update = Assert.IsType<DbUpdateException>(failure.InnerException);
+        var postgres = Assert.IsType<PostgresException>(update.InnerException);
         Assert.Equal(PostgresErrorCodes.UniqueViolation, postgres.SqlState);
     }
 
