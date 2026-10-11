@@ -8,20 +8,25 @@ Absence is not taken on trust from the environment the suite happens to run
 in. A fresh interpreter has Qlib made unimportable — ``sys.modules["qlib"]``
 set to ``None``, which is how Python itself marks a module as unavailable — and
 every module in the package is imported there; a second interpreter imports
-them all with Qlib importable and checks that none of them loaded it.
+them all with Qlib importable and checks that none of them loaded it, MLflow,
+LightGBM or pandas; a third imports the adapter alone and checks it loaded
+none of those or NumPy. (NumPy is loaded by the package as a whole when it is
+installed, by pyarrow, which reads PQT's datasets; that is not the adapter's
+doing and not Qlib's.)
 """
 
 from __future__ import annotations
 
 import inspect
 import os
+import stat
 import subprocess
 import sys
 import textwrap
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -31,6 +36,12 @@ from personal_quant.research.protocols import Model
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 ENGINE_PACKAGES = frozenset({"qlib", "mlflow", "lightgbm", "pandas", "numpy"})
+# Which of those importing the whole package may load: NumPy, through pyarrow.
+LOADED_BY_THE_PACKAGE = frozenset({"numpy"})
+
+_ENGINES_LOADED = """
+print(",".join(sorted({m.split(".")[0] for m in sys.modules} & set(ENGINE_PACKAGES))))
+"""
 
 _IMPORT_EVERYTHING = """
 import importlib
@@ -65,19 +76,35 @@ def _run(code: str) -> str:
     return completed.stdout.strip()
 
 
-def test_no_module_of_the_package_imports_qlib_on_import() -> None:
+def _engines(prefix: str) -> set[str]:
+    # The last line printed, which is empty when no engine was loaded.
     loaded = _run(
-        _IMPORT_EVERYTHING
-        + """
-print(len(names))
-print(",".join(sorted(m for m in sys.modules if m.split(".")[0] in {"qlib", "mlflow", "lightgbm"})))
-"""
-    )
-    count, engines = loaded.splitlines() if "\n" in loaded else (loaded, "")
+        prefix + f"ENGINE_PACKAGES = {sorted(ENGINE_PACKAGES)!r}\n" + _ENGINES_LOADED
+    ).rpartition("\n")[2]
+
+    return set(loaded.split(",")) - {""}
+
+
+def test_no_module_of_the_package_imports_qlib_on_import() -> None:
+    count = _run(_IMPORT_EVERYTHING + "print(len(names))\n")
+    engines = _engines(_IMPORT_EVERYTHING)
 
     assert int(count) > 20, "The walk imported too few modules to prove anything."
-    assert "personal_quant" not in engines
-    assert engines == ""
+    assert engines <= LOADED_BY_THE_PACKAGE
+
+
+def test_the_adapter_alone_loads_no_engine_on_import() -> None:
+    engines = _engines(
+        """
+import sys
+
+import personal_quant.integrations.qlib
+import personal_quant.integrations.qlib.model
+import personal_quant.integrations.qlib.session
+"""
+    )
+
+    assert engines == set()
 
 
 def test_the_package_works_with_qlib_absent() -> None:
@@ -174,14 +201,23 @@ def test_no_engine_type_crosses_the_adapters_public_surface() -> None:
         ([[1.0], [float("inf")]], [1.0, 2.0], "not finite"),
         ([[1.0], [2.0]], [1.0], "given 1 labels"),
         ([[1.0], [2.0]], [1.0, float("nan")], "label is not finite"),
+        ([[1.0], ["2.0"]], [1.0, 2.0], "row 1 holds a value that is not a number"),
+        ([[1.0], 2.0], [1.0, 2.0], "row 1 is not a sequence"),
+        (["ab", "cd"], [1.0, 2.0], "row 0 is text"),
+        ([[1.0], [2.0]], 3.0, "labels is not a sequence"),
+        ([[1.0], [2.0]], [1.0, None], "label holds a value that is not a number"),
     ],
 )
 def test_fit_refuses_rows_it_cannot_train_on_before_touching_the_engine(
-    features: list[list[float]], labels: list[float], message: str
+    features: object, labels: object, message: str
 ) -> None:
-    # Refused whether or not Qlib is installed: the rows are PQT's to check.
+    # Refused whether or not Qlib is installed: the rows are PQT's to check,
+    # and always with a ValueError, whatever shape of wrong they are — some
+    # of these are not even the types the signature promises.
     with pytest.raises(ValueError, match=message):
-        QlibLightGBM().fit(features, labels)
+        QlibLightGBM().fit(
+            cast("Sequence[Sequence[float]]", features), cast("Sequence[float]", labels)
+        )
 
 
 def test_fit_refuses_validation_rows_of_another_width() -> None:
@@ -203,6 +239,11 @@ def test_predict_refuses_before_fit() -> None:
         {"min_data_in_leaf": 0},
         {"num_threads": 0},
         {"learning_rate": 0.0},
+        {"bagging_freq": -1},
+        {"bagging_fraction": 0.0},
+        {"bagging_fraction": 1.5},
+        {"feature_fraction": 0.0},
+        {"feature_fraction": 1.01},
     ],
 )
 def test_settings_refuse_values_that_cannot_train(settings: dict[str, Any]) -> None:
@@ -212,3 +253,46 @@ def test_settings_refuse_values_that_cannot_train(settings: dict[str, Any]) -> N
 
 def test_unavailability_names_the_extra() -> None:
     assert "[research]" in str(QlibUnavailableError())
+
+
+def test_a_run_records_the_engine_by_its_import_name() -> None:
+    # Pinned here because this file may name the engine (see the guard).
+    assert adapter.ENGINE == "qlib"
+
+
+def test_the_default_scratch_is_private_to_the_process_and_removed_at_exit() -> None:
+    # Made without Qlib: the directory is the adapter's, not the engine's.
+    reported = _run(
+        """
+import os
+import tempfile
+from pathlib import Path
+
+from personal_quant.integrations.qlib.session import default_scratch
+
+scratch = default_scratch()
+assert scratch == default_scratch(), "One scratch per process."
+assert scratch.is_dir()
+assert scratch.parent == Path(tempfile.gettempdir())
+(scratch / "left-behind.txt").write_text("removed at exit", encoding="utf-8")
+print(scratch)
+print(oct(os.stat(scratch).st_mode))
+"""
+    ).splitlines()
+    scratch, mode = Path(reported[-2]), int(reported[-1], 8)
+
+    assert scratch.name.startswith("pqt-qlib-")
+    assert not scratch.exists(), "The scratch outlived its process."
+
+    if os.name == "posix":
+        assert stat.S_IMODE(mode) == 0o700
+
+
+def test_two_processes_do_not_share_a_default_scratch() -> None:
+    code = """
+from personal_quant.integrations.qlib.session import default_scratch
+
+print(default_scratch())
+"""
+
+    assert _run(code).splitlines()[-1] != _run(code).splitlines()[-1]

@@ -25,14 +25,28 @@ LightGBM would take a NaN as "missing" and route it down a learned branch;
 what a missing feature means is PQT's to decide when it builds the rows, not
 an engine default to inherit by accident.
 
-Reproducibility: LightGBM runs single-threaded and ``deterministic`` with the
-seed in :class:`LightGBMSettings`, because thread count is a common and silent
-source of drift between two runs of the same configuration.
+Reproducibility: LightGBM runs single-threaded, ``deterministic`` and
+``force_row_wise`` with the seed in :class:`LightGBMSettings`. Thread count is
+a common and silent source of drift between two runs of the same
+configuration, and so is LightGBM choosing between its row-wise and
+column-wise histogram layouts by timing them, which ``force_row_wise`` takes
+out of its hands. The seed drives bagging and feature sampling when the
+settings ask for them. A run is repeatable within one environment, which is
+why :meth:`QlibLightGBM.describe` names the LightGBM, NumPy, pandas and MLflow
+it ran with as well as the Qlib.
+
+Warnings: a fit without validation rows silences one LightGBM warning (see
+``_NO_VALIDATION``) with :func:`warnings.catch_warnings`, which swaps the
+process's warning filters and is not thread-safe. Fits run under the
+session's lock, so they cannot race each other; a thread outside the adapter
+that changes warning filters during a fit can have its change undone when the
+fit ends.
 """
 
 from __future__ import annotations
 
 import math
+import uuid
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -54,6 +68,9 @@ __all__ = ["LightGBMSettings", "QlibLightGBM"]
 
 _ENGINE_MODEL = "qlib.contrib.model.gbdt.LGBModel"
 
+# The distributions beneath Qlib whose versions a run records beside its own.
+_BENEATH_THE_ENGINE = ("lightgbm", "numpy", "pandas", "mlflow")
+
 # With no validation segment LightGBM has nothing to stop early on, says so in
 # a UserWarning, and boosts for num_boost_round rounds — which the settings
 # record. The warning describes a choice the caller made, so it is not raised.
@@ -71,7 +88,13 @@ class LightGBMSettings:
         learning_rate: Shrinkage per round.
         num_leaves: Leaves per tree.
         min_data_in_leaf: Rows a leaf must hold.
-        seed: LightGBM's seed.
+        bagging_fraction: Share of rows each bag samples; one, the default,
+            samples them all.
+        bagging_freq: Rounds between re-sampling the bag; zero, the default,
+            turns bagging off.
+        feature_fraction: Share of features each tree may use; one, the
+            default, offers them all.
+        seed: LightGBM's seed, which the sampling above draws from.
         num_threads: Threads; one, so a run is repeatable.
     """
 
@@ -80,6 +103,9 @@ class LightGBMSettings:
     learning_rate: float = 0.05
     num_leaves: int = 31
     min_data_in_leaf: int = 20
+    bagging_fraction: float = 1.0
+    bagging_freq: int = 0
+    feature_fraction: float = 1.0
     seed: int = 0
     num_threads: int = 1
 
@@ -87,7 +113,9 @@ class LightGBMSettings:
         """Refuse settings that cannot train a model.
 
         Raises:
-            ValueError: A count is below one or the learning rate is not positive.
+            ValueError: A count is below one, the bagging frequency is
+                negative, the learning rate is not positive, or a fraction is
+                outside (0, 1].
         """
         counts = {
             "num_boost_round": self.num_boost_round,
@@ -101,8 +129,20 @@ class LightGBMSettings:
             if value < 1:
                 raise ValueError(f"{name} must be at least one, not {value}.")
 
+        if self.bagging_freq < 0:
+            raise ValueError(f"bagging_freq must be zero or more, not {self.bagging_freq}.")
+
         if not self.learning_rate > 0:
             raise ValueError(f"learning_rate must be positive, not {self.learning_rate}.")
+
+        fractions = {
+            "bagging_fraction": self.bagging_fraction,
+            "feature_fraction": self.feature_fraction,
+        }
+
+        for name, fraction in fractions.items():
+            if not 0 < fraction <= 1:
+                raise ValueError(f"{name} must be in (0, 1], not {fraction}.")
 
 
 class QlibLightGBM:
@@ -115,16 +155,16 @@ class QlibLightGBM:
 
         Args:
             settings: The model's settings; the defaults when ``None``.
-            scratch: Where Qlib's recorder may write; a directory under the
-                system's temporary directory when ``None``. Never a source of
-                truth, and never read back.
+            scratch: Where Qlib's recorder may write; when ``None``, a
+                directory private to the process under the system's
+                temporary directory, made at the first fit and removed at
+                exit. Never a source of truth, and never read back.
         """
         self._settings = settings or LightGBMSettings()
-        self._scratch = scratch or default_scratch()
+        self._scratch = scratch
         self._engine: Any = None
         self._width: int | None = None
         self._curve: Mapping[str, tuple[float, ...]] = MappingProxyType({})
-        self._fits = 0
 
     @property
     def settings(self) -> LightGBMSettings:
@@ -185,15 +225,21 @@ class QlibLightGBM:
             learning_rate=settings.learning_rate,
             num_leaves=settings.num_leaves,
             min_data_in_leaf=settings.min_data_in_leaf,
+            bagging_fraction=settings.bagging_fraction,
+            bagging_freq=settings.bagging_freq,
+            feature_fraction=settings.feature_fraction,
             seed=settings.seed,
             num_threads=settings.num_threads,
             deterministic=True,
+            force_row_wise=True,
         )
         curve: dict[str, dict[str, list[float]]] = {}
-        self._fits += 1
+        scratch = self._scratch or default_scratch()
 
+        # In this order, so the warning filters are swapped only while the
+        # session's lock is held (see the module docstring).
         with (
-            recording(self._scratch, f"lightgbm-{id(self):x}-{self._fits}"),
+            recording(scratch, f"lightgbm-{uuid.uuid4().hex}"),
             warnings.catch_warnings(),
         ):
             warnings.filterwarnings("ignore", message=_NO_VALIDATION, category=UserWarning)
@@ -243,9 +289,11 @@ class QlibLightGBM:
 
         Returns:
             ``research_engine``, ``research_engine_version``, the engine's
-            model class, the LightGBM it trained with — a different LightGBM
-            can grow different trees from the same settings — and the
-            settings, all as builtins.
+            model class, the versions of the libraries beneath it, and the
+            settings, all as builtins. The libraries are part of what a
+            result depends on: a different LightGBM can grow different trees
+            from the same settings, the rows reach it through pandas and
+            NumPy, and the training curve passes through MLflow.
 
         Raises:
             QlibUnavailableError: Qlib is not installed.
@@ -254,7 +302,7 @@ class QlibLightGBM:
             "research_engine": ENGINE,
             "research_engine_version": engine_version(),
             "engine_model": _ENGINE_MODEL,
-            "lightgbm_version": version("lightgbm"),
+            **{f"{library}_version": version(library) for library in _BENEATH_THE_ENGINE},
             "settings": asdict(self._settings),
         }
 
@@ -304,28 +352,50 @@ class _Segments:
 def _width_of(
     features: Sequence[Sequence[float]], labels: Sequence[float] | None, what: str
 ) -> int:
-    if not features:
+    # Every refusal is a ValueError — rows that are not sequences and values
+    # that are not numbers included, which would otherwise surface as a
+    # TypeError from len() or math.isfinite() halfway through the check.
+    if _length_of(features, f"The {what} rows") == 0:
         raise ValueError(f"The {what} rows are empty.")
 
-    width = len(features[0])
+    width = _length_of(features[0], f"{what.capitalize()} row 0")
 
     if width == 0:
         raise ValueError(f"The {what} rows have no features.")
 
     for index, row in enumerate(features):
-        if len(row) != width:
-            raise ValueError(
-                f"{what.capitalize()} row {index} has {len(row)} features, not {width}."
-            )
+        where = f"{what.capitalize()} row {index}"
+        length = _length_of(row, where)
 
-        if not all(math.isfinite(value) for value in row):
-            raise ValueError(f"{what.capitalize()} row {index} holds a value that is not finite.")
+        if length != width:
+            raise ValueError(f"{where} has {length} features, not {width}.")
+
+        if not _all_finite(row, where):
+            raise ValueError(f"{where} holds a value that is not finite.")
 
     if labels is not None:
-        if len(labels) != len(features):
+        if _length_of(labels, f"The {what} labels") != len(features):
             raise ValueError(f"{len(features)} {what} rows were given {len(labels)} labels.")
 
-        if not all(math.isfinite(value) for value in labels):
+        if not _all_finite(labels, f"A {what} label"):
             raise ValueError(f"A {what} label is not finite.")
 
     return width
+
+
+def _length_of(values: object, what: str) -> int:
+    # Duck-typed, so a NumPy row is as good as a list; text is not a row.
+    if isinstance(values, str | bytes):
+        raise ValueError(f"{what} is text, not a sequence of numbers.")
+
+    try:
+        return len(values)  # type: ignore[arg-type]
+    except TypeError as error:
+        raise ValueError(f"{what} is not a sequence of numbers.") from error
+
+
+def _all_finite(values: Sequence[float], what: str) -> bool:
+    try:
+        return all(math.isfinite(value) for value in values)
+    except TypeError as error:
+        raise ValueError(f"{what} holds a value that is not a number.") from error

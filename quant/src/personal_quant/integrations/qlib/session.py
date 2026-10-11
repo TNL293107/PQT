@@ -25,13 +25,33 @@ happens here, once, under the adapter's scratch directory:
   leave the adapter as PQT values, and a run is recorded by PQT with
   :func:`engine_version` as its ``research_engine_version``.
 
-The scratch is regenerable and never a source of truth.
+The scratch is regenerable and never a source of truth. Unless a model is
+given one, it is a directory private to the process — created on first use
+with :func:`tempfile.mkdtemp`, so readable by its owner only, and removed when
+the interpreter exits. It holds a diff of whatever working directory the
+process ran in, which is nobody else's business, and a fixed shared path would
+also let two processes write one SQLite file.
+
+Single process, serialised fits. Qlib's configuration, its recorder ``R`` and
+MLflow's active run are all process-global, so this module assumes one
+process owns them and, within it, holds one lock across initialisation, the
+experiment's creation and the whole of a recorded block: two threads fitting
+at once take turns rather than start one recorder inside another. A process
+forked after the first fit inherits the parent's Qlib configuration and
+scratch, and should be given its own; a process started by
+:mod:`multiprocessing`'s spawn or forkserver starts clean.
 """
 
 from __future__ import annotations
 
+import atexit
+import gc
 import importlib.util
+import logging
+import shutil
+import sys
 import tempfile
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -53,11 +73,22 @@ INSTALL_HINT = 'pip install -e ".[research]"  (Python 3.12; see quant/README.md)
 
 _EXPERIMENT = "pqt-qlib-adapter"
 
+_log = logging.getLogger(__name__)
+
+# Held across initialisation and every recorded block: Qlib's configuration,
+# its recorder and MLflow's active run belong to the process, not the caller.
+_lock = threading.Lock()
+
 # The scratch directory qlib.init was last given, or None before the first
 # call. Qlib's configuration is process-wide; this mirrors it so that a second
 # model with the same scratch does not re-initialise the engine under the
-# first one's recorder.
+# first one's recorder. Read and written only under _lock.
 _initialised: Path | None = None
+
+# This process's default scratch, made on first use; None until then. Its own
+# lock, so that asking for it never waits on a fit in another thread.
+_default_scratch: Path | None = None
+_default_scratch_lock = threading.Lock()
 
 
 class QlibUnavailableError(ImportError):
@@ -100,15 +131,60 @@ def engine_version() -> str:
 def default_scratch() -> Path:
     """Return the scratch directory used when a model is not given one.
 
+    Made on the first call, once per process, and removed at interpreter exit.
+
     Returns:
-        ``pqt-qlib`` under the system's temporary directory.
+        A ``pqt-qlib-*`` directory under the system's temporary directory,
+        private to its owner.
     """
-    return Path(tempfile.gettempdir()) / "pqt-qlib"
+    global _default_scratch  # one per process, made on first use
+
+    with _default_scratch_lock:
+        if _default_scratch is None:
+            _default_scratch = Path(tempfile.mkdtemp(prefix="pqt-qlib-"))
+            atexit.register(_remove, _default_scratch)
+
+        return _default_scratch
+
+
+def _remove(scratch: Path) -> None:
+    # At exit. A scratch that still cannot be removed is a private temporary
+    # directory, and saying so is all that is left to do.
+    def report(_function: object, path: str, error: BaseException) -> None:
+        _log.warning("Could not remove Qlib scratch %s: %s", path, error)
+
+    _close_databases_in(scratch)
+    shutil.rmtree(scratch, onexc=report)
+
+
+def _close_databases_in(scratch: Path) -> None:
+    # MLflow keeps a SQLAlchemy engine per tracking URI for the life of the
+    # process, in more than one private cache, and an engine's pooled
+    # connections hold the SQLite file open — which Windows will not delete.
+    # Engines are found through the garbage collector rather than MLflow's
+    # internals, and only when SQLAlchemy is already loaded: nothing is
+    # imported at exit.
+    sqlalchemy = sys.modules.get("sqlalchemy")
+
+    if sqlalchemy is None:
+        return
+
+    for candidate in gc.get_objects():
+        if not isinstance(candidate, sqlalchemy.engine.Engine):
+            continue
+
+        database = candidate.url.database
+
+        if database and Path(database).resolve().is_relative_to(scratch.resolve()):
+            candidate.dispose()
 
 
 @contextmanager
 def recording(scratch: Path, run_name: str) -> Iterator[None]:
     """Run a block inside a Qlib recorder that writes only into the scratch.
+
+    The process's Qlib lock is held for the whole block, so recorded blocks in
+    different threads run one after another, never inside each other.
 
     Args:
         scratch: The adapter's scratch directory; created when absent.
@@ -125,13 +201,15 @@ def recording(scratch: Path, run_name: str) -> Iterator[None]:
 
     from qlib.workflow import R
 
-    _initialise(scratch)
+    with _lock:
+        _initialise(scratch)
 
-    with R.start(experiment_name=_EXPERIMENT, recorder_name=run_name):
-        yield
+        with R.start(experiment_name=_EXPERIMENT, recorder_name=run_name):
+            yield
 
 
 def _initialise(scratch: Path) -> None:
+    # Called with _lock held.
     global _initialised  # mirrors Qlib's own process-wide configuration
 
     scratch = scratch.resolve()
@@ -146,6 +224,10 @@ def _initialise(scratch: Path) -> None:
     provider.mkdir(parents=True, exist_ok=True)
     # MLflow 3 refuses its file-system store unless told otherwise; SQLite is
     # the backend it supports, and a file in the scratch is all it needs.
+    # Not Path.as_uri() with its scheme swapped: that leaves three slashes
+    # before an absolute POSIX path, which SQLAlchemy reads as relative. The
+    # resolved path's POSIX form after "sqlite:///" gives the four slashes it
+    # needs on POSIX and a drive path on Windows.
     tracking = f"sqlite:///{(scratch / 'mlflow.db').as_posix()}"
 
     # Created here, with its artifact location, because an experiment Qlib
