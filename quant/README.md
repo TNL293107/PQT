@@ -38,8 +38,8 @@ extra — see [The research extra](#the-research-extra-qlib).
 from personal_quant.integrations.qlib import LightGBMSettings, QlibLightGBM
 
 model = QlibLightGBM(LightGBMSettings(seed=7)).fit(train_rows, train_labels)
-predictions = model.predict(test_rows)    # tuple[float, ...]
-model.describe()                          # research_engine, research_engine_version, settings
+predictions = model.predict(test_rows)  # tuple[float, ...]
+model.describe()  # research_engine, research_engine_version, settings
 ```
 
 ## Layout
