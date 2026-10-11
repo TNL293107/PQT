@@ -35,8 +35,8 @@ server could compute, and no function exists in one interface only.
 | 1 | **Coverage registry** | bars, ingestion journal, findings, corporate actions, memberships, calendar | `GET /instruments/{id}/coverage`, `pqt coverage`, console `COV` |
 | 2 | **Market breadth** | point-in-time membership, adjusted closes, calendar | `GET /universes`, `GET /universes/{code}/breadth`, `pqt universe`, console `BREADTH` |
 | 3 | **Price chart** | the existing bar series | console `GP` — presentation only, over the existing endpoint |
-| 4 | Watchlist | operator state | after the write-path ADR |
-| 5 | Workspace | operator state | after the write-path ADR |
+| 4 | Watchlist | operator state | after the write-path ADR — [ADR-027](ADR-027-operator-write-path.md) |
+| 5 | Workspace | operator state | after the write-path ADR — [ADR-027](ADR-027-operator-write-path.md) |
 
 ### The honesty rule, applied to coverage
 
