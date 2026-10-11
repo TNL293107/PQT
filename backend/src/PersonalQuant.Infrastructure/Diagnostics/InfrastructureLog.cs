@@ -59,6 +59,24 @@ internal static partial class InfrastructureLog
     public static partial void MigrationCompleted(ILogger logger);
 
     [LoggerMessage(
+        EventId = 1150,
+        Level = LogLevel.Information,
+        Message = "Research role {Role} can log in; the quant worker may connect as it.")]
+    public static partial void ResearchRoleProvisioned(ILogger logger, string role);
+
+    [LoggerMessage(
+        EventId = 1151,
+        Level = LogLevel.Information,
+        Message = "Research role {Role} has no login: set Research__DatabasePassword to let the quant worker connect.")]
+    public static partial void ResearchRoleWithoutLogin(ILogger logger, string role);
+
+    [LoggerMessage(
+        EventId = 1152,
+        Level = LogLevel.Warning,
+        Message = "Research role {Role} does not exist yet; the schema is behind the build.")]
+    public static partial void ResearchRoleMissing(ILogger logger, string role);
+
+    [LoggerMessage(
         EventId = 1104,
         Level = LogLevel.Warning,
         Message = "Database not ready for migration (attempt {Attempt} of {MaxAttempts}). Retrying in {DelaySeconds}s.")]

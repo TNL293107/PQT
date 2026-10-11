@@ -41,6 +41,7 @@ namespace PersonalQuant.Infrastructure.Persistence;
 public sealed class DatabaseMigrationHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<PostgresOptions> options,
+    IOptions<ResearchOptions> research,
     ILogger<DatabaseMigrationHostedService> logger) : IHostedService
 {
     /// <summary>How many times migration is attempted before giving up.</summary>
@@ -123,6 +124,7 @@ public sealed class DatabaseMigrationHostedService(
         if (pending.Length == 0)
         {
             InfrastructureLog.SchemaUpToDate(logger);
+            await ProvisionResearchRoleAsync(dbContext, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -146,7 +148,18 @@ public sealed class DatabaseMigrationHostedService(
         await dbContext.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
 
         InfrastructureLog.MigrationCompleted(logger);
+
+        await ProvisionResearchRoleAsync(dbContext, cancellationToken).ConfigureAwait(false);
     }
+
+    // Only once the schema is current: the role and its grants arrive with a
+    // migration, and a password given to a role whose grants have not landed
+    // would be a login into a boundary that is not there yet.
+    private Task ProvisionResearchRoleAsync(
+        PersonalQuantDbContext dbContext,
+        CancellationToken cancellationToken) =>
+        ResearchRoleProvisioner.ProvisionAsync(
+            dbContext, research.Value.DatabasePassword, logger, cancellationToken);
 
     /// <summary>
     /// Decides whether a failure is worth retrying.

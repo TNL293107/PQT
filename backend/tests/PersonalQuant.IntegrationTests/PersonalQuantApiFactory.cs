@@ -23,6 +23,16 @@ public sealed class PersonalQuantApiFactory(
     : WebApplicationFactory<Program>
 {
     /// <summary>
+    /// The password the <c>quant_research</c> role is given in every test host.
+    /// </summary>
+    /// <remarks>
+    /// Ephemeral, for containers that live for one test run. Every host sets
+    /// the same one, because the role is cluster-wide and each start-up
+    /// reprovisions its login.
+    /// </remarks>
+    public const string ResearchPassword = "research-test-password";
+
+    /// <summary>
     /// Creates a factory pointed at dependencies that are guaranteed not to
     /// answer, to verify that readiness reports the outage.
     /// </summary>
@@ -76,6 +86,7 @@ public sealed class PersonalQuantApiFactory(
             ["Redis:Port"] = redis.Port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["Redis:ConnectTimeoutMilliseconds"] = "5000",
             ["Cors:AllowedOrigins"] = "http://localhost:3000",
+            ["Research:DatabasePassword"] = ResearchPassword,
         };
 
     /// <summary>

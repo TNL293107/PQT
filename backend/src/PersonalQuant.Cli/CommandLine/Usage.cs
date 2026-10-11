@@ -38,6 +38,11 @@ internal static class Usage
         output.WriteLine("                     [--known-as-of yyyy-MM-dd] [--policy strict|permissive]");
         output.WriteLine("  pqt dataset verify <DATASET-ID> [--version N]");
         output.WriteLine();
+        output.WriteLine("  pqt research submit momentum-slice --dataset <ID> [--version N]");
+        output.WriteLine("                     [--quantiles 10] [--rebalance-every 21]");
+        output.WriteLine("  pqt research list [--limit 20]");
+        output.WriteLine("  pqt research show <JOB-ID>");
+        output.WriteLine();
         output.WriteLine("  pqt schema status");
         output.WriteLine("  pqt calendar status");
         output.WriteLine();

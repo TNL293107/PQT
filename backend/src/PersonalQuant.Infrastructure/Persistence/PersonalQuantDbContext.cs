@@ -5,6 +5,7 @@ using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
+using PersonalQuant.Domain.Research;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Infrastructure.Persistence;
@@ -89,6 +90,10 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets the gaps recorded in those membership histories.</summary>
     public DbSet<UniverseCoverageFinding> UniverseCoverageFindings =>
         Set<UniverseCoverageFinding>();
+
+    /// <summary>Gets the research work queued for the quant worker.</summary>
+    /// <remarks>In the <c>research</c> schema, which the quant layer may write.</remarks>
+    public DbSet<ResearchJob> ResearchJobs => Set<ResearchJob>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

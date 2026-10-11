@@ -102,6 +102,10 @@ services:
       Redis__Host: redis
       Redis__Port: "6379"
 
+      # The quant_research role's login (ADR-016). Empty leaves the role
+      # without one, and the quant worker cannot connect; set it in .env.
+      Research__DatabasePassword: ${RESEARCH_DB_PASSWORD:-}
+
       # Reference-data and market-data sources. The paths point at the tracked
       # fixtures inside the read-only mount below, so the pipelines can be run
       # on a fresh clone without a vendor key.

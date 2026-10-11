@@ -5,6 +5,7 @@ using PersonalQuant.Application.Datasets;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
+using PersonalQuant.Application.Research;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Cli.Commands;
 
@@ -108,10 +109,14 @@ internal static class Dispatcher
                         output)
                     .RunAsync(command, cancellationToken);
 
+            case "research":
+                return new ResearchCommands(Defer<IResearchJobService>(services), output)
+                    .RunAsync(command, cancellationToken);
+
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
-                        + "quality, adjust, dataset, schema or calendar.");
+                        + "quality, adjust, dataset, research, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

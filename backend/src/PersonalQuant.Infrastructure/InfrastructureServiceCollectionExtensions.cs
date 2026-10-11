@@ -51,6 +51,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddOptionsWithValidation<PostgresOptions>(configuration, PostgresOptions.SectionName);
         services.AddOptionsWithValidation<RedisOptions>(configuration, RedisOptions.SectionName);
+        services.AddOptionsWithValidation<ResearchOptions>(configuration, ResearchOptions.SectionName);
         services.AddOptionsWithValidation<MarketDataOptions>(configuration, MarketDataOptions.SectionName);
         services.AddOptionsWithValidation<Datasets.DatasetOptions>(
             configuration, Datasets.DatasetOptions.SectionName);
@@ -107,6 +108,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
         services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
         services.AddScoped<IUniverseRepository, UniverseRepository>();
+        services.AddScoped<Application.Research.IResearchJobRepository, ResearchJobRepository>();
 
         // The research store. One object serves both ports because they are two
         // halves of the same fact: where a dataset's bytes go, and what this
