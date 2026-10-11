@@ -284,13 +284,14 @@ public sealed class MarketDataOptions : IValidatableObject
     /// configured retry policy.
     /// </summary>
     /// <remarks>
-    /// Every attempt timing out, with the longest permitted wait between each.
-    /// The call spacing is left out: it is milliseconds against a bound
-    /// measured in minutes.
+    /// Every attempt timing out, with the longest permitted wait between each,
+    /// and the call spacing the limiter may wait before every attempt — which
+    /// a setting allows up to a minute, and so cannot be dismissed as small.
     /// </remarks>
     /// <returns>The worst-case fetch duration.</returns>
     public TimeSpan LongestFetch() =>
-        (TimeSpan.FromSeconds(ProviderTimeoutSeconds) * MaxAttempts)
+        ((TimeSpan.FromSeconds(ProviderTimeoutSeconds)
+            + TimeSpan.FromMilliseconds(MinimumCallSpacingMilliseconds)) * MaxAttempts)
         + (TimeSpan.FromMilliseconds(MaxBackoffMilliseconds) * (MaxAttempts - 1));
 
     /// <inheritdoc />
@@ -303,15 +304,20 @@ public sealed class MarketDataOptions : IValidatableObject
     /// </remarks>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        var longest = LongestFetch();
+        // Twice the fetch, not just more than it: after the source answers, the
+        // pass still validates, merges and commits, and the lease is never
+        // renewed. A bound with no margin is one that holds until the slowest
+        // day, which is the day it matters.
+        var required = LongestFetch() * 2;
 
-        if (BuildIngestionLockTtl() <= longest)
+        if (BuildIngestionLockTtl() < required)
         {
             yield return new ValidationResult(
-                $"IngestionLockTtlSeconds ({IngestionLockTtlSeconds}) must exceed the longest a pass "
-                    + $"may spend calling its source, {longest.TotalSeconds:0}s "
-                    + "(MaxAttempts x ProviderTimeoutSeconds plus the backoffs between them). "
-                    + "Otherwise the lock can expire while the pass is still writing.",
+                $"IngestionLockTtlSeconds ({IngestionLockTtlSeconds}) must be at least {required.TotalSeconds:0}s: "
+                    + "twice the longest a pass may spend calling its source (MaxAttempts x "
+                    + "(ProviderTimeoutSeconds + the call spacing), plus the backoffs between them), "
+                    + "leaving room for the writes after it. Otherwise the lock can expire while "
+                    + "the pass is still writing.",
                 [nameof(IngestionLockTtlSeconds)]);
         }
     }

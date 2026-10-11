@@ -288,6 +288,42 @@ public sealed class MarketDataPersistenceTests(DependencyContainerFixture contai
     /// did.
     /// </remarks>
     [Fact]
+    public async Task A_checkpoint_read_again_in_the_same_scope_reflects_another_writer()
+    {
+        // A backfill runs every pass in one scope, releasing the series lock
+        // between passes. If the scheduled host advanced the checkpoint in that
+        // gap, EF Core would hand the backfill its own tracked copy back, and
+        // advancing that stale copy would write the position backwards.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var backfill = await CreateScopeAsync();
+        var instrumentId = await AddInstrumentAsync(backfill, "MDJ", "MDJ");
+
+        backfill.Journal.AddCheckpoint(
+            IngestionCheckpoint.Start(instrumentId, BarInterval.OneDay, Source, Period, Ingested));
+        await backfill.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var first = await backfill.Journal.FindCheckpointAsync(
+            instrumentId, BarInterval.OneDay, Source, TestContext.Current.CancellationToken);
+        Assert.Equal(Period, first!.LastBarOpenedAtUtc);
+
+        await using (var host = await CreateScopeAsync())
+        {
+            var theirs = await host.Journal.FindCheckpointAsync(
+                instrumentId, BarInterval.OneDay, Source, TestContext.Current.CancellationToken);
+            Assert.True(theirs!.Advance(Period.AddDays(5), Ingested.AddDays(1)));
+            await host.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        var again = await backfill.Journal.FindCheckpointAsync(
+            instrumentId, BarInterval.OneDay, Source, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Period.AddDays(5), again!.LastBarOpenedAtUtc);
+    }
+
+    [Fact]
     public async Task The_sources_holding_a_series_are_read_back_from_the_database()
     {
         // This one has to run against PostgreSQL, and that is the whole point.

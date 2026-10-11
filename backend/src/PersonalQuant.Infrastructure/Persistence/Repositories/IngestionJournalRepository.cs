@@ -102,7 +102,7 @@ internal sealed class IngestionJournalRepository(PersonalQuantDbContext dbContex
     }
 
     /// <inheritdoc />
-    public Task<IngestionCheckpoint?> FindCheckpointAsync(
+    public async Task<IngestionCheckpoint?> FindCheckpointAsync(
         InstrumentId instrumentId,
         BarInterval interval,
         SourceCode source,
@@ -110,14 +110,36 @@ internal sealed class IngestionJournalRepository(PersonalQuantDbContext dbContex
     {
         ArgumentNullException.ThrowIfNull(source);
 
+        var heldAlready = dbContext.ChangeTracker
+            .Entries<IngestionCheckpoint>()
+            .Any(entry =>
+                entry.Entity.InstrumentId == instrumentId
+                && entry.Entity.Interval == interval
+                && entry.Entity.Source == source);
+
         // Tracked: the caller advances the position in the same unit of work
         // that stores the bars it covers.
-        return dbContext.IngestionCheckpoints.FirstOrDefaultAsync(
-            checkpoint =>
-                checkpoint.InstrumentId == instrumentId
-                && checkpoint.Interval == interval
-                && checkpoint.Source == source,
-            cancellationToken);
+        var checkpoint = await dbContext.IngestionCheckpoints
+            .FirstOrDefaultAsync(
+                candidate =>
+                    candidate.InstrumentId == instrumentId
+                    && candidate.Interval == interval
+                    && candidate.Source == source,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // A query does not overwrite an entity the context already tracks: it
+        // returns the copy in memory. A backfill runs every pass in one scope
+        // and releases the series lock between them, so another writer may
+        // have advanced the row since this context last read it. Reloaded,
+        // the position is the one on record when the lock was taken, and
+        // Advance is monotonic against the truth rather than a stale copy.
+        if (heldAlready && checkpoint is not null && dbContext.Entry(checkpoint).State == EntityState.Unchanged)
+        {
+            await dbContext.Entry(checkpoint).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return checkpoint;
     }
 
     /// <inheritdoc />

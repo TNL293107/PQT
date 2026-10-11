@@ -151,17 +151,21 @@ public sealed class MarketDataOptionsTests
         var options = new MarketDataOptions();
 
         Assert.Equal(TimeSpan.FromMinutes(10), options.BuildIngestionLockTtl());
-        Assert.Equal(TimeSpan.FromSeconds(150), options.LongestFetch());
+        // Plus the call spacing the limiter waits before each attempt.
+        Assert.Equal(TimeSpan.FromSeconds(150.6), options.LongestFetch());
         Assert.Empty(Validate(options));
     }
 
     [Theory]
     [InlineData(150)]
     [InlineData(60)]
+    [InlineData(200)]
     public void A_lock_expiry_the_retry_policy_can_outlive_is_refused(int ttlSeconds)
     {
         // Otherwise the lock expires while the pass is still writing, and a
-        // second pass over the same series is let in beside it.
+        // second pass over the same series is let in beside it. 200 seconds
+        // outlasts the fetch (150.6) but leaves no room for the writes after it:
+        // the expiry must be at least twice the fetch.
         var options = new MarketDataOptions { IngestionLockTtlSeconds = ttlSeconds };
 
         var failure = Assert.Single(Validate(options));
