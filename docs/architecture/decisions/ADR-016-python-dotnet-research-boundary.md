@@ -109,3 +109,26 @@ options until something needs them.
 - Every research result is traceable to a dataset version, a code commit and a research engine version.
 - This ADR closes the open question in [ADR-004](ADR-004-python-quant-layer.md). ADR-004 is not edited; it is superseded on that point by this record.
 - **Open:** the transport for online serving (Phase 18). Revisit gRPC then, with a workload to size it against — the same discipline ADR-004 applied here.
+
+## Implementation — 11 October 2026
+
+Implemented as decided, with these specifics:
+
+- **One role, `quant_research`.** The migration (`ResearchBoundary`) creates it
+  `NOLOGIN` with its grants, and default privileges extend them to later
+  tables. The backend gives it `LOGIN` with `Research__DatabasePassword` on
+  every start-up after the schema is current, and removes the login when none
+  is configured — so the login matches the configuration even on a database
+  older than the role, which an init script would never reach.
+- **`research.jobs`** carries the columns listed in the architecture document
+  plus `attempts`, which lets the worker abandon a job that kills it every
+  time, and `result jsonb`, which holds the outcome until U9's experiment store
+  gives a run a record of its own. Status is text under a check constraint, and
+  a finished job must state its outcome.
+- **The worker's SQL** is tested in Python against a table built from
+  `quant/tests/fixtures/research_jobs.sql`; a backend integration test fails if
+  that file drifts from the migrated table.
+- **"A crashing worker never affects API health"** is held structurally and
+  tested on the compose file: the worker sits behind the `research` profile,
+  nothing depends on it, it mounts the dataset volume read-only, and it is
+  never given the owner's credentials.

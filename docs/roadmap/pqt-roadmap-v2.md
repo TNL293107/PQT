@@ -539,7 +539,7 @@ was added, `pyarrow`.
 
 ---
 
-### U7 — Research Storage · Gate B
+### U7 — Research Storage · Gate B ✅
 
 | Tier | Technology | Justification |
 | --- | --- | --- |
@@ -569,6 +569,12 @@ build). DuckDB is handed the verified bytes as Arrow, not the file's path, and
 the connection cannot read a file at all, so no query sees data that was not
 verified. Tests hold it to the Python loader row for row and value for value.
 `duckdb` is the package's second runtime dependency.
+
+**Gate B's criterion for U7 is met, 11 October 2026**: the analytical tier is
+working and Redis has its job (the ingestion series lock). Two rows of the
+table remain outside that criterion: the raw store's payload-store seam has not
+been extracted yet — raw batches are still written straight to PostgreSQL —
+and the experiment store's tables are U9's.
 
 ---
 
@@ -603,7 +609,7 @@ the experiment log can supply it. Phase 8 depends on this column existing.
 
 ---
 
-### U10 — Python / .NET Research Boundary · Gate B
+### U10 — Python / .NET Research Boundary · Gate B ✅
 
 **Objective.** Close the question [ADR-004](../architecture/decisions/ADR-004-python-quant-layer.md)
 left explicitly open.
@@ -615,6 +621,17 @@ polled by a worker container; Python writes only into the `research` schema.
 Enforced by mechanism rather than convention: a research database role with
 read access to `quant` and no write grant. Recorded in
 [ADR-016](../architecture/decisions/ADR-016-python-dotnet-research-boundary.md).
+
+**Complete, 11 October 2026.** The backend's migration creates the `research`
+schema, `research.jobs` and the `quant_research` role; the backend gives the
+role a login only when `RESEARCH_DB_PASSWORD` is set. Proven as that role
+against PostgreSQL: reads of `quant` succeed, and `INSERT`, `UPDATE`,
+`DELETE`, `TRUNCATE` and `CREATE` in `quant` are refused with `42501`. The
+operator queues work with `pqt research submit momentum-slice`; the
+`quant-worker` container (Compose profile `research`) claims it with a lease
+and records the result. Run end to end on the local stack: a job over the VN30
+export was claimed within a second and succeeded with the slice's figures.
+Nothing depends on the worker, and a test holds the compose file to that.
 
 ---
 

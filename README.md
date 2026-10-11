@@ -19,10 +19,10 @@ Phase 5–20                    PLANNED       ← Phase 5 unlocked by Gate A
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
 | **Complete** | Phases 0–4 — master, ingestion, quality, adjusted prices      |
-| **Current**  | Gate B of the Research Foundation Upgrade — U6 first          |
+| **Current**  | Gate B — U6, U7 and U10 done; U9 experiment store next        |
 | **Next**     | Phase 5 — Market Intelligence Terminal, unlocked by Gate A    |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 856 unit, 138 integration (2026-10-11); React, Python and C++ suites green in CI |
+| **Tests**    | 905 unit, 157 integration, 142 Python (2026-10-11); React and C++ suites green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,

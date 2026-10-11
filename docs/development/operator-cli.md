@@ -324,6 +324,26 @@ docker compose cp backend:/app/datasets/6a233e778e940860/v1 ./exported
 
 ---
 
+### `research`
+
+Queues research work for the quant worker (ADR-016) and reports on it. The CLI
+never runs research itself: the worker claims the job in its own container,
+connected as `quant_research`, and records the outcome.
+
+```bash
+pqt research submit momentum-slice --dataset 3856e4ce77841c1a [--version 3] [--quantiles 10] [--rebalance-every 21]
+pqt research list [--limit 20]
+pqt research show <JOB-ID>
+```
+
+`submit` refuses a dataset that has no exported build, or a named build that
+does not exist, rather than queuing a job to fail later. Without `--version`
+the worker runs the latest build at the moment it claims the job. `show` exits
+1 for a failed job, so a script can wait on one and tell the outcomes apart.
+Start the worker with `docker compose --profile research up -d quant-worker`;
+it needs `RESEARCH_DB_PASSWORD` in `.env`, the same value the backend uses to
+give the role its login.
+
 ## Exit codes
 
 | Code | Meaning |

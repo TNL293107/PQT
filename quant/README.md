@@ -51,6 +51,19 @@ under `quant/`. A `src` layout means tests import the *installed* package
 rather than whatever happens to be in the working directory, so a packaging
 mistake fails in CI instead of after a release.
 
+## The worker
+
+`python -m personal_quant.worker` runs the research jobs the backend queues in
+`research.jobs` (ADR-016): it claims one with a lease, runs its handler, and
+records the result or the error, connected as the `quant_research` role. In
+Compose it is the `quant-worker` service behind the `research` profile. It
+reads `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DATABASE`,
+`RESEARCH_DB_PASSWORD` and `PQT_DATASET_ROOT`.
+
+The queue's SQL tests run when `PQT_TEST_DATABASE_URL` names a PostgreSQL
+database (CI provides one); they build a throwaway copy of the table and drop
+it afterwards.
+
 ## Setup
 
 ```bash
