@@ -89,6 +89,73 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
     }
 
     [Fact]
+    public async Task The_research_role_can_record_a_run_with_its_metrics()
+    {
+        // The experiment store's tables arrived in a later migration than the
+        // grants. Default privileges are what reach them; this proves they do.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        var database = await MigrateAsync("rb_runs");
+        await using var connection = await ConnectAsResearchAsync(database);
+        var experiment = Guid.CreateVersion7();
+        var run = Guid.CreateVersion7();
+
+        await ExecuteAsync(
+            connection,
+            "INSERT INTO research.experiments (id, name, created_at_utc) VALUES (@id, 'momentum', now())",
+            experiment);
+        await ExecuteAsync(connection, RunInsert(run, experiment, "1, 1, NULL"), null);
+        await ExecuteAsync(
+            connection,
+            "INSERT INTO research.run_metrics (run_id, name, split, value) VALUES (@id, 'ic_mean', 'all', 0.07)",
+            run);
+        await ExecuteAsync(
+            connection,
+            "INSERT INTO research.run_artifacts (run_id, kind, path, sha256) "
+                + "VALUES (@id, 'report', 'runs/x.json', repeat('a', 64))",
+            run);
+    }
+
+    [Fact]
+    public async Task A_reproduction_carries_no_trial_and_a_configuration_always_does()
+    {
+        // trial_count is a statistical input. A reproduction is not a new
+        // configuration and must not be counted as one; a configuration
+        // without its count would leave the deflated statistics guessing.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        var database = await MigrateAsync("rb_trial");
+        await using var connection = await ConnectAsResearchAsync(database);
+        var experiment = Guid.CreateVersion7();
+        var original = Guid.CreateVersion7();
+
+        await ExecuteAsync(
+            connection,
+            "INSERT INTO research.experiments (id, name, created_at_utc) VALUES (@id, 'trials', now())",
+            experiment);
+        await ExecuteAsync(connection, RunInsert(original, experiment, "1, 1, NULL"), null);
+
+        foreach (var trial in new[]
+        {
+            "NULL, NULL, NULL",
+            $"1, 1, '{original}'",
+            "2, 1, NULL",
+        })
+        {
+            await using var command = new NpgsqlCommand(
+                RunInsert(Guid.CreateVersion7(), experiment, trial), connection);
+
+            var refusal = await Assert.ThrowsAsync<PostgresException>(
+                () => command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+
+            Assert.Equal("ck_runs_trial", refusal.ConstraintName);
+        }
+
+        await ExecuteAsync(
+            connection, RunInsert(Guid.CreateVersion7(), experiment, $"NULL, NULL, '{original}'"), null);
+    }
+
+    [Fact]
     public async Task The_research_role_cannot_change_the_research_schema()
     {
         // The backend owns every migration, research's included. A worker that
@@ -126,10 +193,10 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
     [Fact]
     public async Task The_python_fixture_matches_the_migrated_table()
     {
-        // The worker's SQL is tested in Python against a table built from
-        // quant/tests/fixtures/research_jobs.sql. If that file and the
-        // migration disagreed, the worker would pass its tests against a
-        // table that does not exist.
+        // The worker's SQL is tested in Python against tables built from
+        // quant/tests/fixtures/research_schema.sql. If that file and the
+        // migrations disagreed, the worker would pass its tests against a
+        // schema that does not exist.
         Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
 
         var database = await MigrateAsync("rb_fixture");
@@ -141,6 +208,16 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
 
         Assert.Equal(await DescribeAsync(connection, "research"), await DescribeAsync(connection, "research_fixture"));
     }
+
+    private static string RunInsert(Guid run, Guid experiment, string trial) =>
+        "INSERT INTO research.runs (id, experiment_id, status, strategy, universe_code, membership, "
+            + "dataset_id, dataset_version, schema_version, content_hash, factor_version, params, "
+            + "params_hash, research_engine, research_engine_version, trial_index, trial_count, "
+            + "reproduces_run_id, started_at_utc, finished_at_utc) "
+            + $"VALUES ('{run}', '{experiment}', 'succeeded', 'momentum_slice', 'VN30', "
+            + "'point_in_time', '3856e4ce77841c1a', 3, 2, repeat('b', 64), 'momentum_12_1@1', "
+            + "'{}'::jsonb, repeat('c', 64), 'personal_quant', '0.1.0', "
+            + $"{trial}, now(), now())";
 
     private async Task<(string Host, int Port, string Database, string Username, string Password)>
         MigrateAsync(string name)
@@ -201,27 +278,30 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
 
     private static async Task<string> DescribeAsync(NpgsqlConnection connection, string schema)
     {
-        // Columns with their types, lengths, nullability and defaults, then the
-        // check and key constraints as PostgreSQL itself renders them.
+        // Every table's columns with their types, lengths, nullability and
+        // defaults, then its constraints and indexes as PostgreSQL itself
+        // renders them, with the schema's own name taken out so the copy and
+        // the original can be compared.
         await using var command = new NpgsqlCommand(
             """
             SELECT string_agg(line, E'\n' ORDER BY line) FROM (
-                SELECT format('column %s %s %s %s %s', column_name, data_type,
+                SELECT format('column %s.%s %s %s %s %s', table_name, column_name, data_type,
                               coalesce(character_maximum_length::text, '-'), is_nullable,
                               coalesce(column_default, '-')) AS line
                 FROM information_schema.columns
-                WHERE table_schema = @schema AND table_name = 'jobs'
+                WHERE table_schema = @schema
                 UNION ALL
-                SELECT format('constraint %s %s', c.conname, pg_get_constraintdef(c.oid))
+                SELECT format('constraint %s.%s %s', t.relname, c.conname,
+                              replace(pg_get_constraintdef(c.oid), @schema || '.', ''))
                 FROM pg_constraint c
                 JOIN pg_class t ON t.oid = c.conrelid
                 JOIN pg_namespace n ON n.oid = t.relnamespace
-                WHERE n.nspname = @schema AND t.relname = 'jobs'
+                WHERE n.nspname = @schema
                 UNION ALL
-                SELECT format('index %s %s', i.indexname,
+                SELECT format('index %s.%s %s', i.tablename, i.indexname,
                               replace(i.indexdef, @schema || '.', ''))
                 FROM pg_indexes i
-                WHERE i.schemaname = @schema AND i.tablename = 'jobs'
+                WHERE i.schemaname = @schema
             ) described
             """,
             connection);
@@ -241,7 +321,7 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
 
         return directory is null
             ? throw new InvalidOperationException("The repository root holding quant/ was not found.")
-            : Path.Combine(directory.FullName, "quant", "tests", "fixtures", "research_jobs.sql");
+            : Path.Combine(directory.FullName, "quant", "tests", "fixtures", "research_schema.sql");
     }
 
     [GeneratedRegex(@"\bresearch(?=[.;])")]

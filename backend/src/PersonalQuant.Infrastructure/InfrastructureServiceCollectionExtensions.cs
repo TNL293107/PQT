@@ -109,6 +109,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
         services.AddScoped<IUniverseRepository, UniverseRepository>();
         services.AddScoped<Application.Research.IResearchJobRepository, ResearchJobRepository>();
+        services.AddScoped<Application.Research.IExperimentRepository, ExperimentRepository>();
+        services.AddScoped<Application.Research.IResearchRunRepository, ResearchRunRepository>();
 
         // The research store. One object serves both ports because they are two
         // halves of the same fact: where a dataset's bytes go, and what this

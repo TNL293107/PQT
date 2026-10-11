@@ -71,6 +71,43 @@ public sealed class ResearchCommandsTests
     }
 
     [Fact]
+    public async Task An_experiment_and_its_hypothesis_reach_the_service()
+    {
+        var harness = new Harness();
+
+        await harness.RunAsync(
+            "research", "submit", "momentum-slice", "--dataset", "3856e4ce77841c1a",
+            "--experiment", "momentum-vn30", "--hypothesis", "12-1 ranks VN30");
+
+        Assert.Equal("momentum-vn30", harness.Jobs.LastRequest!.Experiment);
+        Assert.Equal("12-1 ranks VN30", harness.Jobs.LastRequest.Hypothesis);
+    }
+
+    [Fact]
+    public async Task A_reproduction_is_queued_for_a_recorded_run()
+    {
+        var harness = new Harness();
+        var run = Guid.NewGuid();
+
+        var code = await harness.RunAsync("research", "reproduce", run.ToString());
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Equal(run, harness.Jobs.LastReproduction);
+        Assert.Contains("diffs the metrics", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task No_recorded_runs_says_so()
+    {
+        var harness = new Harness();
+
+        var code = await harness.RunAsync("research", "runs");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Contains("No research runs", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_empty_queue_says_so()
     {
         var harness = new Harness();
@@ -87,7 +124,9 @@ public sealed class ResearchCommandsTests
     [InlineData("research", "submit", "momentum-slice", "--dataset", "x", "--quantiles", "ten")]
     [InlineData("research", "submit", "other-thing", "--dataset", "x")]
     [InlineData("research", "show", "not-a-guid")]
-    [InlineData("research", "run")]
+    [InlineData("research", "run", "not-a-guid")]
+    [InlineData("research", "reproduce")]
+    [InlineData("research", "rerun")]
     public async Task A_command_line_the_operator_got_wrong_never_reaches_the_deployment(
         params string[] args)
     {
@@ -139,6 +178,8 @@ public sealed class ResearchCommandsTests
 
         public MomentumSliceRequest? LastRequest { get; private set; }
 
+        public Guid? LastReproduction { get; private set; }
+
         public void RefuseWith(string reason) => _refusal = reason;
 
         public void Hold(ResearchJob job, ResearchJobStatus status, string? error)
@@ -165,6 +206,25 @@ public sealed class ResearchCommandsTests
 
         public Task<ResearchJob?> FindAsync(ResearchJobId id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_held.FirstOrDefault(job => job.Id == id));
+
+        public Task<ResearchJobSubmission> SubmitReproductionAsync(
+            Guid runId,
+            CancellationToken cancellationToken = default)
+        {
+            LastReproduction = runId;
+
+            return Task.FromResult(
+                new ResearchJobSubmission(ResearchJob.Submit("reproduce_run", "{}", Now), null));
+        }
+
+        public Task<ResearchRunView?> FindRunAsync(Guid runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ResearchRunView?>(null);
+
+        public Task<IReadOnlyList<ResearchRunView>> ListRunsAsync(
+            string? experimentName,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ResearchRunView>>([]);
 
         public Task<IReadOnlyList<ResearchJob>> ListRecentAsync(
             int limit,

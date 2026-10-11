@@ -40,8 +40,12 @@ internal static class Usage
         output.WriteLine();
         output.WriteLine("  pqt research submit momentum-slice --dataset <ID> [--version N]");
         output.WriteLine("                     [--quantiles 10] [--rebalance-every 21]");
+        output.WriteLine("                     [--experiment NAME] [--hypothesis TEXT]");
         output.WriteLine("  pqt research list [--limit 20]");
         output.WriteLine("  pqt research show <JOB-ID>");
+        output.WriteLine("  pqt research runs [--experiment NAME] [--limit 20]");
+        output.WriteLine("  pqt research run <RUN-ID>");
+        output.WriteLine("  pqt research reproduce <RUN-ID>");
         output.WriteLine();
         output.WriteLine("  pqt schema status");
         output.WriteLine("  pqt calendar status");

@@ -879,6 +879,37 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                     b.ToTable("market_data_raw_batches", "quant");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Research.Experiment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Hypothesis")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("hypothesis");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_experiments");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_experiments_name");
+
+                    b.ToTable("experiments", "research");
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Research.ResearchJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -951,6 +982,217 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_jobs_status", "status IN ('queued', 'running', 'succeeded', 'failed')");
                         });
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Research.ResearchRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CodeCommit")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code_commit");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<string>("DatasetId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("dataset_id");
+
+                    b.Property<int>("DatasetVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("dataset_version");
+
+                    b.Property<Guid>("ExperimentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("experiment_id");
+
+                    b.Property<string>("FactorVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("factor_version");
+
+                    b.Property<string>("FeatureVersion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("feature_version");
+
+                    b.Property<DateTimeOffset>("FinishedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at_utc");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Membership")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("membership");
+
+                    b.Property<string>("ModelVersion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("model_version");
+
+                    b.Property<string>("Parameters")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("params");
+
+                    b.Property<string>("ParametersHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("params_hash");
+
+                    b.Property<long?>("RandomSeed")
+                        .HasColumnType("bigint")
+                        .HasColumnName("random_seed");
+
+                    b.Property<Guid?>("ReproducesRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reproduces_run_id");
+
+                    b.Property<string>("ResearchEngine")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("research_engine");
+
+                    b.Property<string>("ResearchEngineVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("research_engine_version");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("schema_version");
+
+                    b.Property<DateTimeOffset>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Strategy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("strategy");
+
+                    b.Property<int?>("TrialCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("trial_count");
+
+                    b.Property<int?>("TrialIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("trial_index");
+
+                    b.Property<DateOnly?>("UniverseAsOf")
+                        .HasColumnType("date")
+                        .HasColumnName("universe_as_of");
+
+                    b.Property<string>("UniverseCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("universe_code");
+
+                    b.HasKey("Id")
+                        .HasName("pk_runs");
+
+                    b.HasIndex("JobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_runs_job_id");
+
+                    b.HasIndex("ReproducesRunId")
+                        .HasDatabaseName("ix_runs_reproduces_run_id");
+
+                    b.HasIndex("DatasetId", "DatasetVersion")
+                        .HasDatabaseName("ix_runs_dataset");
+
+                    b.HasIndex("ExperimentId", "TrialIndex")
+                        .IsUnique()
+                        .HasDatabaseName("ux_runs_experiment_trial");
+
+                    b.ToTable("runs", "research", t =>
+                        {
+                            t.HasCheckConstraint("ck_runs_status", "status IN ('succeeded', 'failed')");
+
+                            t.HasCheckConstraint("ck_runs_trial", "(reproduces_run_id IS NULL AND trial_index IS NOT NULL AND trial_count IS NOT NULL AND trial_index >= 1 AND trial_count >= trial_index) OR (reproduces_run_id IS NOT NULL AND trial_index IS NULL AND trial_count IS NULL)");
+
+                            t.HasCheckConstraint("ck_runs_window", "finished_at_utc >= started_at_utc");
+                        });
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Research.RunArtifact", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Path")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("path");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.HasKey("RunId", "Kind", "Path")
+                        .HasName("pk_run_artifacts");
+
+                    b.ToTable("run_artifacts", "research");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Research.RunMetric", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Split")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("split");
+
+                    b.Property<double?>("Value")
+                        .HasColumnType("double precision")
+                        .HasColumnName("value");
+
+                    b.HasKey("RunId", "Name", "Split")
+                        .HasName("pk_run_metrics");
+
+                    b.ToTable("run_metrics", "research");
                 });
 
             modelBuilder.Entity("PersonalQuant.Domain.Universes.Universe", b =>
@@ -1253,6 +1495,48 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_market_data_raw_batches_instrument");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Research.ResearchRun", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Research.Experiment", null)
+                        .WithMany()
+                        .HasForeignKey("ExperimentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_runs_experiments");
+
+                    b.HasOne("PersonalQuant.Domain.Research.ResearchJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_runs_jobs");
+
+                    b.HasOne("PersonalQuant.Domain.Research.ResearchRun", null)
+                        .WithMany()
+                        .HasForeignKey("ReproducesRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_runs_reproduces");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Research.RunArtifact", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Research.ResearchRun", null)
+                        .WithMany("Artifacts")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_run_artifacts_runs");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Research.RunMetric", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Research.ResearchRun", null)
+                        .WithMany("Metrics")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_run_metrics_runs");
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Universes.Universe", b =>
                 {
                     b.OwnsOne("PersonalQuant.Domain.Universes.MembershipCoverage", "Coverage", b1 =>
@@ -1304,6 +1588,13 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_universe_memberships_universe");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Research.ResearchRun", b =>
+                {
+                    b.Navigation("Artifacts");
+
+                    b.Navigation("Metrics");
                 });
 #pragma warning restore 612, 618
         }

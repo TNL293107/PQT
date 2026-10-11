@@ -95,6 +95,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <remarks>In the <c>research</c> schema, which the quant layer may write.</remarks>
     public DbSet<ResearchJob> ResearchJobs => Set<ResearchJob>();
 
+    /// <summary>Gets the experiments research runs are grouped and counted under.</summary>
+    public DbSet<Experiment> Experiments => Set<Experiment>();
+
+    /// <summary>Gets the runs the quant worker recorded.</summary>
+    public DbSet<ResearchRun> ResearchRuns => Set<ResearchRun>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

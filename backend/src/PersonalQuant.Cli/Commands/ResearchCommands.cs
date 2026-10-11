@@ -35,13 +35,18 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
             "submit" => SubmitAsync(command, cancellationToken),
             "list" => ListAsync(command, cancellationToken),
             "show" => ShowAsync(command, cancellationToken),
+            "runs" => RunsAsync(command, cancellationToken),
+            "run" => ShowRunAsync(command, cancellationToken),
+            "reproduce" => ReproduceAsync(command, cancellationToken),
             _ => Task.FromResult(Unknown(command.Verb)),
         };
     }
 
     private async Task<int> SubmitAsync(CommandArguments command, CancellationToken cancellationToken)
     {
-        if (!command.Validate(["dataset", "version", "quantiles", "rebalance-every"], out var problem))
+        if (!command.Validate(
+                ["dataset", "version", "quantiles", "rebalance-every", "experiment", "hypothesis"],
+                out var problem))
         {
             output.Problem(problem);
             return ExitCode.Usage;
@@ -50,7 +55,7 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
         if (command.Operands is not ["momentum-slice"])
         {
             output.Problem("pqt research submit momentum-slice --dataset <ID> [--version N] "
-                + "[--quantiles 10] [--rebalance-every 21]");
+                + "[--quantiles 10] [--rebalance-every 21] [--experiment NAME] [--hypothesis TEXT]");
             return ExitCode.Usage;
         }
 
@@ -82,7 +87,13 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
 
         var submission = await jobs.Value
             .SubmitMomentumSliceAsync(
-                new MomentumSliceRequest(datasetId, version, quantiles, every),
+                new MomentumSliceRequest(
+                    datasetId,
+                    version,
+                    quantiles,
+                    every,
+                    command.Value("experiment"),
+                    command.Value("hypothesis")),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -185,11 +196,149 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
         return job.Status == ResearchJobStatus.Failed ? ExitCode.Refused : ExitCode.Ok;
     }
 
+    private async Task<int> RunsAsync(CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.Validate(["experiment", "limit"], out var problem))
+        {
+            output.Problem(problem);
+            return ExitCode.Usage;
+        }
+
+        if (!command.TryCount("limit", DefaultListLimit, out var limit, out var badLimit))
+        {
+            output.Problem(badLimit);
+            return ExitCode.Usage;
+        }
+
+        var recorded = await jobs.Value
+            .ListRunsAsync(command.Value("experiment"), limit, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (recorded.Count == 0)
+        {
+            output.Line("No research runs are recorded.");
+            return ExitCode.Ok;
+        }
+
+        // The trial column is the one a reader must not skip: the IC beside it
+        // is one of that many configurations tried.
+        output.Table(
+            ["run", "experiment", "trial", "dataset", "factor", "ic mean", "t", "finished"],
+            [
+                .. recorded.Select(view => (IReadOnlyList<string>)
+                [
+                    view.Run.Id.ToString(),
+                    view.ExperimentName,
+                    Trial(view.Run),
+                    $"{view.Run.DatasetId} v{view.Run.DatasetVersion.ToString(CultureInfo.InvariantCulture)}",
+                    view.Run.FactorVersion,
+                    Metric(view.Run, "ic_mean"),
+                    Metric(view.Run, "t_statistic"),
+                    Instant(view.Run.FinishedAtUtc),
+                ]),
+            ]);
+
+        return ExitCode.Ok;
+    }
+
+    private async Task<int> ShowRunAsync(CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.Validate([], out var problem))
+        {
+            output.Problem(problem);
+            return ExitCode.Usage;
+        }
+
+        if (command.Operands.Count != 1 || !Guid.TryParse(command.Operands[0], out var id))
+        {
+            output.Problem("pqt research run <RUN-ID>");
+            return ExitCode.Usage;
+        }
+
+        var view = await jobs.Value.FindRunAsync(id, cancellationToken).ConfigureAwait(false);
+
+        if (view is null)
+        {
+            output.Problem($"No research run {id} is recorded.");
+            return ExitCode.Refused;
+        }
+
+        var run = view.Run;
+        output.Field("run", run.Id.ToString(), LabelWidth);
+        output.Field("experiment", view.ExperimentName, LabelWidth);
+        output.Field("trial", Trial(run), LabelWidth);
+        output.Field("status", run.Status, LabelWidth);
+        output.Field("strategy", run.Strategy, LabelWidth);
+        output.Field("dataset", $"{run.DatasetId} v{run.DatasetVersion.ToString(CultureInfo.InvariantCulture)} "
+            + $"(schema {run.SchemaVersion.ToString(CultureInfo.InvariantCulture)})", LabelWidth);
+        output.Field("content hash", run.ContentHash, LabelWidth);
+        output.Field("universe", $"{run.UniverseCode}, {run.Membership}", LabelWidth);
+        output.Field("factor", run.FactorVersion, LabelWidth);
+        output.Field("params", run.Parameters, LabelWidth);
+        output.Field("code commit", run.CodeCommit ?? Output.Unknown, LabelWidth);
+        output.Field("engine", $"{run.ResearchEngine} {run.ResearchEngineVersion}", LabelWidth);
+        output.Field("finished", Instant(run.FinishedAtUtc), LabelWidth);
+
+        if (run.ReproducesRunId is { } original)
+        {
+            output.Field("reproduces", original.ToString(), LabelWidth);
+        }
+
+        foreach (var metric in run.Metrics.OrderBy(metric => metric.Name, StringComparer.Ordinal))
+        {
+            output.Field(
+                $"  {metric.Name}",
+                metric.Value?.ToString("R", CultureInfo.InvariantCulture) ?? Output.Unknown,
+                LabelWidth);
+        }
+
+        return run.Status == "succeeded" ? ExitCode.Ok : ExitCode.Refused;
+    }
+
+    private async Task<int> ReproduceAsync(CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.Validate([], out var problem))
+        {
+            output.Problem(problem);
+            return ExitCode.Usage;
+        }
+
+        if (command.Operands.Count != 1 || !Guid.TryParse(command.Operands[0], out var id))
+        {
+            output.Problem("pqt research reproduce <RUN-ID>");
+            return ExitCode.Usage;
+        }
+
+        var submission = await jobs.Value.SubmitReproductionAsync(id, cancellationToken).ConfigureAwait(false);
+
+        if (submission.Job is not { } job)
+        {
+            output.Problem(submission.Refusal ?? "The reproduction was refused.");
+            return ExitCode.Refused;
+        }
+
+        output.Line($"{job.Id} queued: reproduce run {id}. The worker re-executes it from its record "
+            + $"and diffs the metrics; follow it with 'pqt research show {job.Id}'.");
+
+        return ExitCode.Ok;
+    }
+
     private int Unknown(string verb)
     {
-        output.Problem($"'research {verb}' is not a command. Try submit, list or show.");
+        output.Problem(
+            $"'research {verb}' is not a command. Try submit, list, show, runs, run or reproduce.");
         return ExitCode.Usage;
     }
+
+    private static string Trial(ResearchRun run) =>
+        run.TrialIndex is { } index && run.TrialCount is { } count
+            ? $"{index.ToString(CultureInfo.InvariantCulture)} of {count.ToString(CultureInfo.InvariantCulture)}"
+            : "reproduction";
+
+    private static string Metric(ResearchRun run, string name) =>
+        run.Metrics.FirstOrDefault(metric => metric.Name == name && metric.Split == "all")?.Value is { } value
+            ? value.ToString("+0.000;-0.000", CultureInfo.InvariantCulture)
+            : Output.Unknown;
 
     private static string Describe(ResearchJobStatus status) =>
         status.ToString().ToLowerInvariant();
