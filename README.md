@@ -12,15 +12,14 @@ engineering project.
 
 ```
 Phase 0–4                     COMPLETE
-Research Foundation Upgrade   IN PROGRESS   ← Gate A passed; Gate B evidenced, awaiting the operator
-Phase 5–20                    PLANNED       ← Phase 5 unlocked by Gate A
+Research Foundation Upgrade   COMPLETE      ← Gates A and B passed 2026-10-11
+Phase 5–20                    PLANNED       ← Phase 5 next
 ```
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Complete** | Phases 0–4 — master, ingestion, quality, adjusted prices      |
-| **Current**  | Gate B — U6–U10 all evidenced (2026-10-11); declaration pending |
-| **Next**     | Phase 5 — Market Intelligence Terminal, unlocked by Gate A    |
+| **Complete** | Phases 0–4, and the Research Foundation Upgrade (U1–U10)      |
+| **Next**     | Phase 5 — Market Intelligence Terminal                        |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
 | **Tests**    | 946 unit, 162 integration, 262 Python + 91 Qlib (2026-10-11); React and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
@@ -49,8 +48,10 @@ breaches and explained, and a point-in-time dataset holding exactly 30 members
 on every session across the 3 August 2026 review
 ([ADR-024](docs/architecture/decisions/ADR-024-point-in-time-dataset-membership.md)).
 **Gate A passed on 11 October 2026**, declared by the operator on that
-evidence. Phase 5 may begin, and Gate B begins with U6. See the
-[canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
+evidence. **Gate B passed the same day** — the Python research layer, the
+job boundary, the experiment store with reproduction, research storage and
+the optional Qlib adapter — and with it the Research Foundation Upgrade is
+complete. See the [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
 Redis for real; a complete instrument master — identity and listing lifecycle,
@@ -131,7 +132,7 @@ It has since done the thing Gate A asks for: Vietcap serves prices already
 adjusted, so the raw series comes from CafeF
 ([ADR-021](docs/architecture/decisions/ADR-021-raw-vietnamese-price-history.md)),
 and the `FPT` entitlements of 27 May 2016 are reproduced through the corporate
-action engine, as described above. U1–U5 are complete; U6–U10 are Gate B.
+action engine, as described above. U1–U10 are complete.
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A.

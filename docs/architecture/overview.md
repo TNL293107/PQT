@@ -57,21 +57,25 @@ to simulate.
      └─────────────────┘            └──────────────────┘
 
      ┌─────────────────┐            ┌──────────────────┐
-     │  Python quant   │            │   C++ engine     │
-     │  packaging,     │            │   CMake, CTest,  │
-     │  pytest, ruff,  │            │   GoogleTest     │
-     │  mypy           │            │                  │
+     │  quant-worker   │            │   C++ engine     │
+     │  Python 3.12,   │            │   CMake, CTest,  │
+     │  research jobs  │            │   GoogleTest     │
+     │  as quant_      │            │                  │
+     │  research       │            │                  │
      └─────────────────┘            └──────────────────┘
-        not yet wired                  not yet wired
-        to the backend                 to the backend
+        research.* via                 not yet wired
+        PostgreSQL only                to the backend
 ```
 
-The Python and C++ layers are real, built and tested, but they contain no
-financial code and do not yet communicate with the backend. Establishing the
-toolchains before there is pressure to use them was the point of Phase 0.
+The Python layer holds the research code — the point-in-time harness, the
+momentum slice, the experiment store and the optional Qlib adapter — and meets
+the backend only through the `research` schema, as the `quant_research` role
+that cannot write `quant`. The C++ layer is real, built and tested, and holds
+no financial code yet.
 
-The Python layer is populated in **Gate B** of the Research Foundation Upgrade
-(U6–U10), and the boundary it will use is decided in
+The Python layer was populated in **Gate B** of the Research Foundation
+Upgrade (U6–U10, passed 11 October 2026), and the boundary it uses is decided
+in
 [ADR-016](decisions/ADR-016-python-dotnet-research-boundary.md). The C++ layer
 stays untouched until a measurement justifies it, per
 [ADR-005](decisions/ADR-005-cpp-performance-layer.md).
@@ -224,7 +228,7 @@ none may be done superficially: **2** (ingestion) → **3** (quality) → **4**
 The Research Foundation Upgrade sits between Phase 4 and Phase 5 and is split
 into two gates. **Gate A** — U1–U5 plus real-data validation — gates Phase 5.
 **Gate B** — U6–U10 — completes the Upgrade and may run in parallel with
-Phase 5.
+Phase 5. Both passed on 11 October 2026.
 
 See [`../roadmap/pqt-roadmap-v2.md`](../roadmap/pqt-roadmap-v2.md).
 

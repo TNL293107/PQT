@@ -24,12 +24,12 @@ content here: two live roadmaps is exactly the ambiguity v2.0 exists to remove.
 
 ```
 Phase 0–4                     COMPLETE *
-Research Foundation Upgrade   IN PROGRESS
+Research Foundation Upgrade   COMPLETE
 Phase 5–20                    PLANNED
 
 * implemented and tested, but empirically unvalidated against
   real Vietnamese market data until U3 is completed.
 ```
 
-Phase 5 must not begin until **Gate A** — U1–U5 plus real-data validation — is
-satisfied. See [`pqt-roadmap-v2.md`](pqt-roadmap-v2.md).
+**Gate A** and **Gate B** both passed on 11 October 2026, so the Upgrade is
+complete and Phase 5 is next. See [`pqt-roadmap-v2.md`](pqt-roadmap-v2.md).

@@ -23,12 +23,12 @@ PHASE 4 — Corporate Actions & Adjusted Data  COMPLETE *
   unvalidated against real Vietnamese market data
   until U3 is completed.
 --------------------------------------------------
-RESEARCH FOUNDATION UPGRADE      STATUS: IN PROGRESS
-Gate A (U1–U5 + real-data validation) gates Phase 5.
-Gate B (U6–U10) completes the Upgrade.
+RESEARCH FOUNDATION UPGRADE      STATUS: COMPLETE
+Gate A (U1–U5 + real-data validation) passed 2026-10-11.
+Gate B (U6–U10) passed 2026-10-11.
 --------------------------------------------------
 PHASE 5+                         STATUS: PLANNED
-Phase 5 must NOT begin until GATE A is satisfied.
+Phase 5 is unlocked; both gates are passed.
 --------------------------------------------------
 ADVANCED QUANT RESEARCH
  1. Prediction Market Mispricing   RESEARCH ONLY  (Phase 12)
@@ -143,7 +143,7 @@ and use the new numbering throughout.
 | 2 | Market Data Ingestion | Fetch, normalise, deduplicate, provenance, resume checkpoints, audit | COMPLETE * |
 | 3 | Data Normalization & Quality | Trading calendar, price bands, gaps, staleness, recorded findings | COMPLETE * |
 | 4 | Corporate Actions & Adjusted Data | Eight action types, adjustment factors, adjustment-on-read | COMPLETE * |
-| — | **Research Foundation Upgrade** | **U1–U10; Gate A passed 2026-10-11, Gate B current** | **IN PROGRESS** |
+| — | **Research Foundation Upgrade** | **U1–U10; Gates A and B passed 2026-10-11** | **COMPLETE** |
 | 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry | PLANNED |
 | 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` | PLANNED |
 | 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate, declarative labelled-dataset specification | PLANNED |
@@ -863,14 +863,17 @@ Phase 5 and Gate B may both proceed.
 - Reproducibility workflow — a recorded run can be re-executed and its metrics diffed
 - Dataset hashing and verification enforced on load
 
-**Every criterion is evidenced as of 11 October 2026**; declaring Gate B passed
-— and the Upgrade `COMPLETE` — is the operator's call, as Gate A's was. The
-evidence: U6's slice over the real VN30 export; U7's DuckDB tier and Redis
+**Passed on 11 October 2026**, declared by the operator, and with it the
+Research Foundation Upgrade is `COMPLETE`. The evidence, criterion by
+criterion: U6's slice over the real VN30 export; U7's DuckDB tier and Redis
 lock, each run against the live stack; U8's adapter fitting Qlib's LightGBM in
 a Python 3.12 environment while the suite passes without Qlib and a planted
 stray import is caught; U9's two counted runs and an identical reproduction on
 the same commit; U10's `42501` on every write to `quant` as `quant_research`;
 and hashes verified on every load, in .NET and Python alike.
+
+The one cross-gate dependency is met with it: Phase 8 may complete once its
+own work is done, because U9 now records `trial_count`.
 
 ---
 
