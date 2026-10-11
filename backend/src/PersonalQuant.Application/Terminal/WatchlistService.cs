@@ -203,7 +203,7 @@ internal sealed class WatchlistService(
 
         if (await watchlists.ExistsAsync(name, cancellationToken).ConfigureAwait(false))
         {
-            return new WatchlistChange(WatchlistOutcome.NameTaken, $"A watchlist named '{name}' already exists.", null);
+            return Taken(name);
         }
 
         var existing = await watchlists.ListAsync(cancellationToken).ConfigureAwait(false);
@@ -217,7 +217,14 @@ internal sealed class WatchlistService(
         }
 
         watchlists.Add(Watchlist.Create(name, clock.UtcNow));
-        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The check above and the commit are two steps; a concurrent create can
+        // take the name between them, and the database's unique index is what
+        // says so.
+        if (!await TrySaveAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return Taken(name);
+        }
 
         return await ChangedAsync(name, cancellationToken).ConfigureAwait(false);
     }
@@ -247,14 +254,15 @@ internal sealed class WatchlistService(
 
         if (await watchlists.ExistsAsync(newName, cancellationToken).ConfigureAwait(false))
         {
-            return new WatchlistChange(
-                WatchlistOutcome.NameTaken,
-                $"A watchlist named '{newName}' already exists.",
-                null);
+            return Taken(newName);
         }
 
         watchlist.Rename(newName, clock.UtcNow);
-        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!await TrySaveAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return Taken(newName);
+        }
 
         return await ChangedAsync(newName, cancellationToken).ConfigureAwait(false);
     }
@@ -307,12 +315,13 @@ internal sealed class WatchlistService(
             return new WatchlistChange(WatchlistOutcome.Invalid, exception.Message, null);
         }
 
-        if (!added)
+        // A concurrent add of the same instrument loses to the primary key,
+        // and the list is then exactly as this request asked: unchanged, not
+        // failed.
+        if (!added || !await TrySaveAsync(cancellationToken).ConfigureAwait(false))
         {
             return await UnchangedAsync(name, cancellationToken).ConfigureAwait(false);
         }
-
-        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return await ChangedAsync(name, cancellationToken).ConfigureAwait(false);
     }
@@ -348,6 +357,22 @@ internal sealed class WatchlistService(
             $"'{name}' is not a watchlist name: lowercase letters, digits, _ and -, "
                 + $"starting with a letter or digit, at most {Watchlist.MaxNameLength} characters.",
             null);
+
+    private static WatchlistChange Taken(string name) =>
+        new(WatchlistOutcome.NameTaken, $"A watchlist named '{name}' already exists.", null);
+
+    private async Task<bool> TrySaveAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (UniqueConstraintException)
+        {
+            return false;
+        }
+    }
 
     private static WatchlistChange Missing(string name) =>
         new(WatchlistOutcome.NotFound, $"There is no watchlist named '{name}'.", null);

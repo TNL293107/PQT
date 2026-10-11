@@ -74,6 +74,46 @@ public sealed class WatchlistEndpointTests(DependencyContainerFixture containers
         Assert.Equal(HttpStatusCode.NotFound, lookup.StatusCode);
     }
 
+    [Theory]
+    [InlineData(null, HttpStatusCode.Forbidden)]
+    [InlineData(Key, HttpStatusCode.Unauthorized)]
+    public async Task The_key_is_asked_for_before_the_body_is_read(string? key, HttpStatusCode expected)
+    {
+        // Malformed JSON and an oversized body would each be refused by
+        // binding; without a key neither may be reached, or an anonymous
+        // caller could make the server parse whatever it sent. (A non-JSON
+        // content type is refused 415 by routing, before any body is read.)
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync(key);
+        var token = TestContext.Current.CancellationToken;
+
+        using var malformed = new StringContent("{not json", System.Text.Encoding.UTF8, "application/json");
+        using var huge = new StringContent(new string('x', 512 * 1024), System.Text.Encoding.UTF8, "application/json");
+
+        foreach (var body in new HttpContent[] { malformed, huge })
+        {
+            var response = await host.Client.PostAsync(new Uri("/watchlists", UriKind.Relative), body, token);
+            Assert.Equal(expected, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task A_body_larger_than_any_write_needs_is_refused_even_with_the_key()
+    {
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync(Key);
+        var token = TestContext.Current.CancellationToken;
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Key);
+
+        var lines = Enumerable.Repeat(new string('x', 200), 1000).ToArray();
+        var response = await host.Client.PutAsJsonAsync(
+            new Uri("/workspaces/huge", UriKind.Relative), new SaveWorkspaceRequest(lines), token);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+    }
+
     [Fact]
     public async Task A_list_is_created_filled_reordered_by_removal_renamed_and_deleted()
     {
@@ -190,9 +230,17 @@ public sealed class WatchlistEndpointTests(DependencyContainerFixture containers
         await using var host = await CreateHostAsync(Key);
 
         var endpoints = host.Services.GetRequiredService<EndpointDataSource>().Endpoints;
+
+        // An endpoint with no method metadata answers every verb, POST
+        // included, so it counts as a write unless it is one of the few known
+        // read-only diagnostics.
+        string[] readOnlyAnyVerb = ["/health", "/health/ready"];
+
         var writes = endpoints
+            .OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.Metadata.GetMetadata<HttpMethodMetadata>() is { } methods
-                && methods.HttpMethods.Any(method => method is not ("GET" or "HEAD" or "OPTIONS")))
+                ? methods.HttpMethods.Any(method => method is not ("GET" or "HEAD" or "OPTIONS"))
+                : !readOnlyAnyVerb.Contains("/" + endpoint.RoutePattern.RawText?.TrimStart('/')))
             .ToList();
 
         Assert.NotEmpty(writes);

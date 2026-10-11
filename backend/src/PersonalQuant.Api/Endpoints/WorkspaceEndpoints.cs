@@ -88,6 +88,10 @@ internal static class WorkspaceEndpoints
                 TypedResults.Created($"{RouteGroup}/{created.Name}", WorkspaceResponse.From(created)),
             { Outcome: WorkspaceOutcome.Replaced, Workspace: { } replaced } =>
                 TypedResults.Ok(WorkspaceResponse.From(replaced)),
+            { Outcome: WorkspaceOutcome.Conflict } => TypedResults.Problem(
+                detail: change.Message,
+                statusCode: StatusCodes.Status409Conflict,
+                title: "The workspace was saved concurrently."),
             _ => TypedResults.Problem(
                 detail: change.Message,
                 statusCode: StatusCodes.Status400BadRequest,

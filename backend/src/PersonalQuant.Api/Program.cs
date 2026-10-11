@@ -61,6 +61,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(CorsOptions.PolicyName);
+app.UseOperatorKey();
 
 app.MapDiagnosticsEndpoints();
 app.MapInstrumentEndpoints();

@@ -73,9 +73,15 @@ to it.
 
 ## Consequences
 
-- An authorisation filter applies to every non-GET route group. A test asserts
-  that no write endpoint is reachable without it, so a later endpoint cannot
-  forget it.
+- The key is checked by middleware keyed on endpoint metadata, after routing
+  and before the endpoint binds anything: an endpoint filter would run after
+  body binding and let an anonymous caller make the server parse whatever it
+  sent. A write body is bounded at 64 KB. A non-JSON content type is refused
+  415 by routing itself, before any body is read. A test enumerates every
+  mapped endpoint — including any that answers every verb — so a later write
+  cannot ship unguarded.
+- A write that loses a uniqueness race at commit is answered as the conflict it
+  is (409, or unchanged for an idempotent add), never as a server error.
 - The watchlist (ADR-026 slice 4) is the first write endpoint; the workspace
   (slice 5) follows on the same path.
 - `.env.example` documents `PQT_OPERATOR_KEY` and how to generate one.

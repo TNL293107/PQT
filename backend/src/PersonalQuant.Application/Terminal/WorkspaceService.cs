@@ -71,6 +71,9 @@ public enum WorkspaceOutcome
 
     /// <summary>The request breaks a rule.</summary>
     Invalid = 5,
+
+    /// <summary>A concurrent save created the workspace first; saving again replaces it.</summary>
+    Conflict = 6,
 }
 
 /// <summary>What saving or deleting a workspace did.</summary>
@@ -181,7 +184,18 @@ internal sealed class WorkspaceService(
 
             var created = Workspace.Create(name, entries, clock.UtcNow);
             workspaces.Add(created);
-            await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (UniqueConstraintException)
+            {
+                return new WorkspaceChange(
+                    WorkspaceOutcome.Conflict,
+                    $"Workspace '{name}' was created by another request at the same moment. Save again to replace it.",
+                    null);
+            }
 
             return new WorkspaceChange(WorkspaceOutcome.Created, null, WorkspaceView.From(created));
         }

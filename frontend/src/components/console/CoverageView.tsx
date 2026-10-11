@@ -101,7 +101,12 @@ export function CoverageView({ coverage }: { readonly coverage: InstrumentCovera
 
 /** A state as its mark and its word. */
 export function StateMark({ state }: { readonly state: CoverageState }) {
-  const { mark, label } = STATES[state];
+  // A state this build does not know — one added on the server later — is
+  // shown by its own name rather than taking the view down.
+  const { mark, label } = (STATES as Partial<Record<string, { mark: string; label: string }>>)[state] ?? {
+    mark: "·",
+    label: state,
+  };
 
   return (
     <span className={`cov-state cov-state--${state}`}>
@@ -119,11 +124,11 @@ function priceRow(price: PriceCoverage): Row {
   if (price.state === "Held") {
     facts.push(`${count(price.bars)} bar${price.bars === 1 ? "" : "s"}`);
     facts.push(price.sources.join(", "));
-    facts.push(
-      price.missingSessions !== null && price.sessionsExpected !== null
-        ? `${count(price.missingSessions)} of ${count(price.sessionsExpected)} sessions missing`
-        : "missing sessions not measured",
-    );
+    // When the count is absent the server's note says why; repeating it here
+    // would word the same fact twice, and the wording is the server's.
+    if (price.missingSessions !== null && price.sessionsExpected !== null) {
+      facts.push(`${count(price.missingSessions)} of ${count(price.sessionsExpected)} sessions missing`);
+    }
   }
 
   if (price.openFindings > 0) {

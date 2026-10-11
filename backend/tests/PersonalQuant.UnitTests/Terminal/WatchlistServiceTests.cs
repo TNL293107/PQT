@@ -105,6 +105,24 @@ public sealed class WatchlistServiceTests
         Assert.Null(await service.FindAsync("Not A Name", token));
     }
 
+    [Fact]
+    public async Task A_name_taken_by_a_concurrent_create_is_a_conflict_not_a_failure()
+    {
+        // The existence check passed; the database's unique index refused the
+        // commit because another request got there first.
+        var service = new WatchlistService(_store, new RacingUnitOfWork(), new FakeClock(Now));
+
+        var change = await service.CreateAsync("banks", TestContext.Current.CancellationToken);
+
+        Assert.Equal(WatchlistOutcome.NameTaken, change.Outcome);
+    }
+
+    private sealed class RacingUnitOfWork : PersonalQuant.Application.Abstractions.IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+            throw new PersonalQuant.Application.Abstractions.UniqueConstraintException("lost the race");
+    }
+
     private WatchlistService Service() => new(_store, _unitOfWork, new FakeClock(Now));
 
     /// <summary>Holds lists in memory; instruments exist when the test declared them.</summary>

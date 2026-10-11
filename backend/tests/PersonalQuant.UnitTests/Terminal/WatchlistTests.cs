@@ -25,6 +25,7 @@ public sealed class WatchlistTests
     [InlineData("-leading")]
     [InlineData("dots.are.paths")]
     [InlineData("slash/name")]
+    [InlineData("core\n")]
     public void A_name_a_url_or_a_shell_would_mangle_is_refused(string name)
     {
         // The name is a URL segment, a CLI argument and a console word at once.

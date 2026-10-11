@@ -1,7 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Instrument } from "../../types/instrument";
-import type { InstrumentCoverage, PriceCoverage } from "../../types/coverage";
+import type { CoverageState, InstrumentCoverage, PriceCoverage } from "../../types/coverage";
+import { StateMark } from "./CoverageView";
 import { RecordView } from "./RecordView";
 
 const FPT: Instrument = {
@@ -169,9 +170,15 @@ describe("CoverageView", () => {
 
     const hourly = row("Price 1h");
 
-    expect(hourly).toHaveTextContent("missing sessions not measured");
     expect(hourly).not.toHaveTextContent("0 of");
     expect(hourly).toHaveTextContent("daily series only");
+  });
+
+  it("draws a state this build does not know as its own name rather than failing", () => {
+    // A fifth state added on the server must not take the whole view down.
+    render(<StateMark state={"Estimated" as CoverageState} />);
+
+    expect(screen.getByText("Estimated")).toBeInTheDocument();
   });
 
   it("explains a dataset PQT does not collect", () => {

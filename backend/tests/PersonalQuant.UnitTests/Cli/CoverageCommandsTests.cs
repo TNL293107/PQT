@@ -66,7 +66,7 @@ public sealed class CoverageCommandsTests
         await harness.RunAsync("coverage", "FPT");
 
         Assert.Contains("1 of 2,901 sessions missing", Line(harness.Result, "Price 1d"), StringComparison.Ordinal);
-        Assert.Contains("missing sessions not measured", Line(harness.Result, "Price 1h"), StringComparison.Ordinal);
+        Assert.Contains("daily series only", harness.Result, StringComparison.Ordinal);
         Assert.DoesNotContain("0 of", Line(harness.Result, "Price 1h"), StringComparison.Ordinal);
     }
 

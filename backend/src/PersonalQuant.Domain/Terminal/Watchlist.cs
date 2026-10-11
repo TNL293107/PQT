@@ -178,7 +178,9 @@ public sealed partial class Watchlist
         }
     }
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9_\-]*$", RegexOptions.CultureInvariant)]
+    // \z, not $: in .NET $ also matches before a final newline, so a name
+    // ending in one would pass here and then fail the database's stricter check.
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9_\-]*\z", RegexOptions.CultureInvariant)]
     private static partial Regex NamePattern();
 }
 

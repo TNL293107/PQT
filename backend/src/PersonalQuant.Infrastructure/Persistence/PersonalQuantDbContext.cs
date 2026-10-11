@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.CorporateActions;
@@ -107,6 +108,30 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the operator's saved workspaces, in the <c>terminal</c> schema.</summary>
     public DbSet<Workspace> Workspaces => Set<Workspace>();
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A unique violation is translated so the application layer can answer a
+    /// lost race as a conflict without referencing the database driver. Every
+    /// other failure passes through unchanged.
+    /// </remarks>
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception)
+            when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } unique)
+        {
+            throw new UniqueConstraintException(
+                $"A concurrent write already holds what '{unique.ConstraintName}' keeps unique.",
+                exception)
+            {
+                ConstraintName = unique.ConstraintName,
+            };
+        }
+    }
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

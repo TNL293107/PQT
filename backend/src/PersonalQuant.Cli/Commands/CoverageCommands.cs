@@ -220,9 +220,12 @@ internal static class CoverageReport
         {
             parts.Add(price.Bars == 1 ? "1 bar" : $"{Count(price.Bars)} bars");
             parts.Add(string.Join(",", price.Sources.Select(source => source.Value)));
-            parts.Add(price.MissingSessions is { } missing && price.SessionsExpected is { } expected
-                ? $"{Count(missing)} of {Count(expected)} sessions missing"
-                : "missing sessions not measured");
+            // When the count is absent the server's note says why, on its
+            // own line; repeating it here would say it twice.
+            if (price.MissingSessions is { } missing && price.SessionsExpected is { } expected)
+            {
+                parts.Add($"{Count(missing)} of {Count(expected)} sessions missing");
+            }
         }
 
         if (price.OpenFindings > 0)
