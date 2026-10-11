@@ -5,17 +5,24 @@ description = "Quantitative research layer for the Personal Quant Terminal."
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
 
-# One runtime dependency, added by U6 because nothing else can do its job:
-# reading the canonical dataset's Parquet. Everything the momentum vertical
-# slice computes — a 12-1 return, a rank, a decile mean, a rank correlation —
-# runs on the standard library over a few dozen names, and prices stay
-# Decimal as the dataset contract stores them.
+# Two runtime dependencies, each added because nothing else can do its job.
+#
+# pyarrow (U6) reads the canonical dataset's Parquet. Everything the momentum
+# vertical slice computes — a 12-1 return, a rank, a decile mean, a rank
+# correlation — runs on the standard library over a few dozen names, and
+# prices stay Decimal as the dataset contract stores them.
+#
+# duckdb (U7) is the analytical tier: SQL over a verified build, embedded, no
+# server. It is fed the verified bytes as Arrow, never a path, and keeps prices
+# DECIMAL. The floor is the oldest release the tests, its file-access
+# lockdown among them, were run against (1.5.0; also 1.5.6).
 #
 # numpy, polars and the rest arrive when a computation needs them (Phase 7),
 # not before: a dependency added before a computation justifies it is one
 # nobody can argue for removing later.
 dependencies = [
     "pyarrow>=18",
+    "duckdb>=1.5",
 ]
 
 [project.optional-dependencies]

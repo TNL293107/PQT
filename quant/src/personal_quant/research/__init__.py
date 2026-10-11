@@ -4,6 +4,8 @@
 * :mod:`~personal_quant.research.manifest` and
   :mod:`~personal_quant.research.datasets` — canonical datasets, verified
   against their manifest before they are trusted.
+* :mod:`~personal_quant.research.analytical` — SQL over a verified build,
+  through embedded DuckDB (U7).
 * :mod:`~personal_quant.research.history` — the point-in-time harness every
   engine is evaluated through.
 * :mod:`~personal_quant.research.momentum_slice` — the vertical slice that

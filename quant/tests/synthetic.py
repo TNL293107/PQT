@@ -45,6 +45,8 @@ class SyntheticDataset:
     spells: Mapping[str, Sequence[tuple[date, date | None]]] | None = None
     instruments: Sequence[str] = ()
     adjusted: bool = True
+    # The exporter's timestamps carry no zone; a reader must cope if one does.
+    opened_at_zone: str | None = None
 
 
 def weekdays(start: date, count: int) -> list[date]:
@@ -72,7 +74,7 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
             "instrument_id": [bar.instrument_id for bar in ordered],
             "opened_at_utc": pa.array(
                 [datetime(bar.session.year, bar.session.month, bar.session.day) for bar in ordered],
-                type=pa.timestamp("ns"),
+                type=pa.timestamp("ns", tz=spec.opened_at_zone),
             ),
             "open": [str(bar.close) for bar in ordered],
             "high": [str(bar.close) for bar in ordered],
