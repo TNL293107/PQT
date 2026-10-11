@@ -133,6 +133,30 @@ public sealed class PersonalQuantApiFactory(
         IMarketDataProvider provider) =>
         new(BaseSettings(postgres, redis, applyMigrations: true), provider);
 
+    /// <summary>
+    /// Creates a factory pointed at real dependencies that writes datasets to
+    /// a directory the test owns.
+    /// </summary>
+    /// <remarks>
+    /// The real Parquet store on a temporary directory, so an export test reads
+    /// back the bytes the deployment would have written rather than a fake's
+    /// account of them.
+    /// </remarks>
+    /// <param name="postgres">PostgreSQL connection details.</param>
+    /// <param name="redis">Redis connection details.</param>
+    /// <param name="datasetDirectory">Where dataset builds are written.</param>
+    /// <returns>A configured factory.</returns>
+    public static PersonalQuantApiFactory WithDatasetDirectory(
+        (string Host, int Port, string Database, string Username, string Password) postgres,
+        (string Host, int Port) redis,
+        string datasetDirectory)
+    {
+        var settings = BaseSettings(postgres, redis, applyMigrations: true);
+        settings["Datasets:Directory"] = datasetDirectory;
+
+        return new PersonalQuantApiFactory(settings);
+    }
+
     /// <inheritdoc />
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

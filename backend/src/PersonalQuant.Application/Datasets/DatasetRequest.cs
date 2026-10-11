@@ -52,6 +52,17 @@ public sealed record DatasetRequest
     /// <summary>Longest window an export may cover.</summary>
     public const int MaxYears = 30;
 
+    /// <summary>
+    /// Most bars of history an export may write before each instrument's first
+    /// membership session.
+    /// </summary>
+    /// <remarks>
+    /// Four trading years, which covers a 12-1 momentum lookback four times
+    /// over. History is read with one bounded query per instrument, and the
+    /// bound keeps that query inside what a single series read may return.
+    /// </remarks>
+    public const int MaxHistorySessions = 1_000;
+
     private DatasetRequest(
         UniverseCode universeCode,
         DatasetMembership membership,
@@ -61,7 +72,8 @@ public sealed record DatasetRequest
         DateOnly toDate,
         bool adjusted,
         DateTimeOffset? knownAsOfUtc,
-        AnnouncementPolicy announcementPolicy)
+        AnnouncementPolicy announcementPolicy,
+        int historySessions)
     {
         UniverseCode = universeCode;
         Membership = membership;
@@ -72,6 +84,7 @@ public sealed record DatasetRequest
         Adjusted = adjusted;
         KnownAsOfUtc = knownAsOfUtc;
         AnnouncementPolicy = announcementPolicy;
+        HistorySessions = historySessions;
     }
 
     /// <summary>Gets the universe the instrument set comes from.</summary>
@@ -105,6 +118,27 @@ public sealed record DatasetRequest
     public AnnouncementPolicy AnnouncementPolicy { get; }
 
     /// <summary>
+    /// Gets how many bars to write before each instrument's first membership
+    /// session in the window, or zero for none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A point-in-time export otherwise writes nothing before a name's
+    /// admission, so a factor with a year's lookback cannot score a name for
+    /// its first year in the universe, and cannot score anything in the
+    /// window's first year. Those bars are history a strategy could have read
+    /// on the day: prices printed before the decision, of a security it was
+    /// about to be able to hold.
+    /// </para>
+    /// <para>
+    /// History rows are data, never membership. They change which bars are in
+    /// the file and nothing about who belonged when; the manifest's spells
+    /// still say that. See ADR-025.
+    /// </para>
+    /// </remarks>
+    public int HistorySessions { get; }
+
+    /// <summary>
     /// Gets the identifier these parameters name.
     /// </summary>
     /// <remarks>
@@ -127,6 +161,7 @@ public sealed record DatasetRequest
     /// <param name="adjusted">Whether to rescale for corporate actions.</param>
     /// <param name="knownAsOfUtc">The observation instant, or null.</param>
     /// <param name="announcementPolicy">What to do with an unknown announcement date.</param>
+    /// <param name="historySessions">Bars to write before each instrument's first membership session.</param>
     /// <returns><see langword="true"/> when the request is usable.</returns>
     public static bool TryCreatePointInTime(
         UniverseCode universeCode,
@@ -137,11 +172,12 @@ public sealed record DatasetRequest
         [NotNullWhen(false)] out string? problem,
         bool adjusted = true,
         DateTimeOffset? knownAsOfUtc = null,
-        AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict)
+        AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict,
+        int historySessions = 0)
     {
         request = null;
 
-        if (!TryValidate(universeCode, interval, fromDate, toDate, announcementPolicy, out problem))
+        if (!TryValidate(universeCode, interval, fromDate, toDate, announcementPolicy, historySessions, out problem))
         {
             return false;
         }
@@ -155,7 +191,8 @@ public sealed record DatasetRequest
             toDate,
             adjusted,
             knownAsOfUtc?.ToUniversalTime(),
-            announcementPolicy);
+            announcementPolicy,
+            historySessions);
         return true;
     }
 
@@ -173,6 +210,7 @@ public sealed record DatasetRequest
     /// <param name="adjusted">Whether to rescale for corporate actions.</param>
     /// <param name="knownAsOfUtc">The observation instant, or null.</param>
     /// <param name="announcementPolicy">What to do with an unknown announcement date.</param>
+    /// <param name="historySessions">Bars to write before the window starts.</param>
     /// <returns><see langword="true"/> when the request is usable.</returns>
     public static bool TryCreate(
         UniverseCode universeCode,
@@ -184,11 +222,12 @@ public sealed record DatasetRequest
         [NotNullWhen(false)] out string? problem,
         bool adjusted = true,
         DateTimeOffset? knownAsOfUtc = null,
-        AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict)
+        AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict,
+        int historySessions = 0)
     {
         request = null;
 
-        if (!TryValidate(universeCode, interval, fromDate, toDate, announcementPolicy, out problem))
+        if (!TryValidate(universeCode, interval, fromDate, toDate, announcementPolicy, historySessions, out problem))
         {
             return false;
         }
@@ -213,7 +252,8 @@ public sealed record DatasetRequest
             toDate,
             adjusted,
             knownAsOfUtc?.ToUniversalTime(),
-            announcementPolicy);
+            announcementPolicy,
+            historySessions);
         problem = null;
         return true;
     }
@@ -224,6 +264,7 @@ public sealed record DatasetRequest
         DateOnly fromDate,
         DateOnly toDate,
         AnnouncementPolicy announcementPolicy,
+        int historySessions,
         [NotNullWhen(false)] out string? problem)
     {
         if (universeCode is null)
@@ -253,6 +294,12 @@ public sealed record DatasetRequest
         if (fromDate.AddYears(MaxYears) < toDate)
         {
             problem = $"The window may not span more than {MaxYears} years.";
+            return false;
+        }
+
+        if (historySessions is < 0 or > MaxHistorySessions)
+        {
+            problem = $"The history must be between 0 and {MaxHistorySessions} bars.";
             return false;
         }
 
@@ -300,6 +347,14 @@ public static class DatasetIdentity
             request.KnownAsOfUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "current",
             request.AnnouncementPolicy.ToString());
 
+        // Appended only when there is some, for the reason point-in-time was
+        // rendered in place of the date: every request made before history
+        // existed keeps the identifier its datasets are stored under.
+        if (request.HistorySessions > 0)
+        {
+            canonical += string.Create(CultureInfo.InvariantCulture, $"|history:{request.HistorySessions}");
+        }
+
         return Digest(canonical)[..IdLength];
     }
 
@@ -318,6 +373,12 @@ public static class DatasetIdentity
     public static string ContentHashOf(DatasetManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
+
+        // Version 3's fields are rendered only for version 3 and later. A
+        // version 1 or 2 manifest on disk was hashed without them, and must
+        // keep verifying byte-for-byte; the defaults it reads back with are
+        // not facts it ever recorded.
+        var withHistory = manifest.SchemaVersion >= DatasetManifest.HistorySchemaVersion;
 
         // Deliberately excludes DatasetVersion along with the two timestamps.
         // Version says which build this is, not what the data is, so including
@@ -344,9 +405,24 @@ public static class DatasetIdentity
             .Append(manifest.ValidationVersion).Append('|')
             .Append(manifest.AdjustmentVersion).Append('|');
 
+        if (withHistory)
+        {
+            builder.Append(manifest.HistorySessions).Append('|');
+        }
+
         foreach (var instrument in manifest.Instruments)
         {
             builder.Append(instrument.InstrumentId).Append(',');
+
+            // Where history starts decides which rows a reader accepts outside
+            // the spells, so it is part of what the data is. "none" for an
+            // instrument without history, which accepts none.
+            if (withHistory)
+            {
+                builder
+                    .Append(instrument.HistoryFrom is { } historyFrom ? Format(historyFrom) : "none")
+                    .Append(',');
+            }
 
             // Only a point-in-time manifest carries spells, and only then do
             // they enter the hash, so an as-of manifest hashes exactly as it
@@ -357,8 +433,16 @@ public static class DatasetIdentity
                 builder
                     .Append(Format(spell.From)).Append('~')
                     .Append(spell.Until is { } until ? Format(until) : "open").Append('~')
-                    .Append(spell.AnnouncedOn is { } announced ? Format(announced) : "unannounced")
-                    .Append(';');
+                    .Append(spell.AnnouncedOn is { } announced ? Format(announced) : "unannounced");
+
+                if (withHistory)
+                {
+                    builder
+                        .Append('~')
+                        .Append(spell.RemovalAnnouncedOn is { } removal ? Format(removal) : "unannounced");
+                }
+
+                builder.Append(';');
             }
         }
 

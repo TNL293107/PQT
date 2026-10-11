@@ -224,12 +224,13 @@ internal static partial class ApplicationLog
     [LoggerMessage(
         EventId = 3400,
         Level = LogLevel.Information,
-        Message = "dataset.export {DatasetId} v{Version} wrote {Rows} row(s) for {Instruments} instrument(s); {WithoutBars} had no stored bars.")]
+        Message = "dataset.export {DatasetId} v{Version} wrote {Rows} row(s) for {Instruments} instrument(s), {HistoryRows} of them history outside membership; {WithoutBars} had no stored bars.")]
     public static partial void DatasetExported(
         ILogger logger,
         string datasetId,
         int version,
         int instruments,
         long rows,
+        int historyRows,
         int withoutBars);
 }

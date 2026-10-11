@@ -57,7 +57,7 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         CancellationToken cancellationToken)
     {
         if (!command.Validate(
-                ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy"],
+                ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy", "history"],
                 out var problem))
         {
             output.Problem(problem);
@@ -92,6 +92,12 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
             || !command.TryDate("known-as-of", out var knownAsOf, out badFrom))
         {
             output.Problem(badFrom);
+            return ExitCode.Usage;
+        }
+
+        if (!TryHistory(command, out var history, out var badHistory))
+        {
+            output.Problem(badHistory);
             return ExitCode.Usage;
         }
 
@@ -139,7 +145,8 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
                 out invalidRequest,
                 adjusted,
                 knownAsOfUtc,
-                policy)
+                policy,
+                history)
             : DatasetRequest.TryCreatePointInTime(
                 code,
                 interval,
@@ -149,7 +156,8 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
                 out invalidRequest,
                 adjusted,
                 knownAsOfUtc,
-                policy);
+                policy,
+                history);
 
         if (!valid || request is null)
         {
@@ -250,6 +258,12 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
             "known as of",
             manifest.KnownAsOfUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "current series",
             LabelWidth);
+        output.Field(
+            "history",
+            manifest.HistorySessions == 0
+                ? "none: rows only where each instrument was a member"
+                : $"up to {Output.Plural(manifest.HistorySessions, "bar")} before each instrument's first membership session",
+            LabelWidth);
         output.Field("instruments", manifest.Instruments.Count.ToString(CultureInfo.InvariantCulture), LabelWidth);
         output.Field("rows", manifest.RowCount.ToString(CultureInfo.InvariantCulture), LabelWidth);
         output.Field("built by", manifest.CreatedByCommit ?? "unrecorded build", LabelWidth);
@@ -273,6 +287,40 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         {
             output.Line($"{source.Code}: {source.LicenceNote}");
         }
+    }
+
+    /// <summary>
+    /// Reads <c>--history</c>, where zero is a legitimate value.
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="CommandArguments.TryCount"/>, which refuses zero: a
+    /// script that passes its history through as a variable must be able to
+    /// pass the default. The upper bound is the request's to state, so it is
+    /// stated once.
+    /// </remarks>
+    private static bool TryHistory(
+        CommandArguments command,
+        out int history,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? problem)
+    {
+        history = 0;
+        problem = null;
+
+        if (!command.HasFlag("history"))
+        {
+            return true;
+        }
+
+        var value = command.Value("history");
+
+        if (value is not null
+            && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out history))
+        {
+            return true;
+        }
+
+        problem = $"--history {value} is not a whole number of bars. Write it as 0 to {DatasetRequest.MaxHistorySessions}.";
+        return false;
     }
 
     private static string Day(DateOnly date) =>

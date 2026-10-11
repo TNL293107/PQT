@@ -147,6 +147,35 @@ public sealed class DatasetManifestSchemaTests
         Assert.Equal(new DateOnly(2016, 12, 31), read.UniverseAsOf);
     }
 
+    [Fact]
+    public void A_version_two_manifest_reads_with_no_history_and_no_removal_announcements()
+    {
+        // Version 2 manifests stay on disk and stay verifiable. Reading one
+        // must not invent history rows it never had, or a removal date nobody
+        // recorded in it.
+        var json = JsonSerializer.Serialize(Build(pointInTime: true), ParquetDatasetStore.ManifestJson);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        node.Remove("history_sessions");
+        node["schema_version"] = 2;
+
+        foreach (var instrument in node["instruments"]!.AsArray())
+        {
+            instrument!.AsObject().Remove("history_from");
+
+            foreach (var spell in instrument["spells"]!.AsArray())
+            {
+                spell!.AsObject().Remove("removal_announced_on");
+            }
+        }
+
+        var read = JsonSerializer.Deserialize<DatasetManifest>(node.ToJsonString(), ParquetDatasetStore.ManifestJson)!;
+        var only = Assert.Single(read.Instruments);
+
+        Assert.Equal(0, read.HistorySessions);
+        Assert.Null(only.HistoryFrom);
+        Assert.Null(Assert.Single(only.Spells!).RemovalAnnouncedOn);
+    }
+
     private static JsonElement Schema() =>
         JsonDocument.Parse(File.ReadAllText(SchemaPath())).RootElement;
 
@@ -179,8 +208,15 @@ public sealed class DatasetManifestSchemaTests
                     "FPT",
                     "HOSE",
                     pointInTime
-                        ? [new DatasetSpell(new DateOnly(2016, 1, 1), new DateOnly(2016, 8, 1), new DateOnly(2016, 7, 15))]
-                        : null),
+                        ? [
+                            new DatasetSpell(
+                                new DateOnly(2016, 1, 1),
+                                new DateOnly(2016, 8, 1),
+                                new DateOnly(2015, 12, 15),
+                                new DateOnly(2016, 7, 15)),
+                        ]
+                        : null,
+                    new DateOnly(2015, 1, 5)),
             ],
             "1d",
             new DateOnly(2016, 1, 1),
@@ -192,7 +228,8 @@ public sealed class DatasetManifestSchemaTests
             [new DatasetFile("bars.parquet", 5, 1_024, new string('a', 64))],
             new DateTimeOffset(2026, 9, 6, 0, 0, 0, TimeSpan.Zero),
             null,
-            pointInTime ? DatasetMembership.PointInTime : DatasetMembership.AsOf);
+            pointInTime ? DatasetMembership.PointInTime : DatasetMembership.AsOf,
+            253);
 
         return manifest;
     }
@@ -212,7 +249,7 @@ public sealed class DatasetManifestSchemaTests
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "docs", "schemas", "dataset-manifest-v2.schema.json");
+                directory.FullName, "docs", "schemas", "dataset-manifest-v3.schema.json");
 
             if (File.Exists(candidate))
             {
@@ -223,6 +260,6 @@ public sealed class DatasetManifestSchemaTests
         }
 
         throw new FileNotFoundException(
-            "dataset-manifest-v2.schema.json was not found above the test binary.");
+            "dataset-manifest-v3.schema.json was not found above the test binary.");
     }
 }

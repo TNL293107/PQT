@@ -89,6 +89,63 @@ public sealed class DatasetRequestTests
         Assert.NotEqual(baseline.DatasetId, other.DatasetId);
     }
 
+    [Fact]
+    public void An_export_carries_no_history_unless_it_asks_for_some()
+    {
+        Assert.True(DatasetRequest.TryCreate(
+            Vn30, To, BarInterval.OneDay, From, To, out var request, out _));
+
+        Assert.Equal(0, request.HistorySessions);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(DatasetRequest.MaxHistorySessions + 1)]
+    public void A_history_outside_the_bound_is_refused(int sessions)
+    {
+        // Bounded for the reason the window is: history is read with one
+        // limited query per instrument, and an unbounded one would be a way to
+        // make every export read each series from its first bar.
+        var asOf = DatasetRequest.TryCreate(
+            Vn30, To, BarInterval.OneDay, From, To, out _, out var problem, historySessions: sessions);
+        var pointInTime = DatasetRequest.TryCreatePointInTime(
+            Vn30, BarInterval.OneDay, From, To, out _, out var otherProblem, historySessions: sessions);
+
+        Assert.False(asOf);
+        Assert.False(pointInTime);
+        Assert.Contains("history", problem, StringComparison.Ordinal);
+        Assert.Contains("history", otherProblem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_request_without_history_keeps_the_identifier_it_had_before_history_existed()
+    {
+        // Datasets already on disk are named by these identifiers, so history
+        // enters the canonical string only when there is some.
+        Assert.True(DatasetRequest.TryCreatePointInTime(
+            Vn30, BarInterval.OneDay, From, To, out var request, out var problem), problem);
+
+        var canonical = "VN30|point-in-time|OneDay|2016-01-01|2016-12-31|adjusted|current|Strict";
+        var expected = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical)))[..16];
+
+        Assert.Equal(expected, request.DatasetId);
+    }
+
+    [Fact]
+    public void A_request_with_history_names_it_in_the_identifier()
+    {
+        Assert.True(DatasetRequest.TryCreatePointInTime(
+            Vn30, BarInterval.OneDay, From, To, out var request, out var problem, historySessions: 253), problem);
+
+        var canonical = "VN30|point-in-time|OneDay|2016-01-01|2016-12-31|adjusted|current|Strict|history:253";
+        var expected = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical)))[..16];
+
+        Assert.Equal(expected, request.DatasetId);
+        Assert.Equal(253, request.HistorySessions);
+    }
+
     public static TheoryData<DatasetRequest> DifferingRequests()
     {
         var data = new TheoryData<DatasetRequest>();
@@ -101,6 +158,7 @@ public sealed class DatasetRequestTests
         data.Add(Create(policy: AnnouncementPolicy.Permissive));
         data.Add(Create(knownAsOf: new DateTimeOffset(2016, 6, 1, 0, 0, 0, TimeSpan.Zero)));
         data.Add(Create(universe: UniverseCode.Create("VN100")));
+        data.Add(Create(historySessions: 253));
 
         return data;
     }
@@ -113,7 +171,8 @@ public sealed class DatasetRequestTests
         DateOnly? toDate = null,
         bool adjusted = true,
         DateTimeOffset? knownAsOf = null,
-        AnnouncementPolicy policy = AnnouncementPolicy.Strict)
+        AnnouncementPolicy policy = AnnouncementPolicy.Strict,
+        int historySessions = 0)
     {
         Assert.True(DatasetRequest.TryCreate(
             universe ?? Vn30,
@@ -125,7 +184,8 @@ public sealed class DatasetRequestTests
             out var problem,
             adjusted,
             knownAsOf,
-            policy),
+            policy,
+            historySessions),
             problem);
 
         return request;

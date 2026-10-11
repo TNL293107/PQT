@@ -65,6 +65,7 @@ internal sealed class DatasetExportService(
         var members = new List<DatasetInstrument>();
         var sources = new SortedSet<string>(StringComparer.Ordinal);
         var withoutBars = 0;
+        var historyRows = 0;
 
         foreach (var (instrumentId, spells) in plan.Members)
         {
@@ -83,25 +84,19 @@ internal sealed class DatasetExportService(
                     + "disagree, and a dataset built over that disagreement cannot be interpreted.");
             }
 
+            var read = await ReadInstrumentAsync(request, instrumentId, spells, rows, sources, cancellationToken)
+                .ConfigureAwait(false);
+
             members.Add(new DatasetInstrument(
                 instrumentId.Value,
                 detail.Ticker.Value,
                 detail.ExchangeCode.Value,
-                spells is null ? null : [.. spells.Select(spell => Clip(spell, request))]));
+                spells is null ? null : [.. spells.Select(spell => Clip(spell, request))],
+                read.HistoryFrom));
 
-            var before = rows.Count;
+            historyRows += read.HistoryRows;
 
-            // Read only across the sessions the instrument belonged on. For an
-            // as-of export that is the whole window; for a point-in-time one it
-            // is each spell, so a bar from before it joined or after it left
-            // never reaches the file.
-            foreach (var (from, to) in Ranges(request, spells))
-            {
-                await ReadSeriesAsync(request, instrumentId, from, to, rows, sources, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            if (rows.Count == before)
+            if (!read.HasWindowBars)
             {
                 withoutBars++;
             }
@@ -143,6 +138,7 @@ internal sealed class DatasetExportService(
             version,
             members.Count,
             file.RowCount,
+            historyRows,
             withoutBars);
 
         return new DatasetExport(manifest, null, withoutBars);
@@ -200,9 +196,6 @@ internal sealed class DatasetExportService(
         return new DatasetVerification(datasetId, version, manifest.Files.Count, problems);
     }
 
-    /// <summary>
-    /// Reads one instrument's series across the window, in bounded chunks.
-    /// </summary>
     /// <summary>
     /// Decides which instruments the export covers and, for a point-in-time
     /// export, when each one belonged.
@@ -272,6 +265,106 @@ internal sealed class DatasetExportService(
     }
 
     /// <summary>
+    /// Reads one instrument's rows: its membership sessions, and its history
+    /// when the request asks for some.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without history only the sessions the instrument belonged on are read.
+    /// For an as-of export that is the whole window; for a point-in-time one it
+    /// is each spell, so a bar from before it joined or after it left never
+    /// reaches the file.
+    /// </para>
+    /// <para>
+    /// With history the read runs continuously from the first membership
+    /// session to the last, filling any gap between spells, and the N bars
+    /// before the first are read too. Those are bars a strategy could have
+    /// seen on the day of admission, and a lookback needs them to score the
+    /// name from that day; a series with holes in it would be read as missing
+    /// data instead. Nothing is read after the last membership session: a bar
+    /// from after the name left is not history to anything in the dataset.
+    /// </para>
+    /// </remarks>
+    private async Task<InstrumentRead> ReadInstrumentAsync(
+        DatasetRequest request,
+        InstrumentId instrumentId,
+        IReadOnlyList<UniverseSpell>? spells,
+        List<DatasetBar> rows,
+        SortedSet<string> sources,
+        CancellationToken cancellationToken)
+    {
+        var membership = Ranges(request, spells).ToList();
+        var withHistory = request.HistorySessions > 0 && membership.Count > 0;
+        IReadOnlyList<(DateOnly From, DateOnly To)> reads = withHistory
+            ? [(membership[0].From, membership[^1].To)]
+            : membership;
+
+        var before = rows.Count;
+
+        foreach (var (from, to) in reads)
+        {
+            await ReadSeriesAsync(request, instrumentId, from, to, rows, sources, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var hasWindowBars = rows.Count > before;
+
+        if (!withHistory)
+        {
+            return new InstrumentRead(hasWindowBars, null, 0);
+        }
+
+        await ReadHistoryAsync(request, instrumentId, membership[0].From, rows, sources, cancellationToken)
+            .ConfigureAwait(false);
+
+        var written = rows.GetRange(before, rows.Count - before);
+
+        return new InstrumentRead(
+            hasWindowBars,
+            written.Count == 0 ? null : written.Min(row => Session(row)),
+            written.Count(row => !membership.Exists(range => range.From <= Session(row) && Session(row) <= range.To)));
+    }
+
+    /// <summary>
+    /// Reads the bars immediately before an instrument's first membership
+    /// session.
+    /// </summary>
+    /// <remarks>
+    /// One bounded read with no start: the series query takes its bound from
+    /// the newest end, so "the last N bars before this date" is exactly what it
+    /// returns, however many calendar days those span and whatever the venue's
+    /// holidays were. A series shorter than N simply yields what it has.
+    /// </remarks>
+    private async Task ReadHistoryAsync(
+        DatasetRequest request,
+        InstrumentId instrumentId,
+        DateOnly firstSession,
+        List<DatasetBar> rows,
+        SortedSet<string> sources,
+        CancellationToken cancellationToken)
+    {
+        if (!BarQuery.TryCreate(
+                instrumentId,
+                request.Interval,
+                null,
+                ToInstant(firstSession),
+                request.HistorySessions,
+                out var query,
+                out var problem,
+                request.Adjusted,
+                request.KnownAsOfUtc,
+                request.AnnouncementPolicy))
+        {
+            // Unreachable from a validated request, whose history is within
+            // the query's bound; thrown for the reason a bad chunk is.
+            throw new InvalidOperationException(
+                $"An export history read produced an invalid bar query: {problem}");
+        }
+
+        await AppendAsync(query, instrumentId, rows, sources, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// The inclusive date ranges to read for one instrument.
     /// </summary>
     private static IEnumerable<(DateOnly From, DateOnly To)> Ranges(
@@ -305,18 +398,32 @@ internal sealed class DatasetExportService(
     /// Restates a spell within the dataset's window.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Clipped because the manifest describes this dataset rather than the
     /// universe's whole history: a spell that began in 2019 began, as far as a
-    /// 2026 dataset can say, on the window's first day. The announcement date is
-    /// kept as recorded, because it is what says whether trading the change was
-    /// possible.
+    /// 2026 dataset can say, on the window's first day. The admission's
+    /// announcement date is kept as recorded, because it is what says whether
+    /// trading the change was possible.
+    /// </para>
+    /// <para>
+    /// The removal's announcement is kept when it was published on or before
+    /// the window's last day, including for a removal that takes effect after
+    /// it: a strategy inside the window could have read that notice. One
+    /// published later is dropped, since it tells the dataset's reader what the
+    /// index decided after the dataset ends.
+    /// </para>
     /// </remarks>
     private static DatasetSpell Clip(UniverseSpell spell, DatasetRequest request) =>
         new(
             spell.EffectiveFrom > request.FromDate ? spell.EffectiveFrom : request.FromDate,
             spell.EffectiveTo is { } left && left <= request.ToDate ? left : null,
-            spell.AnnouncedOn);
+            spell.AnnouncedOn,
+            spell.RemovalAnnouncedOn is { } removal && removal <= request.ToDate ? removal : null);
 
+    /// <summary>
+    /// Reads one instrument's series across an inclusive range, in bounded
+    /// chunks.
+    /// </summary>
     private async Task ReadSeriesAsync(
         DatasetRequest request,
         InstrumentId instrumentId,
@@ -361,30 +468,48 @@ internal sealed class DatasetExportService(
                     $"An export chunk produced an invalid bar query: {problem}");
             }
 
-            var series = await marketData
-                .GetSeriesAsync(query, cancellationToken)
-                .ConfigureAwait(false);
-
-            foreach (var bar in series.Bars)
-            {
-                sources.Add(bar.Source.Value);
-
-                rows.Add(new DatasetBar(
-                    instrumentId.Value,
-                    bar.OpenedAtUtc,
-                    bar.Open,
-                    bar.High,
-                    bar.Low,
-                    bar.Close,
-                    bar.Volume,
-                    bar.Turnover,
-                    bar.Source.Value,
-                    bar.Revision,
-                    bar.PriceFactor,
-                    bar.ShareFactor));
-            }
+            await AppendAsync(query, instrumentId, rows, sources, cancellationToken).ConfigureAwait(false);
 
             cursor = next;
+        }
+    }
+
+    /// <summary>
+    /// Runs one series read and appends what it returned as dataset rows.
+    /// </summary>
+    /// <remarks>
+    /// The window and the history go through this one projection, so a history
+    /// row cannot be shaped, adjusted or attributed differently from a
+    /// membership row read from the same series.
+    /// </remarks>
+    private async Task AppendAsync(
+        BarQuery query,
+        InstrumentId instrumentId,
+        List<DatasetBar> rows,
+        SortedSet<string> sources,
+        CancellationToken cancellationToken)
+    {
+        var series = await marketData
+            .GetSeriesAsync(query, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var bar in series.Bars)
+        {
+            sources.Add(bar.Source.Value);
+
+            rows.Add(new DatasetBar(
+                instrumentId.Value,
+                bar.OpenedAtUtc,
+                bar.Open,
+                bar.High,
+                bar.Low,
+                bar.Close,
+                bar.Volume,
+                bar.Turnover,
+                bar.Source.Value,
+                bar.Revision,
+                bar.PriceFactor,
+                bar.ShareFactor));
         }
     }
 
@@ -418,7 +543,8 @@ internal sealed class DatasetExportService(
             [file],
             clock.UtcNow,
             build.Commit,
-            request.Membership);
+            request.Membership,
+            request.HistorySessions);
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
     }
@@ -443,6 +569,10 @@ internal sealed class DatasetExportService(
     private static DateTimeOffset ToInstant(DateOnly date) =>
         new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
+    /// <summary>The UTC date a row's period opened on, as the readers take it.</summary>
+    private static DateOnly Session(DatasetBar row) =>
+        DateOnly.FromDateTime(row.OpenedAtUtc.UtcDateTime);
+
     private static string Day(DateOnly date) =>
         date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
@@ -450,6 +580,13 @@ internal sealed class DatasetExportService(
     /// The instruments an export covers, each with its spells when the export is
     /// point-in-time; or why there is nothing to export.
     /// </summary>
+    /// <summary>
+    /// What reading one instrument found: whether it had any bar from its first
+    /// membership session on, where its rows begin when history was asked for,
+    /// and how many of them fall outside its membership.
+    /// </summary>
+    private sealed record InstrumentRead(bool HasWindowBars, DateOnly? HistoryFrom, int HistoryRows);
+
     private sealed record ExportPlan(
         IReadOnlyList<(InstrumentId Instrument, IReadOnlyList<UniverseSpell>? Spells)> Members,
         string? Refusal)

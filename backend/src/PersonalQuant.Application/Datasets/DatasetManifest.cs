@@ -35,11 +35,18 @@ public sealed record DatasetFile(string Name, long RowCount, long Bytes, string 
 /// dataset; null for an as-of one. A reader needs these to tell a session the
 /// instrument was not a member from one it simply has no bar for.
 /// </param>
+/// <param name="HistoryFrom">
+/// The first session of this instrument's rows when the export carried history,
+/// or null when it carried none or the instrument has no rows. Every row from
+/// here up to its last membership session is data a feature may read; a row
+/// outside a spell is never membership. Absent before schema version 3.
+/// </param>
 public sealed record DatasetInstrument(
     Guid InstrumentId,
     string TickerAtAsOf,
     string Exchange,
-    IReadOnlyList<DatasetSpell>? Spells = null);
+    IReadOnlyList<DatasetSpell>? Spells = null,
+    DateOnly? HistoryFrom = null);
 
 /// <summary>
 /// A spell of membership, clipped to the dataset's window.
@@ -51,11 +58,19 @@ public sealed record DatasetInstrument(
 /// </param>
 /// <param name="AnnouncedOn">
 /// When the admission was published, when known. A strategy that trades the
-/// inclusion before this date is looking ahead. The removal's announcement is
-/// recorded on the membership but not carried into the manifest: doing so
-/// changes the manifest and its hash, and is a decision of its own.
+/// inclusion before this date is looking ahead.
 /// </param>
-public sealed record DatasetSpell(DateOnly From, DateOnly? Until, DateOnly? AnnouncedOn);
+/// <param name="RemovalAnnouncedOn">
+/// When the removal was published, when known and on or before the window's
+/// last day. A strategy that sells ahead of the exclusion before this date is
+/// looking ahead. Absent before schema version 3, which is when carrying it
+/// into the manifest and its hash was decided (ADR-025).
+/// </param>
+public sealed record DatasetSpell(
+    DateOnly From,
+    DateOnly? Until,
+    DateOnly? AnnouncedOn,
+    DateOnly? RemovalAnnouncedOn = null);
 
 /// <summary>
 /// What a dataset is, what produced it, and what it must still hash to.
@@ -136,6 +151,11 @@ public sealed record DatasetSpell(DateOnly From, DateOnly? Until, DateOnly? Anno
 /// Null rather than a placeholder: a dataset that claims a commit it does not
 /// know is worse than one that admits it.
 /// </param>
+/// <param name="HistorySessions">
+/// How many bars of history the export asked for before each instrument's
+/// first membership session, or zero. Absent before schema version 3, which
+/// never wrote history, so an older manifest reads as zero.
+/// </param>
 public sealed record DatasetManifest(
     string DatasetId,
     int DatasetVersion,
@@ -157,7 +177,8 @@ public sealed record DatasetManifest(
     IReadOnlyList<DatasetFile> Files,
     DateTimeOffset CreatedAtUtc,
     string? CreatedByCommit,
-    DatasetMembership Membership = DatasetMembership.AsOf)
+    DatasetMembership Membership = DatasetMembership.AsOf,
+    int HistorySessions = 0)
 {
     /// <summary>
     /// The manifest shape this build writes and knows how to read.
@@ -173,8 +194,20 @@ public sealed record DatasetManifest(
     /// or on every session; <c>universe_as_of</c> is null for the second, and
     /// each instrument then carries its <c>spells</c>. See ADR-024.
     /// </para>
+    /// <para>
+    /// Version 3: <c>history_sessions</c>, each instrument's
+    /// <c>history_from</c>, and each spell's <c>removal_announced_on</c>. Rows
+    /// may then precede a spell or fill the gap between two, as data rather
+    /// than membership. See ADR-025.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = HistorySchemaVersion;
+
+    /// <summary>
+    /// The first schema version whose manifests carry history and removal
+    /// announcements, and hash them.
+    /// </summary>
+    public const int HistorySchemaVersion = 3;
 
     /// <summary>Gets the total rows across every file.</summary>
     public long RowCount => Files.Sum(file => file.RowCount);

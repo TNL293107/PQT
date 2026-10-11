@@ -36,6 +36,7 @@ internal static class Usage
         output.WriteLine("                     (point-in-time membership; --as-of reads one set instead)");
         output.WriteLine("                     [--as-of yyyy-MM-dd] [--interval 1d] [--raw]");
         output.WriteLine("                     [--known-as-of yyyy-MM-dd] [--policy strict|permissive]");
+        output.WriteLine("                     [--history N]  (bars before each name's admission; default 0)");
         output.WriteLine("  pqt dataset verify <DATASET-ID> [--version N]");
         output.WriteLine();
         output.WriteLine("  pqt research submit momentum-slice --dataset <ID> [--version N]");
