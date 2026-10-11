@@ -1,0 +1,421 @@
+{
+  "dataset_id": "9d1609783db37729",
+  "dataset_version": 2,
+  "schema_version": 2,
+  "content_hash": "1b0aeea1d93c0c1cef17990eee43fdd2b8249699a62dafd1a1c865b7cfd04f11",
+  "known_as_of_utc": null,
+  "adjusted": true,
+  "announcement_policy": "strict",
+  "universe_code": "VN30",
+  "universe_as_of": null,
+  "instruments": [
+    {
+      "instrument_id": "01a0a8ff-bed0-7631-8fb0-6b019677fb84",
+      "ticker_at_as_of": "FPT",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-bef6-7255-8f57-0d60928eb474",
+      "ticker_at_as_of": "VNM",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-bef8-7bb1-8515-aeec58d4230c",
+      "ticker_at_as_of": "VIC",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-bef9-7ce3-87f7-db0dbc1903e8",
+      "ticker_at_as_of": "VHM",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-befa-7a62-a7ef-296ec1a26ac2",
+      "ticker_at_as_of": "VCB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-befb-7e10-a636-7e228a984e4d",
+      "ticker_at_as_of": "TCB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-befc-76ee-8e5d-a71bccd87f65",
+      "ticker_at_as_of": "HPG",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-befc-7cbf-8f85-5d881fb93acb",
+      "ticker_at_as_of": "MSN",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-befd-7257-9622-18bc635fc5c1",
+      "ticker_at_as_of": "MWG",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-befe-7619-b1fc-121b8fe30c96",
+      "ticker_at_as_of": "SSI",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0a8ff-bf06-7ddc-9c35-acee6ce1b2a2",
+      "ticker_at_as_of": "BSR",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2026-05-07"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-a9ea-7aea-b29a-a48bbc18eb80",
+      "ticker_at_as_of": "ACB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa17-7e8a-b2ee-4a51d4fb3434",
+      "ticker_at_as_of": "BID",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa18-7ee9-b4bd-cdc5a2a5b2a1",
+      "ticker_at_as_of": "CTG",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa1a-7bf1-83b9-7a61a4ec64ed",
+      "ticker_at_as_of": "GAS",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa1c-7137-ae06-03750f4e65d2",
+      "ticker_at_as_of": "GVR",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa1d-7bde-ae78-91c7a1db16b5",
+      "ticker_at_as_of": "HDB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa1e-7225-a7dc-69a99645682a",
+      "ticker_at_as_of": "LPB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa20-7079-8a56-fd9c574bec96",
+      "ticker_at_as_of": "MBB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa21-70c5-8ab5-f2a3de19e343",
+      "ticker_at_as_of": "MCH",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-08-03",
+          "until": null,
+          "announced_on": "2026-07-15"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa2a-7adc-aee7-d05bc00a57ea",
+      "ticker_at_as_of": "SAB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa2c-7c75-a491-65812b320ea5",
+      "ticker_at_as_of": "SHB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa2d-77c4-b6f1-7f4e32a31fe2",
+      "ticker_at_as_of": "SSB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa30-7b9c-9751-495fd460cd9f",
+      "ticker_at_as_of": "STB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa32-7525-9285-04586e8793ea",
+      "ticker_at_as_of": "TCX",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-08-03",
+          "until": null,
+          "announced_on": "2026-07-15"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa36-7884-8319-302130012f0f",
+      "ticker_at_as_of": "VIB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa38-7106-8116-5f2ad1fa198f",
+      "ticker_at_as_of": "VJC",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa3b-779a-8152-b328e1563d4e",
+      "ticker_at_as_of": "VPB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa3c-7cfc-9cbd-b8201d9cfe11",
+      "ticker_at_as_of": "VPL",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2026-01-21"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa3e-738e-bfb9-23fc83919765",
+      "ticker_at_as_of": "VRE",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa42-75fa-9a10-03da83bf8112",
+      "ticker_at_as_of": "PLX",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": "2026-08-03",
+          "announced_on": "2025-07-17"
+        }
+      ]
+    },
+    {
+      "instrument_id": "01a0b352-aa43-7299-9cdf-5b948063d2ca",
+      "ticker_at_as_of": "TPB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": "2026-08-03",
+          "announced_on": "2025-07-17"
+        }
+      ]
+    }
+  ],
+  "interval": "1d",
+  "from_date": "2026-07-01",
+  "to_date": "2026-09-17",
+  "transformation_version": 1,
+  "validation_version": 1,
+  "adjustment_version": 2,
+  "sources": [
+    {
+      "code": "CAFEF",
+      "licence_note": "No licence granted. Retained under the absence of a prohibition rather than a permission. Not for redistribution."
+    }
+  ],
+  "files": [
+    {
+      "name": "bars.parquet",
+      "row_count": 1620,
+      "bytes": 47488,
+      "sha256": "8b051f07b1d2c09ac7e3c009aff481db692ea43729dea9db6a80dbf7b57c9d81"
+    }
+  ],
+  "created_at_utc": "2026-09-19T05:33:38.3859069+00:00",
+  "created_by_commit": "c6371fa9f01fa78e1a5aee9bb391e6e7ab1371ad",
+  "membership": "point_in_time",
+  "row_count": 1620
+}
