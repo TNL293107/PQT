@@ -64,6 +64,20 @@ either session is counted as **no data**, never as unchanged. A session the
 venue calendar does not cover, or that is not a trading day, is refused rather
 than answered.
 
+*Settled in the implementation, 2026-10-11.* The previous session is each
+member's **own venue's** previous trading day, and the session must be a
+trading day on every venue a member trades on; one venue's holiday is never
+compared with another's session. "Adjusted for actions going ex that day" means
+the previous close is multiplied by the stored factor of every action going ex
+after the previous session and on or before this one — the exchange's
+reference-price rule — on the **current** series, so every factor PQT knows
+applies (ADR-022's rule for a read without `knownAsOf`); a point-in-time
+breadth is not offered yet. A session the universe's coverage claim does not
+reach is refused as unknown membership, per ADR-020. Without a named session,
+the count is for the latest day up to today on which a member *that day* has a
+daily bar, looking back at most 31 days, and the answer says it chose. Every
+member's rows are read in three queries whatever the universe's size.
+
 ### What waits
 
 The watchlist and the workspace need the first write path from a browser. That
