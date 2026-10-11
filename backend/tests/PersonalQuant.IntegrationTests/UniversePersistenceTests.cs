@@ -328,6 +328,39 @@ public sealed class UniversePersistenceTests(DependencyContainerFixture containe
         Assert.Equal(new UniverseSpell(spanning, Joined, null, new DateOnly(2023, 12, 20)), carried);
     }
 
+    [Fact]
+    public async Task A_spell_read_over_a_window_carries_its_removal_announcement()
+    {
+        // The projection the dataset export reads. The column has been stored
+        // since the removal announcement was modelled; a projection that left
+        // it out would export every spell as unannounced, and nothing would
+        // fail.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var code = UniverseCode.Create("URA");
+        var universe = await DefineAsync(scope, code, Joined, until: null);
+        var leaver = await AddInstrumentAsync(scope, "URA", "URAA");
+        var removed = new DateOnly(2024, 8, 1);
+        var announced = new DateOnly(2024, 7, 15);
+
+        var spell = UniverseMembership.Admit(universe.Id, leaver, Joined, null, Source, RecordedAt);
+        spell.Remove(removed, announced);
+
+        scope.Universes.Add(spell);
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await using var reader = await CreateScopeAsync();
+        var history = await reader.Catalog.MembershipOverAsync(
+            code, new DateOnly(2024, 7, 1), new DateOnly(2024, 12, 31), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            new UniverseSpell(leaver, Joined, removed, null, announced),
+            Assert.Single(history.Spells));
+    }
+
     private static async Task<UniverseConstituents> ReadAsync(
         UniverseScope scope,
         UniverseCode code,

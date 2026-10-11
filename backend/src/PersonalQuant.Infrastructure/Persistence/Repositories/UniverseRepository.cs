@@ -98,7 +98,8 @@ internal sealed class UniverseRepository(PersonalQuantDbContext dbContext) : IUn
                 membership.InstrumentId,
                 membership.EffectiveFrom,
                 membership.EffectiveTo,
-                membership.AnnouncedOn))
+                membership.AnnouncedOn,
+                membership.RemovalAnnouncedOn))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

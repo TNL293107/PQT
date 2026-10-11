@@ -9,15 +9,19 @@ namespace PersonalQuant.Application.Universes;
 /// <param name="InstrumentId">The security.</param>
 /// <param name="EffectiveFrom">The first date of membership, inclusive.</param>
 /// <param name="EffectiveTo">The date it left, exclusive; null while it is still a member.</param>
-/// <param name="AnnouncedOn">
-/// When the admission was published, when known. Not the removal's: that is
-/// recorded on the membership and not yet carried here.
+/// <param name="AnnouncedOn">When the admission was published, when known.</param>
+/// <param name="RemovalAnnouncedOn">
+/// When the removal was published, when known; always null while the spell is
+/// running. Kept apart from <paramref name="AnnouncedOn"/> because the two
+/// answer different questions: whether buying ahead of the inclusion was
+/// possible, and whether selling ahead of the exclusion was.
 /// </param>
 public sealed record UniverseSpell(
     InstrumentId InstrumentId,
     DateOnly EffectiveFrom,
     DateOnly? EffectiveTo,
-    DateOnly? AnnouncedOn)
+    DateOnly? AnnouncedOn,
+    DateOnly? RemovalAnnouncedOn = null)
 {
     /// <summary>
     /// Reports whether the security was a member on a date.
