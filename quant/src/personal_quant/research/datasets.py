@@ -12,6 +12,12 @@ instrument's spells, which the exporter never writes. Any mismatch is a hard
 error. A result computed from a silently changed input is not reproducible, and
 the point of a dataset version is that it is.
 
+:meth:`LocalDatasetProvider.verify` does all of that once and hands back what it
+checked, as a :class:`VerifiedBuild`. Every reader is built on it —
+:meth:`LocalDatasetProvider.open` for Python,
+:func:`personal_quant.research.analytical.connect` for DuckDB — so none of them
+can skip a check, and none reads a file a second time.
+
 Prices are read from the strings the exporter writes into
 :class:`~decimal.Decimal`; nothing passes through a binary float.
 """
@@ -22,10 +28,12 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -37,7 +45,14 @@ from personal_quant.research.manifest import (
 )
 from personal_quant.research.protocols import Bar
 
-__all__ = ["CanonicalDataset", "DatasetIntegrityError", "LocalDatasetProvider"]
+__all__ = [
+    "CanonicalDataset",
+    "DatasetIntegrityError",
+    "LocalDatasetProvider",
+    "VerifiedBuild",
+    "read_bars_table",
+    "require_daily",
+]
 
 MANIFEST_FILE = "manifest.json"
 BARS_FILE = "bars.parquet"
@@ -48,6 +63,42 @@ _COLUMNS = ["instrument_id", "opened_at_utc", "open", "high", "low", "close", "v
 
 class DatasetIntegrityError(RuntimeError):
     """Raised when a build does not match the manifest that describes it."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedBuild:
+    """A build that passed every check, held as the bytes that were checked.
+
+    Every reader of a build starts here — the Python loader and the DuckDB
+    view alike — so none repeats the verification, and none goes back to the
+    disk after it: a file replaced once it has been hashed is never the one
+    that is read.
+
+    Attributes:
+        manifest: The manifest, its content hash recomputed and matched.
+        files: Each data file the manifest names, by name, as it was hashed.
+        bars: The rows of ``bars.parquet``, already held to the manifest.
+    """
+
+    manifest: DatasetManifest
+    files: Mapping[str, bytes]
+    bars: tuple[Bar, ...]
+
+
+def require_daily(manifest: DatasetManifest) -> None:
+    """Refuse a build whose bars are not one per session.
+
+    Args:
+        manifest: The build's manifest.
+
+    Raises:
+        UnsupportedManifestError: The build is not daily. Sessions here are
+            dates, and an intraday build would be read as one bar per date.
+    """
+    if manifest.interval != "1d":
+        raise UnsupportedManifestError(
+            f"Only daily datasets can be read as sessions; this one is '{manifest.interval}'."
+        )
 
 
 class CanonicalDataset:
@@ -64,10 +115,7 @@ class CanonicalDataset:
             UnsupportedManifestError: The build is not daily. Sessions here are
                 dates, and an intraday build would be read as one bar per date.
         """
-        if manifest.interval != "1d":
-            raise UnsupportedManifestError(
-                f"Only daily datasets can be read as sessions; this one is '{manifest.interval}'."
-            )
+        require_daily(manifest)
 
         by_instrument: dict[str, dict[date, Bar]] = {}
 
@@ -170,6 +218,24 @@ class LocalDatasetProvider:
             FileNotFoundError: No such build is held.
             DatasetIntegrityError: A file or the manifest does not match.
         """
+        build = self.verify(dataset_id, version)
+
+        return CanonicalDataset(build.manifest, build.bars)
+
+    def verify(self, dataset_id: str, version: int | None = None) -> VerifiedBuild:
+        """Check a build against its manifest, and keep what was checked.
+
+        Args:
+            dataset_id: The dataset id.
+            version: The build to verify; the latest when ``None``.
+
+        Returns:
+            The manifest, the verified bytes of each file, and the rows.
+
+        Raises:
+            FileNotFoundError: No such build is held.
+            DatasetIntegrityError: A file or the manifest does not match.
+        """
         held = self.versions(dataset_id)
         chosen = version if version is not None else (held[-1] if held else None)
 
@@ -196,7 +262,7 @@ class LocalDatasetProvider:
         bars = _read_bars(payloads[BARS_FILE])
         _verify_rows(manifest, bars)
 
-        return CanonicalDataset(manifest, bars)
+        return VerifiedBuild(manifest, MappingProxyType(payloads), tuple(bars))
 
 
 def _verify_files(build: Path, manifest: DatasetManifest) -> dict[str, bytes]:
@@ -292,21 +358,49 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
         seen.add(key)
 
 
+def read_bars_table(payload: bytes) -> Any:  # noqa: ANN401 - pyarrow ships no types.
+    """Read ``bars.parquet`` into Arrow, one session date per row.
+
+    The one place a session is derived from ``opened_at_utc``, so every
+    reader of a build — Python or DuckDB — agrees on it. The date is taken in
+    Arrow, as the UTC date of the instant: no Python time zone object is
+    built, and no database session's time zone is consulted.
+
+    Args:
+        payload: The verified bytes of ``bars.parquet``.
+
+    Returns:
+        A ``pyarrow.Table`` of ``instrument_id``, ``session`` (``date32``),
+        ``open``, ``high``, ``low`` and ``close`` as the exporter's strings,
+        and ``volume``.
+    """
+    table = pq.read_table(pa.BufferReader(payload), columns=_COLUMNS)
+    opened = table.column("opened_at_utc")
+
+    if opened.type.tz is not None:
+        # A zoned instant is stored as UTC; dropping the zone keeps the UTC
+        # wall time, whose date is the session.
+        opened = opened.cast(pa.timestamp(opened.type.unit))
+
+    return table.set_column(_COLUMNS.index("opened_at_utc"), "session", opened.cast(pa.date32()))
+
+
 def _read_bars(payload: bytes) -> list[Bar]:
-    columns = pq.read_table(pa.BufferReader(payload), columns=_COLUMNS).to_pydict()
+    columns = read_bars_table(payload).to_pydict()
+    names = ["instrument_id", "session", "open", "high", "low", "close", "volume"]
 
     return [
         Bar(
             instrument_id=str(instrument),
-            session=opened.date(),
+            session=session,
             open=Decimal(open_),
             high=Decimal(high),
             low=Decimal(low),
             close=Decimal(close),
             volume=int(volume),
         )
-        for instrument, opened, open_, high, low, close, volume in zip(
-            *(columns[name] for name in _COLUMNS), strict=True
+        for instrument, session, open_, high, low, close, volume in zip(
+            *(columns[name] for name in names), strict=True
         )
     ]
 

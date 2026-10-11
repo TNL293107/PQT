@@ -44,6 +44,23 @@ def test_a_build_loads_with_exact_decimal_prices(tmp_path: Path) -> None:
     assert SESSIONS[0] not in dataset.bars_of("bbb")
 
 
+def test_verify_keeps_the_bytes_it_hashed(tmp_path: Path) -> None:
+    # A reader built on the verified build reads these bytes, not the file:
+    # changing the file afterwards changes nothing it can see.
+    build = write_dataset(tmp_path, _spec())
+    original = (build / "bars.parquet").read_bytes()
+
+    verified = LocalDatasetProvider(tmp_path).verify("0123456789abcdef")
+    (build / "bars.parquet").write_bytes(b"replaced")
+
+    assert verified.files["bars.parquet"] == original
+    assert len(verified.bars) == 7
+    assert verified.manifest.dataset_version == 1
+
+    with pytest.raises(TypeError):
+        verified.files["bars.parquet"] = b"replaced"  # type: ignore[index]
+
+
 def test_without_a_version_the_latest_build_is_opened(tmp_path: Path) -> None:
     write_dataset(tmp_path, _spec(version=1))
     write_dataset(tmp_path, _spec(version=2))
