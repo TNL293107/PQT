@@ -13,13 +13,14 @@ engineering project.
 ```
 Phase 0–4                     COMPLETE
 Research Foundation Upgrade   COMPLETE      ← Gates A and B passed 2026-10-11
-Phase 5–20                    PLANNED       ← Phase 5 next
+Phase 5                       IN PROGRESS   ← Market Intelligence Terminal, ADR-026
+Phase 6–20                    PLANNED
 ```
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
 | **Complete** | Phases 0–4, and the Research Foundation Upgrade (U1–U10)      |
-| **Next**     | Phase 5 — Market Intelligence Terminal                        |
+| **Current**  | Phase 5 — Market Intelligence Terminal ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
 | **Tests**    | 946 unit, 162 integration, 262 Python + 91 Qlib (2026-10-11); React and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |

@@ -34,6 +34,7 @@ reasoning at the time is preserved.
 | [023](ADR-023-canonical-dataset-contract.md)                 | The canonical dataset contract PQT owns | Accepted |
 | [024](ADR-024-point-in-time-dataset-membership.md)           | Point-in-time membership in the canonical dataset | Accepted |
 | [025](ADR-025-dataset-history-rows.md)                       | History rows in the canonical dataset, extending ADR-024 | Accepted |
+| [026](ADR-026-market-intelligence-terminal.md)               | The Market Intelligence Terminal's scope and first slices | Accepted |
 
 ## Format
 
