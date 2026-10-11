@@ -546,3 +546,14 @@
 .coverage__note {
   color: var(--text-muted);
 }
+
+/* A saved workspace's lines, numbered as they replay. */
+.workspace-lines {
+  margin: var(--space-1) 0 0;
+  padding-left: 2.5em;
+  color: var(--text-muted);
+}
+
+.workspace-lines code {
+  color: var(--text-primary);
+}

@@ -5,6 +5,7 @@ import type { ConsoleRecord } from "../../lib/console/records";
 import { PriceChart } from "./PriceChart";
 import { BreadthView, UniversesView } from "./BreadthView";
 import { CoverageView } from "./CoverageView";
+import { WatchlistView, WatchlistsView, WorkspaceView, WorkspacesView } from "./OperatorStateView";
 
 /** Renders whatever a command produced. */
 export function RecordView({ record }: { readonly record: ConsoleRecord }) {
@@ -74,8 +75,21 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
 
     case "breadth":
       return <BreadthView breadth={record.breadth} />;
+
     case "coverage":
       return <CoverageView coverage={record.coverage} />;
+
+    case "watchlists":
+      return <WatchlistsView listing={record.listing} />;
+
+    case "watchlist":
+      return <WatchlistView watchlist={record.watchlist} />;
+
+    case "workspaces":
+      return <WorkspacesView listing={record.listing} />;
+
+    case "workspace":
+      return <WorkspaceView workspace={record.workspace} />;
 
     default:
       return null;

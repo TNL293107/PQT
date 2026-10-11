@@ -10,6 +10,7 @@ import {
 } from "../api/marketData";
 import { fetchBreadth, fetchUniverses, UniverseApiError } from "../api/universes";
 import { parseEntry, readCount } from "./entry";
+import { liveOperatorServices, runKey, runWatchlist, runWorkspace, type OperatorServices } from "./operator";
 import { failure, lines, type ConsoleRecord } from "./records";
 
 /**
@@ -27,6 +28,9 @@ export interface ConsoleServices {
   readonly health: typeof fetchSystemHealth;
   readonly universes: typeof fetchUniverses;
   readonly breadth: typeof fetchBreadth;
+
+  /** The key, watchlists and workspaces. Absent means the live ones. */
+  readonly operator?: OperatorServices;
 }
 
 /** The live services, reaching the API. */
@@ -47,6 +51,9 @@ export const liveServices: ConsoleServices = {
 export interface ConsoleResult {
   readonly record: ConsoleRecord;
   readonly clear?: boolean;
+
+  /** Lines to run next, in order — what loading a workspace asks for. */
+  readonly replay?: readonly string[];
 }
 
 /**
@@ -59,11 +66,13 @@ export interface ConsoleResult {
  * @param input The line as typed.
  * @param services What the command may reach.
  * @param signal Aborts a command the user interrupted.
+ * @param history The lines run earlier this session, for `ws save`.
  */
 export async function runEntry(
   input: string,
   services: ConsoleServices,
   signal?: AbortSignal,
+  history: readonly string[] = [],
 ): Promise<ConsoleResult> {
   const entry = parseEntry(input);
 
@@ -90,6 +99,27 @@ export async function runEntry(
 
       case "BREADTH":
         return { record: await breadth(entry.securityQuery, entry.options, services, signal) };
+
+      case "KEY":
+        return { record: runKey(entry.securityQuery, services.operator ?? liveOperatorServices) };
+
+      case "WL":
+        return {
+          record: await runWatchlist(
+            entry.securityQuery,
+            services.operator ?? liveOperatorServices,
+            services.resolve,
+            signal,
+          ),
+        };
+
+      case "WS":
+        return await runWorkspace(
+          entry.securityQuery,
+          history,
+          services.operator ?? liveOperatorServices,
+          signal,
+        );
 
       default:
         break;

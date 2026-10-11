@@ -41,7 +41,63 @@ describe("Console", () => {
   it("opens with a banner saying what the console does and does not do", () => {
     render(<Console services={stubServices()} />);
 
-    expect(screen.getByText(/Nothing here writes/)).toBeInTheDocument();
+    expect(screen.getByText(/Market data is read-only here/)).toBeInTheDocument();
+  });
+
+  it("echoes an operator key masked and keeps it out of the history", async () => {
+    // The transcript is on screen and ↑ recalls it; neither is a place for
+    // the deployment's write credential.
+    const key = "s3cret".repeat(8);
+    const write = vi.fn(() => true);
+    const user = userEvent.setup();
+    render(
+      <Console
+        services={{
+          ...stubServices(),
+          operator: {
+            key: { read: () => null, write },
+            watchlists: {} as never,
+            workspaces: {} as never,
+          },
+        }}
+      />,
+    );
+
+    await user.type(terminal(), `key ${key}{Enter}`);
+
+    await waitFor(() => expect(screen.getByText(/Operator key held/)).toBeInTheDocument());
+    expect(write).toHaveBeenCalledWith(key);
+    expect(document.body.textContent).not.toContain(key);
+
+    await user.type(terminal(), "{ArrowUp}");
+    expect(terminal()).toHaveValue("");
+  });
+
+  it("replays a loaded workspace line by line into the transcript", async () => {
+    const user = userEvent.setup();
+    const get = vi.fn(async () => ({
+      name: "morning",
+      entries: ["FPT"],
+      createdAtUtc: "2026-10-11T09:00:00Z",
+      updatedAtUtc: "2026-10-11T09:00:00Z",
+    }));
+    render(
+      <Console
+        services={{
+          ...stubServices(),
+          operator: {
+            key: { read: () => null, write: () => true },
+            watchlists: {} as never,
+            workspaces: { list: vi.fn(), get, save: vi.fn(), delete: vi.fn() } as never,
+          },
+        }}
+      />,
+    );
+
+    await user.type(terminal(), "ws load morning{Enter}");
+
+    await waitFor(() => expect(screen.getByText("FPT Corporation")).toBeInTheDocument());
+    expect(screen.getByText(/Replaying workspace 'morning'/)).toBeInTheDocument();
   });
 
   it("echoes the line and shows what came back", async () => {
@@ -102,7 +158,7 @@ describe("Console", () => {
 
     await user.type(terminal(), "clear{Enter}");
 
-    await waitFor(() => expect(screen.queryByText(/Nothing here writes/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Market data is read-only here/)).not.toBeInTheDocument());
     expect(terminal()).toBeEnabled();
   });
 
@@ -127,7 +183,7 @@ describe("Console", () => {
     await waitFor(() =>
       expect(screen.getByText(/No instrument currently trades/)).toBeInTheDocument(),
     );
-    expect(screen.getByText(/Nothing here writes/)).toBeInTheDocument();
+    expect(screen.getByText(/Market data is read-only here/)).toBeInTheDocument();
   });
 
   it("echoes the line while the command is still running", async () => {

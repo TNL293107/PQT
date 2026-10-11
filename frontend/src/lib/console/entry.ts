@@ -74,16 +74,28 @@ export const VERBS: readonly FunctionSpec[] = [
     summary: "Advancers, decliners and no-data members of a universe on a session",
     options: ["on"],
   },
+  {
+    code: "WL",
+    summary: "Watchlists — list, show, create, add, rm, delete (saving needs the key)",
+    options: [],
+  },
+  {
+    code: "WS",
+    summary: "Workspaces — save this session's views by name, load one to replay it",
+    options: [],
+  },
+  { code: "KEY", summary: "Hold the operator key for this tab, or 'key clear'", options: [] },
   { code: "CLEAR", summary: "Empty the transcript", options: [] },
 ];
 
 /**
  * The verbs that take the rest of the line as their argument.
  *
- * FIND's is a search query; BREADTH's is a universe code. Neither names a
- * security, so neither is resolved against the instrument master.
+ * FIND's is a search query; BREADTH's is a universe code; WL, WS and KEY
+ * read their own sub-commands. None names a security, so none is resolved
+ * against the instrument master.
  */
-const VERBS_WITH_ARGUMENT = new Set(["FIND", "BREADTH"]);
+const VERBS_WITH_ARGUMENT = new Set(["FIND", "BREADTH", "WL", "WS", "KEY"]);
 
 /** One console line, split into what it names and what it asks for. */
 export interface ConsoleEntry {

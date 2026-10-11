@@ -83,7 +83,7 @@ export function AppShell() {
       </main>
 
       <footer className="shell__footer">
-        <span>Read-only. Every write — ingest, resolve a finding — belongs to the operator CLI.</span>
+        <span>Market data is read-only here — ingest and findings belong to the operator CLI. Watchlists and workspaces save with the operator key.</span>
         <span className="numeric">LIVE_TRADING_ENABLED=false</span>
       </footer>
 

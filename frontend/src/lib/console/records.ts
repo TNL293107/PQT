@@ -9,6 +9,8 @@ import type { SystemHealth } from "../../types/health";
 import type { ChartStyle } from "../chart/series";
 import type { Breadth, UniverseList } from "../../types/universe";
 import type { InstrumentCoverage } from "../../types/coverage";
+import type { Watchlist, WatchlistList } from "../../types/watchlist";
+import type { Workspace, WorkspaceList } from "../../types/workspace";
 
 /**
  * What a command produced.
@@ -57,7 +59,11 @@ export type ConsoleRecord =
       readonly kind: "coverage";
       readonly instrument: Instrument;
       readonly coverage: InstrumentCoverage;
-    };
+    }
+  | { readonly kind: "watchlists"; readonly listing: WatchlistList }
+  | { readonly kind: "watchlist"; readonly watchlist: Watchlist }
+  | { readonly kind: "workspaces"; readonly listing: WorkspaceList }
+  | { readonly kind: "workspace"; readonly workspace: Workspace };
 
 /** One exchange in the transcript: what was typed, and what came back. */
 export interface TranscriptItem {
