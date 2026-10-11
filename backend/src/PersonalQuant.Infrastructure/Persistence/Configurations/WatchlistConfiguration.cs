@@ -107,3 +107,54 @@ internal sealed class WatchlistEntryConfiguration : IEntityTypeConfiguration<Wat
             .HasDatabaseName("ix_watchlist_entries_instrument_id");
     }
 }
+
+/// <summary>Maps <see cref="Workspace"/> onto <c>terminal.workspaces</c>.</summary>
+internal sealed class WorkspaceConfiguration : IEntityTypeConfiguration<Workspace>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<Workspace> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("workspaces", WatchlistConfiguration.Schema, table =>
+        {
+            table.HasCheckConstraint("ck_workspaces_name", "name ~ '^[a-z0-9][a-z0-9_-]*$'");
+            table.HasCheckConstraint(
+                "ck_workspaces_entries",
+                $"cardinality(entries) BETWEEN 1 AND {Workspace.MaxEntries}");
+        });
+
+        builder.HasKey(workspace => workspace.Id).HasName("pk_workspaces");
+
+        builder.Property(workspace => workspace.Id)
+            .HasColumnName("id")
+            .HasConversion(id => id.Value, value => new WorkspaceId(value))
+            .ValueGeneratedNever();
+
+        builder.Property(workspace => workspace.Name)
+            .HasColumnName("name")
+            .HasMaxLength(Watchlist.MaxNameLength)
+            .IsRequired();
+
+        // A text array: the lines are one value read and written whole, in
+        // order, and never queried one by one.
+        builder.Property<string[]>("_entries")
+            .HasColumnName("entries")
+            .HasColumnType("text[]")
+            .IsRequired();
+
+        builder.Ignore(workspace => workspace.Entries);
+
+        builder.Property(workspace => workspace.CreatedAtUtc)
+            .HasColumnName("created_at_utc")
+            .IsRequired();
+
+        builder.Property(workspace => workspace.UpdatedAtUtc)
+            .HasColumnName("updated_at_utc")
+            .IsRequired();
+
+        builder.HasIndex(workspace => workspace.Name)
+            .IsUnique()
+            .HasDatabaseName("ux_workspaces_name");
+    }
+}

@@ -381,6 +381,22 @@ refused. The CLI needs no operator key — it writes with the deployment's
 database credentials — but the browser does: set `PQT_OPERATOR_KEY` in `.env`
 for the API to accept writes at all (ADR-027).
 
+### `workspace`
+
+A workspace is a named list of console lines the console replays with
+`ws load <NAME>` — what was asked, never what was answered, so replaying it
+tomorrow shows tomorrow's data.
+
+```bash
+pqt workspace save morning "breadth VN30" "FPT GP" "wl show core"
+pqt workspace list
+pqt workspace show morning
+pqt workspace delete morning
+```
+
+Saving under an existing name replaces its lines. At most 50 lines of 256
+characters each, without control characters.
+
 ## Exit codes
 
 | Code | Meaning |

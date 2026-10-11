@@ -121,10 +121,14 @@ internal static class Dispatcher
                         output)
                     .RunAsync(command, cancellationToken);
 
+            case "workspace":
+                return new WorkspaceCommands(Defer<IWorkspaceService>(services), output)
+                    .RunAsync(command, cancellationToken);
+
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
-                        + "quality, adjust, dataset, research, watchlist, schema or calendar.");
+                        + "quality, adjust, dataset, research, watchlist, workspace, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

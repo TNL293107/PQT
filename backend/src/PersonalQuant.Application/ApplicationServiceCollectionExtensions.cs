@@ -103,5 +103,6 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<Datasets.IDatasetExportService, Datasets.DatasetExportService>();
         services.AddScoped<Research.IResearchJobService, Research.ResearchJobService>();
         services.AddScoped<Terminal.IWatchlistService, Terminal.WatchlistService>();
+        services.AddScoped<Terminal.IWorkspaceService, Terminal.WorkspaceService>();
     }
 }

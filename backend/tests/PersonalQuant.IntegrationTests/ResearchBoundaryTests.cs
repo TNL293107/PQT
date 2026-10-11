@@ -63,6 +63,7 @@ public sealed partial class ResearchBoundaryTests(DependencyContainerFixture con
     [Theory]
     [InlineData("SELECT count(*) FROM terminal.watchlists")]
     [InlineData("DELETE FROM terminal.watchlist_entries")]
+    [InlineData("SELECT entries FROM terminal.workspaces")]
     public async Task The_research_role_has_no_access_to_operator_state(string sql)
     {
         // Watchlists are the operator's, not research input or output

@@ -156,6 +156,31 @@ public sealed class WatchlistEndpointTests(DependencyContainerFixture containers
     }
 
     [Fact]
+    public async Task A_workspace_is_saved_replaced_read_and_deleted()
+    {
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync(Key);
+        var token = TestContext.Current.CancellationToken;
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Key);
+        var path = new Uri("/workspaces/morning", UriKind.Relative);
+
+        var created = await host.Client.PutAsJsonAsync(path, new SaveWorkspaceRequest(["breadth VN30"]), token);
+        var replaced = await host.Client.PutAsJsonAsync(path, new SaveWorkspaceRequest(["FPT GP", "VCB GP"]), token);
+        var read = await host.Client.GetFromJsonAsync<WorkspaceResponse>(path, token);
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        Assert.Equal(["FPT GP", "VCB GP"], read!.Entries);
+
+        var empty = await host.Client.PutAsJsonAsync(path, new SaveWorkspaceRequest([]), token);
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await host.Client.DeleteAsync(path, token)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync(path, token)).StatusCode);
+    }
+
+    [Fact]
     public async Task No_endpoint_that_writes_is_mapped_without_the_operator_key()
     {
         // The guard is a group convention. This is what stops a later write

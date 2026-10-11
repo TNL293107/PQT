@@ -1258,6 +1258,46 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Terminal.Workspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.PrimitiveCollection<string[]>("_entries")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("entries");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workspaces");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_workspaces_name");
+
+                    b.ToTable("workspaces", "terminal", t =>
+                        {
+                            t.HasCheckConstraint("ck_workspaces_entries", "cardinality(entries) BETWEEN 1 AND 50");
+
+                            t.HasCheckConstraint("ck_workspaces_name", "name ~ '^[a-z0-9][a-z0-9_-]*$'");
+                        });
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Universes.Universe", b =>
                 {
                     b.Property<Guid>("Id")
