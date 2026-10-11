@@ -102,5 +102,12 @@ public static class ApplicationServiceCollectionExtensions
         // contract is PQT's, and where the files land is Infrastructure's.
         services.AddScoped<Datasets.IDatasetExportService, Datasets.DatasetExportService>();
         services.AddScoped<Research.IResearchJobService, Research.ResearchJobService>();
+
+        // The coverage registry. Read-only introspection over everything
+        // above, owning no state; the API, the CLI and the console all call
+        // this one query (ADR-026).
+        services.AddScoped<
+            Coverage.IInstrumentCoverageService,
+            Coverage.InstrumentCoverageService>();
     }
 }
