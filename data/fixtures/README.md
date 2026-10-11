@@ -239,10 +239,14 @@ member on the old coverage start and gave it that review's date, which told a
 point-in-time consumer an inclusion had been announced that never happened. The
 six real inclusions (LPB, DGC, VPL, BSR, MCH, TCX) carry their dates.
 `announced_on` means the admission announcement throughout. A removal's
-announcement has its own optional column, `removal_announced_on`, which this
-file does not carry yet: every closed spell's removal date is blank, meaning
-not transcribed, not unannounced. A later file may fill a blank; it may not
-re-date one already recorded, and the import refuses such a row whole.
+announcement is in its own column, `removal_announced_on`. Each of the six
+removals (POW, BVH, BCM, DGC, PLX, TPB) was published by the same review
+announcement as the name that replaced it, so it carries that review's date
+from the table above, with the same strength of evidence; a script checked
+that every removal date equals its replacements' admission date. The
+`DEMO_INDEX` rows are synthetic and leave it blank. A later file may fill a
+blank date; it may not re-date one already recorded, and the import refuses
+such a row whole.
 
 Where the record is weaker than the membership itself:
 
