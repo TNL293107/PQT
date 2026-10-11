@@ -144,12 +144,14 @@ internal static partial class InfrastructureLog
     [LoggerMessage(
         EventId = 1130,
         Level = LogLevel.Information,
-        Message = "Ingestion pass covered {Universe} instrument(s): {Ingested} attempted, {Failed} could not be attempted, in {ElapsedMs}ms.")]
+        Message = "Ingestion pass covered {Universe} instrument(s): {Succeeded} succeeded, {Skipped} skipped, {Failed} failed, {Unattempted} could not be attempted, in {ElapsedMs}ms.")]
     public static partial void IngestionPassCompleted(
         ILogger logger,
         int universe,
-        int ingested,
+        int succeeded,
+        int skipped,
         int failed,
+        int unattempted,
         long elapsedMs);
 
     [LoggerMessage(

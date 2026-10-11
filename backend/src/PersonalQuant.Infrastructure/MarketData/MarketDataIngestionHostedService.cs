@@ -134,8 +134,14 @@ public sealed class MarketDataIngestionHostedService(
             return;
         }
 
-        var ingested = 0;
+        // Counted by how each run ended, not by whether the call returned. A
+        // run recorded as failed — a provider outage, or the series lock's
+        // store unreachable — is not "ingested", and a summary that said so
+        // read as healthy through exactly the outages it exists to show.
+        var succeeded = 0;
+        var skipped = 0;
         var failed = 0;
+        var unattempted = 0;
 
         foreach (var instrumentId in universe)
         {
@@ -144,21 +150,30 @@ public sealed class MarketDataIngestionHostedService(
                 break;
             }
 
-            if (await IngestAsync(instrumentId, interval, stoppingToken).ConfigureAwait(false))
+            switch (await IngestAsync(instrumentId, interval, stoppingToken).ConfigureAwait(false))
             {
-                ingested++;
-            }
-            else
-            {
-                failed++;
+                case IngestionOutcome.Succeeded:
+                    succeeded++;
+                    break;
+                case IngestionOutcome.Skipped:
+                    skipped++;
+                    break;
+                case IngestionOutcome.Failed:
+                    failed++;
+                    break;
+                default:
+                    unattempted++;
+                    break;
             }
         }
 
         InfrastructureLog.IngestionPassCompleted(
             logger,
             universe.Count,
-            ingested,
+            succeeded,
+            skipped,
             failed,
+            unattempted,
             (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
     }
 
@@ -226,7 +241,7 @@ public sealed class MarketDataIngestionHostedService(
         }
     }
 
-    private async Task<bool> IngestAsync(
+    private async Task<IngestionOutcome?> IngestAsync(
         InstrumentId instrumentId,
         BarInterval interval,
         CancellationToken stoppingToken)
@@ -245,24 +260,24 @@ public sealed class MarketDataIngestionHostedService(
                     out var problem))
             {
                 InfrastructureLog.IngestionScheduleMisconfigured(logger, problem);
-                return false;
+                return null;
             }
 
-            // The run's own outcome — succeeded, failed or skipped — is
-            // already recorded in the audit trail by the pipeline. What this
-            // returns is only whether the attempt itself completed, so one
-            // instrument's provider outage cannot end the pass.
-            await scope.ServiceProvider
+            // The run is recorded in the audit trail by the pipeline; its
+            // outcome is returned so the pass can count it. An exception here
+            // means no run was recorded at all, and one instrument's must not
+            // end the pass.
+            var run = await scope.ServiceProvider
                 .GetRequiredService<IMarketDataIngestionService>()
                 .IngestAsync(instruction, stoppingToken)
                 .ConfigureAwait(false);
 
-            return true;
+            return run.Outcome;
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
             InfrastructureLog.IngestionPassFailed(logger, exception);
-            return false;
+            return null;
         }
     }
 
