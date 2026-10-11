@@ -48,6 +48,10 @@ internal static class Usage
         output.WriteLine("  pqt research run <RUN-ID>");
         output.WriteLine("  pqt research reproduce <RUN-ID>");
         output.WriteLine();
+        output.WriteLine("  pqt universe list");
+        output.WriteLine("  pqt universe breadth <CODE> [--on yyyy-MM-dd]");
+        output.WriteLine("                     (latest session with member bars when --on is omitted)");
+        output.WriteLine();
         output.WriteLine("  pqt schema status");
         output.WriteLine("  pqt calendar status");
         output.WriteLine();

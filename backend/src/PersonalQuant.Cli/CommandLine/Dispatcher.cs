@@ -113,10 +113,17 @@ internal static class Dispatcher
                 return new ResearchCommands(Defer<IResearchJobService>(services), output)
                     .RunAsync(command, cancellationToken);
 
+            case "universe":
+                return new UniverseCommands(
+                        Defer<IUniverseDirectory>(services),
+                        Defer<Application.Breadth.IMarketBreadthService>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
-                        + "quality, adjust, dataset, research, schema or calendar.");
+                        + "quality, adjust, dataset, research, universe, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }
