@@ -503,7 +503,7 @@ storage architecture. The two gates do not collide.
 
 ---
 
-### U6 — Quant Research Abstraction Layer · Gate B · `IN PROGRESS`
+### U6 — Quant Research Abstraction Layer · Gate B ✅
 
 **Objective.** PQT-owned, framework-agnostic research contracts. **PQT owns the
 abstractions; third-party engines implement adapters against them.** Qlib's
@@ -524,6 +524,18 @@ strategy through it is untested scaffolding.
 
 Detail in
 [`../architecture/quant-research-architecture.md`](../architecture/quant-research-architecture.md).
+
+**Complete, 11 October 2026.** The twelve protocols are declared; a dataset is
+loaded only after its files and its manifest's content hash are verified (the
+Python hash agrees with the .NET one on every manifest written); engines see
+data only through a point-in-time harness that raises on look-ahead, on reads
+deeper than the declared lookback, and on scoring a non-member, each shown
+firing by a planted cheat. The slice ran over the real VN30 export: twelve
+rebalances, mean IC +0.069, t +0.64 — the plumbing proven, no claim about the
+factor. It exposed that a point-in-time export has no bars before a name's
+admission, so new members wait a full lookback before they can be scored; the
+remedy is an export warm-up window, recorded for U7/Phase 7. One dependency
+was added, `pyarrow`.
 
 ---
 

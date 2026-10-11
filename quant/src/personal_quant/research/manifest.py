@@ -168,7 +168,7 @@ class DatasetManifest:
             content_hash=str(raw["content_hash"]),
             known_as_of_utc=_instant(known_as_of_text),
             known_as_of_text=None if known_as_of_text is None else str(known_as_of_text),
-            adjusted=bool(raw["adjusted"]),
+            adjusted=_boolean(raw["adjusted"], "adjusted"),
             announcement_policy=policy,
             universe_code=str(raw["universe_code"]),
             universe_as_of=_date(raw.get("universe_as_of")),
@@ -317,6 +317,14 @@ def _instant(value: object) -> datetime | None:
     # datetime takes six fractional digits; the seventh is a tenth of a
     # microsecond and is kept only in the rendering the hash uses.
     return datetime.fromisoformat(rendered[:26] + rendered[27:]).astimezone(UTC)
+
+
+def _boolean(value: object, field: str) -> bool:
+    # bool("false") is True; a manifest's booleans are JSON booleans or nothing.
+    if not isinstance(value, bool):
+        raise UnsupportedManifestError(f"'{field}' must be true or false, not {value!r}.")
+
+    return value
 
 
 def _date(value: object) -> date | None:

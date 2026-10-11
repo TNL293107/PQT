@@ -4,9 +4,13 @@ A build lives at ``<root>/<dataset_id>/v<version>/`` beside its
 ``manifest.json``, as ``pqt dataset export`` writes it. Loading checks, in
 order: that each file named by the manifest is a plain name inside the build,
 that its size and SHA-256 are the recorded ones, and that the manifest still
-hashes to its own ``content_hash``. Any mismatch is a hard error. A result
-computed from a silently changed input is not reproducible, and the point of a
-dataset version is that it is.
+hashes to its own ``content_hash``. The bytes that are hashed are the bytes
+that are parsed; the file is not opened twice. The rows are then held to the
+manifest: no duplicate session, no instrument it does not list, no session
+outside its window, and — for a point-in-time build — no row outside the
+instrument's spells, which the exporter never writes. Any mismatch is a hard
+error. A result computed from a silently changed input is not reproducible, and
+the point of a dataset version is that it is.
 
 Prices are read from the strings the exporter writes into
 :class:`~decimal.Decimal`; nothing passes through a binary float.
@@ -23,6 +27,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from personal_quant.research.manifest import (
@@ -37,8 +42,7 @@ __all__ = ["CanonicalDataset", "DatasetIntegrityError", "LocalDatasetProvider"]
 MANIFEST_FILE = "manifest.json"
 BARS_FILE = "bars.parquet"
 
-_BUILD = re.compile(r"^v(?P<version>[1-9]\d*)$")
-_CHUNK = 1 << 20
+_BUILD = re.compile(r"v(?P<version>[1-9][0-9]*)")
 _COLUMNS = ["instrument_id", "opened_at_utc", "open", "high", "low", "close", "volume"]
 
 
@@ -148,7 +152,7 @@ class LocalDatasetProvider:
             sorted(
                 int(match["version"])
                 for entry in directory.iterdir()
-                if entry.is_dir() and (match := _BUILD.match(entry.name)) is not None
+                if entry.is_dir() and (match := _BUILD.fullmatch(entry.name)) is not None
             )
         )
 
@@ -186,13 +190,16 @@ class LocalDatasetProvider:
                 f"v{manifest.dataset_version}, not of {dataset_id} v{chosen}."
             )
 
-        _verify_files(build, manifest)
+        payloads = _verify_files(build, manifest)
         _verify_content(manifest)
 
-        return CanonicalDataset(manifest, _read_bars(build / BARS_FILE))
+        bars = _read_bars(payloads[BARS_FILE])
+        _verify_rows(manifest, bars)
+
+        return CanonicalDataset(manifest, bars)
 
 
-def _verify_files(build: Path, manifest: DatasetManifest) -> None:
+def _verify_files(build: Path, manifest: DatasetManifest) -> dict[str, bytes]:
     for file in manifest.files:
         if Path(file.name).name != file.name or file.name in ("", ".", ".."):
             raise DatasetIntegrityError(
@@ -202,23 +209,33 @@ def _verify_files(build: Path, manifest: DatasetManifest) -> None:
     if BARS_FILE not in {file.name for file in manifest.files}:
         raise DatasetIntegrityError(f"The manifest of {build} names no {BARS_FILE}.")
 
+    payloads: dict[str, bytes] = {}
+
     for file in manifest.files:
         path = build / file.name
 
         if not path.is_file():
             raise DatasetIntegrityError(f"{file.name} is named by the manifest but missing.")
 
-        if path.stat().st_size != file.size:
+        # Read once: the bytes verified here are the bytes parsed later, so a
+        # file replaced between the two cannot slip through.
+        payload = path.read_bytes()
+
+        if len(payload) != file.size:
             raise DatasetIntegrityError(
-                f"{file.name} is {path.stat().st_size} bytes; the manifest records {file.size}."
+                f"{file.name} is {len(payload)} bytes; the manifest records {file.size}."
             )
 
-        digest = _sha256(path)
+        digest = hashlib.sha256(payload).hexdigest()
 
         if digest != file.sha256:
             raise DatasetIntegrityError(
                 f"{file.name} hashes to {digest} but the manifest records {file.sha256}."
             )
+
+        payloads[file.name] = payload
+
+    return payloads
 
 
 def _verify_content(manifest: DatasetManifest) -> None:
@@ -231,8 +248,52 @@ def _verify_content(manifest: DatasetManifest) -> None:
         )
 
 
-def _read_bars(path: Path) -> list[Bar]:
-    columns = pq.read_table(path, columns=_COLUMNS).to_pydict()
+def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
+    recorded = next(file.row_count for file in manifest.files if file.name == BARS_FILE)
+
+    if len(bars) != recorded:
+        raise DatasetIntegrityError(
+            f"{BARS_FILE} holds {len(bars)} rows; the manifest records {recorded}."
+        )
+
+    listed = {instrument.instrument_id: instrument for instrument in manifest.instruments}
+    point_in_time = manifest.membership == "point_in_time"
+
+    if point_in_time and any(instrument.spells is None for instrument in listed.values()):
+        raise DatasetIntegrityError("A point-in-time manifest lists an instrument with no spells.")
+
+    seen: set[tuple[str, date]] = set()
+
+    for bar in bars:
+        key = (bar.instrument_id, bar.session)
+        instrument = listed.get(bar.instrument_id)
+
+        if instrument is None:
+            raise DatasetIntegrityError(
+                f"A row names {bar.instrument_id}, which the manifest does not list."
+            )
+
+        if key in seen:
+            raise DatasetIntegrityError(f"{bar.instrument_id} has two rows for {bar.session}.")
+
+        if not manifest.from_date <= bar.session <= manifest.to_date:
+            raise DatasetIntegrityError(
+                f"{bar.instrument_id} has a row for {bar.session}, outside the window "
+                f"{manifest.from_date} to {manifest.to_date}."
+            )
+
+        if point_in_time and not any(
+            spell.includes(bar.session) for spell in instrument.spells or ()
+        ):
+            raise DatasetIntegrityError(
+                f"{bar.instrument_id} has a row for {bar.session}, outside its membership."
+            )
+
+        seen.add(key)
+
+
+def _read_bars(payload: bytes) -> list[Bar]:
+    columns = pq.read_table(pa.BufferReader(payload), columns=_COLUMNS).to_pydict()
 
     return [
         Bar(
@@ -248,16 +309,6 @@ def _read_bars(path: Path) -> list[Bar]:
             *(columns[name] for name in _COLUMNS), strict=True
         )
     ]
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-
-    with path.open("rb") as stream:
-        while chunk := stream.read(_CHUNK):
-            digest.update(chunk)
-
-    return digest.hexdigest()
 
 
 def _plain(dataset_id: str) -> str:

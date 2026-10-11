@@ -37,7 +37,7 @@ def _dataset(tmp_path: Path) -> CanonicalDataset:
     bars += [
         SyntheticBar("bbb", session, Decimal(50 + index))
         for index, session in enumerate(SESSIONS)
-        if index != 3
+        if index >= 2 and index != 3
     ]
     write_dataset(
         tmp_path,

@@ -44,6 +44,7 @@ class SyntheticDataset:
     bars: list[SyntheticBar] = field(default_factory=list)
     spells: Mapping[str, Sequence[tuple[date, date | None]]] | None = None
     instruments: Sequence[str] = ()
+    adjusted: bool = True
 
 
 def weekdays(start: date, count: int) -> list[date]:
@@ -97,7 +98,7 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
         "schema_version": 2,
         "content_hash": "",
         "known_as_of_utc": None,
-        "adjusted": True,
+        "adjusted": spec.adjusted,
         "announcement_policy": "strict",
         "universe_code": "TEST30",
         "universe_as_of": None if spec.spells is not None else min(sessions).isoformat(),

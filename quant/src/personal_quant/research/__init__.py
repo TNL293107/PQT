@@ -1,9 +1,11 @@
-"""Exploratory research.
+"""The research layer's contracts and the machinery around them (U6).
 
-Ad-hoc analysis, hypothesis exploration and the notebook-facing helpers that
-support it. Code here is allowed to be experimental; anything that becomes
-load-bearing moves into :mod:`personal_quant.factors` or
-:mod:`personal_quant.strategies`.
-
-Phase 0 status: empty. Populated from Phase 8 — Quant Research Framework.
+* :mod:`~personal_quant.research.protocols` — the twelve research protocols.
+* :mod:`~personal_quant.research.manifest` and
+  :mod:`~personal_quant.research.datasets` — canonical datasets, verified
+  against their manifest before they are trusted.
+* :mod:`~personal_quant.research.history` — the point-in-time harness every
+  engine is evaluated through.
+* :mod:`~personal_quant.research.momentum_slice` — the vertical slice that
+  proves the layer end to end.
 """

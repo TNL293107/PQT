@@ -3,8 +3,13 @@
 The Python side of the terminal: research, factors, strategies, backtesting
 and performance analytics.
 
-**Phase 0 status:** environment and tooling only. There is no financial
-computation in this package yet.
+**Status:** the U6 research layer — PQT's research protocols, verified dataset
+loading, the point-in-time harness, and one vertical slice (12-1 momentum →
+rank → deciles → returns → IC/IR). Run the slice over an export:
+
+```bash
+python -m personal_quant.research.momentum_slice --root ../data/tmp/datasets --dataset <id>
+```
 
 ## Layout
 
@@ -13,11 +18,11 @@ quant/
 ├── pyproject.toml              packaging, pytest, ruff and mypy configuration
 ├── src/personal_quant/
 │   ├── environment.py          reads the shared POSTGRES_* configuration
-│   ├── research/               exploratory analysis            (Phase 7)
-│   ├── factors/                factor definitions              (Phase 7)
-│   ├── strategies/             signal generation               (Phase 7)
-│   ├── backtesting/            historical simulation           (Phase 8)
-│   └── analytics/              performance and attribution     (Phase 8)
+│   ├── research/               protocols, datasets, point-in-time harness, the slice (U6)
+│   ├── factors/                factor definitions — momentum (U6)
+│   ├── strategies/             signals and portfolio construction (U6)
+│   ├── backtesting/            close-to-close returns (U6); the backtester (Phase 8)
+│   └── analytics/              information coefficient (U6); performance (Phase 8)
 └── tests/
 ```
 

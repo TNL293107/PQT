@@ -1,9 +1,10 @@
 # Quant Research Architecture
 
-**Status: DESIGNED.** Nothing in this document is implemented. The `quant/`
-package currently contains packaging, tooling and a configuration reader; it has
-no financial code and no numerical dependencies. This describes what the
-Research Foundation Upgrade builds there, in Gate B.
+**Status.** The U6 sections — the protocols, the point-in-time harness and the
+vertical slice — are `COMPLETE` as of 11 October 2026. Everything else here
+(the boundary, the experiment store, reproduction) is **DESIGNED** and belongs
+to U7–U10. This describes what the Research Foundation Upgrade builds in the
+`quant/` package, in Gate B.
 
 Roadmap and workstream numbering: [`../roadmap/pqt-roadmap-v2.md`](../roadmap/pqt-roadmap-v2.md).
 
@@ -44,6 +45,18 @@ should not have to inherit from PQT to satisfy PQT.
 | `ResearchValidator` | Walk-forward, out-of-sample, perturbation, overfitting statistics |
 | `ExperimentTracker` | Record and retrieve reproducible runs |
 
+All twelve are declared in `personal_quant.research.protocols`. The ones on the
+vertical slice have implementations — `DataProvider` and `Dataset`
+(`research.datasets`), `FactorEngine` (`factors.momentum`), `SignalEngine`
+(`strategies.signals`) and `PortfolioConstructor` (`strategies.portfolio`). The
+rest are shapes decided once, implemented by the workstreams that own them:
+`Backtester` and `ResearchValidator` by Phase 8, `ExperimentTracker` by U9.
+
+A loaded dataset is verified before it is trusted: every file's size and
+SHA-256, and the manifest's `content_hash`, recomputed exactly as the .NET
+exporter renders it. The Python and .NET hashes agree on every manifest the
+backend has written.
+
 ### Every data-touching protocol declares a lookback and an as-of
 
 This is the rule that makes look-ahead **detectable** rather than merely
@@ -58,6 +71,15 @@ checked, and an unchecked feature is where look-ahead lives.
 A test in the suite plants a deliberately over-reaching feature and asserts the
 harness catches it. A safeguard that has never been shown to fire is not known
 to work.
+
+Implemented in `personal_quant.research.history`. An engine never reads a
+dataset; it gets a `PointInTimeHistory` cut at the as-of session and no deeper
+than its lookback, and `evaluate` checks its output. Three violations raise: a
+session after the as-of (`LookAheadError`), a read deeper than declared
+(`LookbackExceededError`), and a score for an instrument that was not a member
+on the as-of (`NonMemberScoredError`) — survivorship, caught at the same
+boundary. Lookbacks count the dataset's market sessions, so a gap in one series
+reads as missing rather than pulling an older bar forward.
 
 ---
 
@@ -212,8 +234,14 @@ is never exercised does not work; it is only believed to.
 
 ## Dependencies
 
-Added in U6. Chosen for being numerical primitives with no reasonable
-substitute, not for breadth.
+Chosen for being numerical primitives with no reasonable substitute, not for
+breadth — and added when a computation needs them, not before.
+
+**U6 added one: `pyarrow`**, because nothing else reads the dataset's Parquet.
+The vertical slice's arithmetic — a 12-1 return, a rank, a quantile mean, a
+rank correlation — runs on the standard library over a few dozen names, with
+prices kept `Decimal` as the dataset stores them. The table below is where the
+rest is expected to come from, starting with Phase 7.
 
 | Package | Role |
 | --- | --- |
@@ -248,3 +276,19 @@ Not a library of factors. One factor, end to end, through every protocol, with
 its lookback declared and its as-of respected. A framework with nothing running
 through it is untested scaffolding, and the scope discipline here is what keeps
 Gate B from becoming Phase 7 early.
+
+**Run on 11 October 2026** over the point-in-time VN30 export
+`3856e4ce77841c1a` v3 (`python -m personal_quant.research.momentum_slice`):
+twelve monthly rebalances from August 2025 to August 2026, 28 of 30 members
+scored each time, mean IC +0.069, IR +0.186, t +0.64, top-minus-bottom decile
+positive in 8 of 12 periods. That is no evidence for or against momentum in
+Vietnam — twelve periods over thirty names cannot carry it — and it was not the
+point. The point is that a verified dataset went in, every factor value passed
+through the point-in-time harness, and the result names the build, factor
+version and parameters that produced it.
+
+What the run exposed: a point-in-time export holds bars only inside each
+spell, so a name admitted to the index has no history before its admission and
+cannot be scored until a full lookback of membership has passed — two names
+per rebalance here. Fixing it belongs to the export (a warm-up window of bars
+before the membership window), not to the factor.

@@ -27,7 +27,7 @@ def _spec(version: int = 1) -> SyntheticDataset:
             SyntheticBar("aaa", session, Decimal("100.5") + index)
             for index, session in enumerate(SESSIONS)
         ]
-        + [SyntheticBar("bbb", session, Decimal("20.125")) for session in SESSIONS[2:]],
+        + [SyntheticBar("bbb", session, Decimal("20.125")) for session in SESSIONS[2:4]],
         spells={"aaa": [(SESSIONS[0], None)], "bbb": [(SESSIONS[2], SESSIONS[4])]},
     )
 
@@ -114,6 +114,47 @@ def test_a_file_name_that_leaves_the_build_directory_is_refused(tmp_path: Path) 
 def test_a_dataset_id_that_is_not_a_plain_name_is_refused(tmp_path: Path, dataset_id: str) -> None:
     with pytest.raises(ValueError, match="dataset id"):
         LocalDatasetProvider(tmp_path).open(dataset_id)
+
+
+def test_a_duplicated_row_is_refused(tmp_path: Path) -> None:
+    spec = _spec()
+    spec.bars.append(SyntheticBar("aaa", SESSIONS[1], Decimal(1)))
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="two rows"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_a_row_outside_its_instruments_membership_is_refused(tmp_path: Path) -> None:
+    # bbb's spell ends, exclusively, on the fifth session. The exporter never
+    # writes a row there; a build that has one was not written by it.
+    spec = _spec()
+    spec.bars.append(SyntheticBar("bbb", SESSIONS[4], Decimal(1)))
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="outside its membership"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_a_row_for_an_instrument_the_manifest_does_not_list_is_refused(tmp_path: Path) -> None:
+    spec = _spec()
+    spec.instruments = ["aaa"]
+    spec.spells = {"aaa": [(SESSIONS[0], None)]}
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(DatasetIntegrityError, match="does not list"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+
+def test_a_row_count_that_disagrees_with_the_manifest_is_refused(tmp_path: Path) -> None:
+    build = write_dataset(tmp_path, _spec())
+    manifest = json.loads((build / "manifest.json").read_text(encoding="utf-8"))
+    manifest["files"][0]["row_count"] += 1
+    manifest["content_hash"] = content_hash_of(DatasetManifest.from_json(manifest))
+    (build / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(DatasetIntegrityError, match="rows"):
+        LocalDatasetProvider(tmp_path).open("0123456789abcdef")
 
 
 def test_a_dataset_with_no_build_is_reported_as_missing(tmp_path: Path) -> None:

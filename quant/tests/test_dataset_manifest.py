@@ -31,7 +31,16 @@ def _raw(name: str) -> dict[str, Any]:
     return raw
 
 
-@pytest.mark.parametrize("name", ["v1-as-of.json", "v2-point-in-time.json"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "v1-as-of.json",
+        "v2-point-in-time.json",
+        # Exported with --known-as-of across the August 2026 review: a non-null
+        # instant, unannounced spells and closed ones, as .NET rendered them.
+        "v2-known-as-of.json",
+    ],
+)
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:
     manifest = DatasetManifest.from_json(_raw(name))
 
@@ -87,6 +96,15 @@ def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
     raw["schema_version"] = 3
 
     with pytest.raises(UnsupportedManifestError, match="schema version 3"):
+        DatasetManifest.from_json(raw)
+
+
+def test_a_boolean_written_as_a_string_is_refused() -> None:
+    # bool("false") is True; reading it that way would relabel a raw build.
+    raw = _raw("v2-point-in-time.json")
+    raw["adjusted"] = "false"
+
+    with pytest.raises(UnsupportedManifestError, match="adjusted"):
         DatasetManifest.from_json(raw)
 
 
