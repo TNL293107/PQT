@@ -165,6 +165,51 @@ describe("Console", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  it("answers GP with a chart that keeps focus when clicked", async () => {
+    // The console sends every click to its prompt. A click on the chart is a
+    // request to read it, and the arrow keys only work while it has focus.
+    const bar = (day: string, close: number) => ({
+      openedAtUtc: `${day}T02:00:00Z`,
+      open: close,
+      high: close,
+      low: close,
+      close,
+      volume: 100,
+      turnover: null,
+      source: "test",
+      revision: 1,
+      priceFactor: 1,
+      shareFactor: 1,
+    });
+    const user = userEvent.setup();
+    const services = {
+      ...stubServices(),
+      bars: vi.fn(async () => ({
+        instrumentId: FPT.instrumentId,
+        interval: "D1",
+        adjusted: false,
+        adjustedAtSource: false,
+        adjustedBars: 0,
+        count: 2,
+        limit: 40,
+        knownAsOf: null,
+        announcementPolicy: "permissive" as const,
+        adjustmentsApplied: 0,
+        adjustmentsWithheld: 0,
+        bars: [bar("2016-05-26", 100), bar("2016-05-27", 110)],
+      })),
+    } as unknown as ConsoleServices;
+
+    render(<Console services={services} />);
+
+    await user.type(terminal(), "FPT GP --line{Enter}");
+
+    const chart = await screen.findByRole("img", { name: /^FPT D1 raw line chart/ });
+    await user.click(chart);
+
+    expect(chart).toHaveFocus();
+  });
+
   it("submits nothing on an empty line", async () => {
     const user = userEvent.setup();
     const services = stubServices();

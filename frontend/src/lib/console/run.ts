@@ -228,7 +228,10 @@ async function graph(
     signal,
   );
 
-  return { kind: "series", instrument, series, knownAsOf };
+  // A presentation choice only: the same bars are fetched either way.
+  const style = "line" in options ? ("line" as const) : ("candles" as const);
+
+  return { kind: "series", instrument, series, knownAsOf, style };
 }
 
 async function quality(

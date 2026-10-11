@@ -6,6 +6,7 @@ import type {
   IngestionRun,
 } from "../../types/marketData";
 import type { SystemHealth } from "../../types/health";
+import type { ChartStyle } from "../chart/series";
 
 /**
  * What a command produced.
@@ -34,6 +35,8 @@ export type ConsoleRecord =
       readonly series: BarSeries;
       /** The as-of the caller asked for, echoed so the answer states its cut. */
       readonly knownAsOf: string | null;
+      /** How the price pane is drawn. Candlesticks when absent. */
+      readonly style?: ChartStyle;
     }
   | {
       readonly kind: "quality";

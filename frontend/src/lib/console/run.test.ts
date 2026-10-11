@@ -284,6 +284,23 @@ describe("runEntry — GP", () => {
       undefined,
     );
   });
+
+  it("draws candlesticks unless a line is asked for", async () => {
+    const record = (await runEntry("FPT GP", stubServices())).record;
+
+    expect(record).toMatchObject({ kind: "series", style: "candles" });
+  });
+
+  it("draws a close line on --line without changing what is fetched", async () => {
+    // A presentation choice. The same bars back both drawings, so the read
+    // must not differ by so much as a parameter.
+    const services = stubServices();
+
+    const record = (await runEntry("FPT GP --line --limit 40", services)).record;
+
+    expect(record).toMatchObject({ kind: "series", style: "line" });
+    expect(services.bars).toHaveBeenCalledWith(FPT.instrumentId, { limit: 40 }, undefined);
+  });
 });
 
 describe("runEntry — QLTY and ING", () => {

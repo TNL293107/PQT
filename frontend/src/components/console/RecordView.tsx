@@ -2,7 +2,7 @@ import type { Instrument } from "../../types/instrument";
 import type { Bar, DataQualityIssue, IngestionRun } from "../../types/marketData";
 import { FUNCTIONS, VERBS } from "../../lib/console/entry";
 import type { ConsoleRecord } from "../../lib/console/records";
-import { Sparkline } from "./Sparkline";
+import { PriceChart } from "./PriceChart";
 
 /** Renders whatever a command produced. */
 export function RecordView({ record }: { readonly record: ConsoleRecord }) {
@@ -194,7 +194,7 @@ function DescriptionView({ instrument }: { readonly instrument: Instrument }) {
 }
 
 function SeriesView({ record }: { readonly record: Extract<ConsoleRecord, { kind: "series" }> }) {
-  const { series, instrument, knownAsOf } = record;
+  const { series, instrument, knownAsOf, style } = record;
 
   if (series.bars.length === 0) {
     return (
@@ -230,17 +230,12 @@ function SeriesView({ record }: { readonly record: Extract<ConsoleRecord, { kind
         </span>
       </div>
 
-      <Sparkline bars={series.bars} label={`${instrument.ticker} close`} />
-
-      <div className="scale">
-        <span>{first.openedAtUtc.slice(0, 10)}</span>
-        <span>{last.openedAtUtc.slice(0, 10)}</span>
-      </div>
-
-      <p className="out__line out__line--dim">
-        {describeAdjustment(series.adjusted, series.adjustedAtSource, series.adjustedBars)}
-        {knownAsOf ? ` Point-in-time as of ${knownAsOf}.` : ""}
-      </p>
+      <PriceChart
+        instrument={instrument}
+        series={series}
+        knownAsOf={knownAsOf}
+        style={style ?? "candles"}
+      />
 
       {series.adjustmentsWithheld > 0 ? (
         <p className="out__line out__line--warn">
@@ -285,22 +280,6 @@ function SeriesView({ record }: { readonly record: Extract<ConsoleRecord, { kind
       </details>
     </div>
   );
-}
-
-/**
- * Says who did the adjusting, which is not the same question as whether the
- * series is adjusted.
- */
-function describeAdjustment(adjusted: boolean, atSource: boolean, applied: number): string {
-  if (!adjusted) {
-    return "Raw — exactly what the market printed, with no factor applied.";
-  }
-
-  if (atSource) {
-    return "Adjusted at source. This system applied nothing: the feed had already rescaled it, and adjusting again would be wrong by the product of every factor since.";
-  }
-
-  return `Adjusted on read — ${applied} bar${applied === 1 ? "" : "s"} rescaled from recorded corporate actions.`;
 }
 
 function QualityView({ record }: { readonly record: Extract<ConsoleRecord, { kind: "quality" }> }) {

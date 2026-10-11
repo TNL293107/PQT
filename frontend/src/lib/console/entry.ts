@@ -39,8 +39,8 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   },
   {
     code: "GP",
-    summary: "Price graph and the stored series behind it",
-    options: ["interval", "limit", "raw", "adjusted", "as-of", "strict"],
+    summary: "Price chart — candles, or a close line with --line — and the series behind it",
+    options: ["interval", "limit", "raw", "adjusted", "as-of", "strict", "line"],
   },
   {
     code: "QLTY",

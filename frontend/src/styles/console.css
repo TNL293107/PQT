@@ -190,7 +190,7 @@
   width: 12rem;
 }
 
-/* --- Quote line and chart ----------------------------------------------- */
+/* --- Quote line --------------------------------------------------------- */
 
 .quote {
   display: flex;
@@ -236,51 +236,204 @@
   color: var(--text-muted);
 }
 
-.spark {
-  display: block;
-  width: 100%;
-  max-width: 52rem;
-  height: 7.5rem;
+/* --- Price chart ---------------------------------------------------------
+ * Up and down are carried by shape as well as colour: a hollow body closed
+ * above its open, a filled one closed below. The colours are the state tokens
+ * every other direction in the console uses, so green means the same thing
+ * here as it does in the quote line above.
+ */
+
+.chart {
+  margin: 0 0 var(--space-2);
+  max-width: 78rem;
 }
 
-.spark__line {
-  fill: none;
+.chart__readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-3);
+  /* Two lines reserved, so a readout that wraps on a narrow panel does not
+     push the chart down as the pointer moves across it. */
+  min-height: calc(2 * 1.55em);
+  margin: 0 0 var(--space-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.chart__day {
+  color: var(--text-primary);
+}
+
+.chart__key {
+  color: var(--text-muted);
+}
+
+.chart__chg.is-flat {
+  color: var(--text-muted);
+}
+
+.chart__flag {
+  color: var(--state-degraded);
+}
+
+.chart__frame {
+  width: 100%;
+  /* Matches CHART_HEIGHT in lib/chart/layout.ts. The box is sized before the
+     width is measured, so the transcript never reflows when it is. */
+  height: 272px;
+}
+
+.chart__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.chart__svg:focus {
+  outline: none;
+}
+
+.chart__svg:focus-visible {
+  outline: 1px solid var(--accent-dim);
+  outline-offset: 2px;
+}
+
+.chart__grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.chart__rule {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.chart__tick {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart__tick--dim {
+  fill: var(--text-muted);
+  opacity: 0.7;
+}
+
+.chart__wick {
+  stroke-width: 1;
+}
+
+.chart__body {
+  stroke-width: 1;
+}
+
+.chart__candle--up .chart__wick,
+.chart__candle--up .chart__body {
   stroke: var(--state-online);
+}
+
+.chart__candle--up .chart__body {
+  /* Hollow: the ground shows through. */
+  fill: var(--surface-void);
+}
+
+.chart__candle--down .chart__wick,
+.chart__candle--down .chart__body {
+  stroke: var(--state-offline);
+  fill: var(--state-offline);
+}
+
+.chart__candle--flat .chart__wick,
+.chart__candle--flat .chart__body {
+  stroke: var(--text-secondary);
+  fill: var(--text-secondary);
+}
+
+.chart__line {
+  fill: none;
+  stroke: var(--accent);
   stroke-width: 1.5;
   stroke-linejoin: round;
   stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
 }
 
-.spark--down .spark__line {
-  stroke: var(--state-offline);
+.chart__dot {
+  fill: var(--accent);
 }
 
-.spark__stop--top {
-  stop-color: var(--state-online);
-  stop-opacity: 0.22;
+.chart__vol {
+  stroke-width: 1;
 }
 
-.spark__stop--bottom {
-  stop-color: var(--state-online);
-  stop-opacity: 0;
+.chart__vol--up {
+  fill: var(--state-online-wash);
+  stroke: var(--state-online);
+  stroke-opacity: 0.6;
 }
 
-.spark--down .spark__stop--top {
-  stop-color: var(--state-offline);
+.chart__vol--down {
+  fill: var(--state-offline);
+  fill-opacity: 0.55;
+  stroke: none;
 }
 
-.spark--down .spark__stop--bottom {
-  stop-color: var(--state-offline);
+.chart__vol--flat {
+  fill: var(--text-muted);
+  fill-opacity: 0.5;
+  stroke: none;
 }
 
-.scale {
-  display: flex;
-  justify-content: space-between;
-  max-width: 52rem;
-  color: var(--text-muted);
+.chart__exdate-rule {
+  stroke: var(--state-degraded);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  stroke-opacity: 0.55;
+}
+
+.chart__exdate-mark {
+  fill: var(--state-degraded);
+}
+
+.chart__cross {
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.chart__tag {
+  fill: var(--surface-overlay);
+  stroke: var(--border-strong);
+}
+
+.chart__tag-text {
+  fill: var(--text-primary);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  margin-bottom: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+}
+
+.chart__what {
+  color: var(--text-secondary);
+}
+
+.chart__keys {
+  font-size: var(--text-xs);
 }
 
 /* --- Scores ------------------------------------------------------------- */
