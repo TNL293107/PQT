@@ -1,4 +1,6 @@
 .venv
+.venv-*
+mlruns
 .mypy_cache
 .pytest_cache
 .ruff_cache

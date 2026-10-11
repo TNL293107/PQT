@@ -99,6 +99,12 @@ __pycache__/
 *.egg
 .eggs/
 .venv/
+# A second interpreter beside the first, e.g. quant/.venv-qlib for the
+# research extra, which needs Python 3.12.
+.venv-*/
+# MLflow's default store, should anything Qlib-related ever run outside the
+# adapter's scratch directory.
+mlruns/
 venv/
 env/
 ENV/
