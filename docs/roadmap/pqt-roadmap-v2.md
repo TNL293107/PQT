@@ -571,10 +571,12 @@ verified. Tests hold it to the Python loader row for row and value for value.
 `duckdb` is the package's second runtime dependency.
 
 **Gate B's criterion for U7 is met, 11 October 2026**: the analytical tier is
-working and Redis has its job (the ingestion series lock). Two rows of the
-table remain outside that criterion: the raw store's payload-store seam has not
-been extracted yet — raw batches are still written straight to PostgreSQL —
-and the experiment store's tables are U9's.
+working and Redis has its job (the ingestion series lock). The experiment
+store is U9's, and done. The raw store's payload-store seam is `DEFERRED`:
+raw batches stay in PostgreSQL, where a few kilobytes per call is nothing,
+and a seam with one implementation would be abstraction ahead of need.
+Trigger to revisit: raw payloads past roughly 10 GB, intraday ingestion, or a
+second store actually wanted (object storage for archive).
 
 ---
 
@@ -592,7 +594,7 @@ an adapter and must be removable without redesigning PQT.
 
 ---
 
-### U9 — Experiment Tracking & Reproducibility · Gate B
+### U9 — Experiment Tracking & Reproducibility · Gate B ✅
 
 **Objective.** *Same dataset version + same code commit + same configuration ⇒
 identical result.*
@@ -606,6 +608,21 @@ metrics, artifacts and timestamps — and **`trial_count`**.
 `trial_count` is not bookkeeping. It is a statistical input: the Deflated
 Sharpe Ratio and PBO both require the number of configurations tried, and only
 the experiment log can supply it. Phase 8 depends on this column existing.
+
+**Complete, 11 October 2026.** `research.experiments`, `runs`, `run_metrics`
+and `run_artifacts` hold every run the worker finishes, written in the same
+transaction that completes its job. A run records the dataset build it read
+(never "latest"), its content hash, the factor version, the parameters and
+their canonical hash, the code commit the worker image was built from, the
+engine and its version, and `trial_index` / `trial_count`, assigned under a
+lock on the experiment so concurrent workers cannot share one. `pqt research
+reproduce <run>` re-executes a run from its record and diffs every metric
+exactly; it is refused when the dataset version is gone or hashes differently,
+or the factor version is not the one the code computes. Proven on the local
+stack: two runs counted 1 of 1 and 2 of 2, and the first reproduced
+*identical*, on the same commit. Windows (train/valid/test), costs, slippage
+and seeds are columns waiting for the first strategy that has them — the
+momentum slice has none.
 
 ---
 

@@ -168,6 +168,11 @@ irrelevant — research jobs run for minutes.
 
 ## Experiment store (U9)
 
+**Implemented 11 October 2026**, as below, with `job_id` linking a run to the
+job that produced it and `reproduces_run_id` marking a reproduction (which
+carries no trial index and is not counted). `reproduce(run_id)` is the
+`reproduce_run` job kind, queued with `pqt research reproduce`.
+
 ```
 research.experiments   id, name, hypothesis, created_at
 
