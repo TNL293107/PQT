@@ -204,4 +204,20 @@ internal static partial class InfrastructureLog
         int announcementsRecorded,
         int rejected,
         int openFindings);
+
+    [LoggerMessage(
+        EventId = 1140,
+        Level = LogLevel.Warning,
+        Message = "The ingestion lock on {Key} could not be released. It expires on its own within {TtlSeconds}s; until then every pass over that series is skipped as busy.")]
+    public static partial void SeriesLockReleaseFailed(
+        ILogger logger,
+        Exception exception,
+        string key,
+        double ttlSeconds);
+
+    [LoggerMessage(
+        EventId = 1141,
+        Level = LogLevel.Warning,
+        Message = "The ingestion lock on {Key} had already passed to another owner or expired when this pass released it. The pass outlived the lock's {TtlSeconds}s expiry; raise MarketData:IngestionLockTtlSeconds.")]
+    public static partial void SeriesLockLost(ILogger logger, string key, double ttlSeconds);
 }

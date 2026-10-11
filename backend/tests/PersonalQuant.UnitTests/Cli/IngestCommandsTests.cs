@@ -214,6 +214,27 @@ public sealed class IngestCommandsTests
     }
 
     [Fact]
+    public async Task A_series_another_pass_holds_mid_backfill_is_refused_not_completed()
+    {
+        // The busy skip fetched nothing, exactly like the skip that ends a
+        // backfill. Read as that, the command would report the instrument
+        // complete while the scheduled pass was still writing it, and the
+        // operator would have no reason to re-run.
+        var harness = new Harness();
+        harness.Instruments.Add("FPT");
+
+        harness.Ingestion
+            .Then(instruction => Succeeded(instruction, stored: 10))
+            .Then(instruction => Skipped(instruction, SeriesLockReasons.Busy));
+
+        var code = await harness.RunAsync(
+            "ingest", "backfill", "--instrument", "FPT", "--from", "2021-12-27");
+
+        Assert.Equal(ExitCode.Refused, code);
+        Assert.Contains("in progress", harness.Problems, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_window_the_source_returned_nothing_for_does_not_end_the_backfill()
     {
         // A long suspension is a window with no bars in it, not the end of the

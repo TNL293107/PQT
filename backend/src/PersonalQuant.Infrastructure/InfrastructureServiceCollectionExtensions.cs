@@ -128,8 +128,20 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHostedService<ReferenceDataSeedHostedService>();
     }
 
-    private static void AddRedis(IServiceCollection services) =>
+    /// <summary>
+    /// Registers the Redis connection and the job it does.
+    /// </summary>
+    /// <remarks>
+    /// The series lock is why Redis is in the readiness gate. Ingestion fails
+    /// closed without it, so a deployment that reports ready with Redis down
+    /// would report ready while every pass it ran was refused.
+    /// </remarks>
+    /// <param name="services">The service collection to add to.</param>
+    private static void AddRedis(IServiceCollection services)
+    {
         services.AddSingleton<IRedisConnectionProvider, RedisConnectionProvider>();
+        services.AddSingleton<ISeriesLock, RedisSeriesLock>();
+    }
 
     private static void AddHealthChecks(IServiceCollection services) =>
         services.AddHealthChecks()

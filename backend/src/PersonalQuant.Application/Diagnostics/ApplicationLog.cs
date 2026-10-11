@@ -103,6 +103,27 @@ internal static partial class ApplicationLog
         string reason);
 
     [LoggerMessage(
+        EventId = 3104,
+        Level = LogLevel.Information,
+        Message = "marketdata.ingest {Source}/{Ticker} {Interval} skipped: another pass holds the series.")]
+    public static partial void MarketDataSeriesBusy(
+        ILogger logger,
+        string source,
+        string ticker,
+        BarInterval interval);
+
+    [LoggerMessage(
+        EventId = 3105,
+        Level = LogLevel.Error,
+        Message = "marketdata.ingest {Source}/{Ticker} {Interval} did not run: the series lock store could not be reached.")]
+    public static partial void MarketDataSeriesLockUnavailable(
+        ILogger logger,
+        Exception exception,
+        string source,
+        string ticker,
+        BarInterval interval);
+
+    [LoggerMessage(
         EventId = 3010,
         Level = LogLevel.Information,
         Message = "instrument.import {Source} read {RowsRead} row(s): created {Created}, matched {Matched}, enriched {Enriched}, rejected {Rejected}.")]

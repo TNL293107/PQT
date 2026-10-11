@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using PersonalQuant.Domain.Common;
 using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Infrastructure.Configuration;
@@ -140,5 +141,53 @@ public sealed class MarketDataOptionsTests
         };
 
         Assert.Throws<DomainValidationException>(() => options.BuildPolicy());
+    }
+
+    [Fact]
+    public void The_default_lock_expiry_is_ten_minutes_and_outlasts_the_longest_pass()
+    {
+        // A pass is one provider call: three attempts of thirty seconds with
+        // two backoffs of at most thirty is two and a half minutes.
+        var options = new MarketDataOptions();
+
+        Assert.Equal(TimeSpan.FromMinutes(10), options.BuildIngestionLockTtl());
+        Assert.Equal(TimeSpan.FromSeconds(150), options.LongestFetch());
+        Assert.Empty(Validate(options));
+    }
+
+    [Theory]
+    [InlineData(150)]
+    [InlineData(60)]
+    public void A_lock_expiry_the_retry_policy_can_outlive_is_refused(int ttlSeconds)
+    {
+        // Otherwise the lock expires while the pass is still writing, and a
+        // second pass over the same series is let in beside it.
+        var options = new MarketDataOptions { IngestionLockTtlSeconds = ttlSeconds };
+
+        var failure = Assert.Single(Validate(options));
+
+        Assert.Contains(nameof(MarketDataOptions.IngestionLockTtlSeconds), failure.MemberNames);
+    }
+
+    [Fact]
+    public void Raising_the_provider_timeout_raises_the_expiry_it_needs()
+    {
+        // Ten attempts of five minutes is fifty minutes before any backoff;
+        // the ten-minute default no longer covers that and has to be raised.
+        var options = new MarketDataOptions { MaxAttempts = 10, ProviderTimeoutSeconds = 300 };
+
+        Assert.Single(Validate(options));
+
+        options.IngestionLockTtlSeconds = 4 * 3_600;
+
+        Assert.Empty(Validate(options));
+    }
+
+    private static List<ValidationResult> Validate(MarketDataOptions options)
+    {
+        var results = new List<ValidationResult>();
+        Validator.TryValidateObject(options, new ValidationContext(options), results, validateAllProperties: true);
+
+        return results;
     }
 }

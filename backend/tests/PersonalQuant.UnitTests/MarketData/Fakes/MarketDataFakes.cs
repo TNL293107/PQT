@@ -401,3 +401,81 @@ internal sealed class NoOpQualityInspector : IBarQualityInspector
         return Task.FromResult(new QualityInspection(pending.Count, 0, [], null));
     }
 }
+
+/// <summary>
+/// A series lock held in memory, which can be told the series is taken or the
+/// store is down.
+/// </summary>
+/// <remarks>
+/// Records what was taken and what was given back, because the property under
+/// test is that every pass which takes a series releases it — on success, on a
+/// recorded failure, on an exception and on cancellation alike. A lease that
+/// leaked would keep every later pass off the series until it expired.
+/// </remarks>
+internal sealed class FakeSeriesLock : ISeriesLock
+{
+    private readonly HashSet<(InstrumentId, BarInterval)> _held = [];
+
+    /// <summary>Gets or sets a value indicating whether the store answers.</summary>
+    public bool Reachable { get; set; } = true;
+
+    /// <summary>Gets how many leases were granted.</summary>
+    public int Acquired { get; private set; }
+
+    /// <summary>Gets how many granted leases were given back.</summary>
+    public int Released { get; private set; }
+
+    /// <summary>Gets how many attempts found the series taken.</summary>
+    public int Refused { get; private set; }
+
+    /// <summary>Marks a series as held by somebody else.</summary>
+    public void HoldElsewhere(InstrumentId instrumentId, BarInterval interval) =>
+        _held.Add((instrumentId, interval));
+
+    /// <summary>Reports whether a series is currently held.</summary>
+    public bool IsHeld(InstrumentId instrumentId, BarInterval interval) =>
+        _held.Contains((instrumentId, interval));
+
+    public Task<ISeriesLease?> TryAcquireAsync(
+        InstrumentId instrumentId,
+        BarInterval interval,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!Reachable)
+        {
+            throw new SeriesLockUnavailableException("The ingestion lock store could not be reached.");
+        }
+
+        if (!_held.Add((instrumentId, interval)))
+        {
+            Refused++;
+            return Task.FromResult<ISeriesLease?>(null);
+        }
+
+        Acquired++;
+
+        return Task.FromResult<ISeriesLease?>(new Lease(this, instrumentId, interval));
+    }
+
+    private sealed class Lease(
+        FakeSeriesLock owner,
+        InstrumentId instrumentId,
+        BarInterval interval) : ISeriesLease
+    {
+        private bool _released;
+
+        public ValueTask DisposeAsync()
+        {
+            if (!_released)
+            {
+                _released = true;
+                owner._held.Remove((instrumentId, interval));
+                owner.Released++;
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+}

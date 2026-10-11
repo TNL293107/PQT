@@ -127,6 +127,43 @@ public sealed class IngestBackfillTests(DependencyContainerFixture containers)
         Assert.Contains("IBGA: 4 passes", scope.Result, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_series_held_in_redis_is_not_ingested_until_it_is_released()
+    {
+        // The scheduled host and the CLI, through the real composition root and
+        // the real Redis: a pass over a series another process holds reaches
+        // neither the source nor the bars, and records why.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        var source = new WeekdaySource();
+        await using var scope = await CreateScopeAsync(source);
+        var instrumentId = await AddInstrumentAsync(scope, "IBH", "IBHA");
+
+        var elsewhere = await scope.SeriesLock.TryAcquireAsync(
+            instrumentId, BarInterval.OneDay, TestContext.Current.CancellationToken);
+        Assert.NotNull(elsewhere);
+
+        // Act
+        var held = await scope.RunAsync(
+            "ingest", "run", "--instrument", "IBHA", "--source", WeekdaySource.Code,
+            "--interval", "1d", "--from", "2025-03-03", "--to", "2025-03-10");
+
+        await elsewhere.DisposeAsync();
+
+        var released = await scope.RunAsync(
+            "ingest", "run", "--instrument", "IBHA", "--source", WeekdaySource.Code,
+            "--interval", "1d", "--from", "2025-03-03", "--to", "2025-03-10");
+
+        // Assert
+        Assert.Equal(ExitCode.Refused, held);
+        Assert.Contains("in progress", scope.Problems, StringComparison.Ordinal);
+        Assert.Equal(ExitCode.Ok, released);
+        Assert.Single(source.Calls);
+        Assert.Equal(
+            Weekdays(new DateOnly(2025, 3, 3), new DateOnly(2025, 3, 10)),
+            await ReadDatesAsync(scope, instrumentId));
+    }
+
     private static List<DateOnly> Weekdays(DateOnly first, DateOnly last)
     {
         var days = new List<DateOnly>();
@@ -281,6 +318,7 @@ public sealed class IngestBackfillTests(DependencyContainerFixture containers)
             Exchanges = services.GetRequiredService<IExchangeRepository>();
             Instruments = services.GetRequiredService<IInstrumentRepository>();
             MarketData = services.GetRequiredService<IMarketDataQueryService>();
+            SeriesLock = services.GetRequiredService<ISeriesLock>();
 
             Commands = new IngestCommands(
                 new Lazy<IMarketDataIngestionService>(services.GetRequiredService<IMarketDataIngestionService>),
@@ -296,6 +334,8 @@ public sealed class IngestBackfillTests(DependencyContainerFixture containers)
         public IInstrumentRepository Instruments { get; }
 
         public IMarketDataQueryService MarketData { get; }
+
+        public ISeriesLock SeriesLock { get; }
 
         public string Result => _result.ToString();
 

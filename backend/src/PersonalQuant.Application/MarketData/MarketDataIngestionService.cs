@@ -30,6 +30,14 @@ namespace PersonalQuant.Application.MarketData;
 /// table's purpose is to explain gaps, and it can only do that if a failure
 /// leaves a row.
 /// </para>
+/// <para>
+/// A pass holds its series — the instrument at one resolution — for its whole
+/// length, through <see cref="ISeriesLock"/>. The scheduled host and the
+/// operator CLI are separate processes calling this same method, and two passes
+/// over one series would read one checkpoint, fetch one range and race to
+/// commit the same bars. A pass that finds the series held is skipped and says
+/// so; one that cannot reach the lock store does not proceed at all.
+/// </para>
 /// </remarks>
 /// <param name="instruments">Resolves the instrument to a ticker and venue.</param>
 /// <param name="registry">The registered sources.</param>
@@ -39,6 +47,7 @@ namespace PersonalQuant.Application.MarketData;
 /// <param name="bars">The canonical series.</param>
 /// <param name="journal">Raw payloads, run history and checkpoints.</param>
 /// <param name="unitOfWork">Commits the run.</param>
+/// <param name="seriesLock">Excludes a concurrent pass over the same series.</param>
 /// <param name="policy">Backfill and range settings.</param>
 /// <param name="clock">Supplies the current instant.</param>
 /// <param name="logger">Logger for ingestion telemetry.</param>
@@ -51,6 +60,7 @@ internal sealed class MarketDataIngestionService(
     IBarRepository bars,
     IIngestionJournal journal,
     IUnitOfWork unitOfWork,
+    ISeriesLock seriesLock,
     IngestionPolicy policy,
     IClock clock,
     ILogger<MarketDataIngestionService> logger) : IMarketDataIngestionService
@@ -106,6 +116,81 @@ internal sealed class MarketDataIngestionService(
                 cancellationToken).ConfigureAwait(false);
         }
 
+        // Taken before anything the series holds is read, not just before the
+        // fetch. The adjustment-convention check reads which sources the series
+        // holds and the range is read off its checkpoint; either read made
+        // outside the lock could be stale by the time this pass commits.
+        ISeriesLease? lease;
+
+        try
+        {
+            lease = await seriesLock
+                .TryAcquireAsync(instruction.InstrumentId, instruction.Interval, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (SeriesLockUnavailableException exception)
+        {
+            // Fail closed. Not knowing whether another pass holds the series is
+            // not knowing that none does. Recorded as failed rather than
+            // skipped: a skip means there was nothing to ask for, and here
+            // there was — the gap stays open until somebody restores the store
+            // and re-runs, and the failure counts are where that is noticed.
+            ApplicationLog.MarketDataSeriesLockUnavailable(
+                logger,
+                exception,
+                provider.Code.Value,
+                instrument.Ticker.Value,
+                instruction.Interval);
+
+            return await CloseAsync(
+                OpenUnattempted(provider.Code, instruction, startedAtUtc),
+                run => run.Fail(SeriesLockReasons.Unavailable(exception), 0, clock.UtcNow),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (lease is null)
+        {
+            // Another pass is doing this work now. Its checkpoint is where the
+            // next pass resumes, so nothing is lost by stepping aside.
+            ApplicationLog.MarketDataSeriesBusy(
+                logger,
+                provider.Code.Value,
+                instrument.Ticker.Value,
+                instruction.Interval);
+
+            return await CloseAsync(
+                OpenUnattempted(provider.Code, instruction, startedAtUtc),
+                run => run.Skip(SeriesLockReasons.Busy, clock.UtcNow),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        // Released however the pass ends — committed, recorded as failed,
+        // thrown or cancelled. The lease also expires on its own, but a pass
+        // that leaked it would keep the series closed for the whole expiry.
+        await using (lease.ConfigureAwait(false))
+        {
+            return await IngestHeldSeriesAsync(
+                    instruction, provider, instrument, startedAtUtc, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Runs the pipeline over a series this pass holds the lock for.
+    /// </summary>
+    /// <param name="instruction">What to ingest.</param>
+    /// <param name="provider">The selected source.</param>
+    /// <param name="instrument">The resolved instrument.</param>
+    /// <param name="startedAtUtc">When the pass started.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The completed audit record.</returns>
+    private async Task<IngestionRun> IngestHeldSeriesAsync(
+        IngestionInstruction instruction,
+        IMarketDataProvider provider,
+        InstrumentSearchResult instrument,
+        DateTimeOffset startedAtUtc,
+        CancellationToken cancellationToken)
+    {
         // V9, and refused before anything is fetched. A source that adjusts
         // prices for corporate actions and one that does not are two different
         // datasets that happen to share a shape: merging them produces a series
@@ -568,6 +653,26 @@ internal sealed class MarketDataIngestionService(
         return await CloseAsync(run, closing => closing.Skip(reason, clock.UtcNow), cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Opens the record of a pass that will not reach the source.
+    /// </summary>
+    /// <remarks>
+    /// The range is one period from the start, the same placeholder every
+    /// other unattempted run records: nothing was asked for, and the record
+    /// must still carry a range that ends after it begins.
+    /// </remarks>
+    private static IngestionRun OpenUnattempted(
+        SourceCode source,
+        IngestionInstruction instruction,
+        DateTimeOffset startedAtUtc) =>
+        IngestionRun.Start(
+            source,
+            instruction.InstrumentId,
+            instruction.Interval,
+            startedAtUtc,
+            startedAtUtc.AddTicks(instruction.Interval.ToDuration().Ticks),
+            startedAtUtc);
 
     private async Task<IngestionRun> CloseAsync(
         IngestionRun run,

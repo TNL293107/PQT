@@ -244,9 +244,13 @@ internal sealed class IngestCommands(
                 Report(instrument.Ticker.Value, run);
 
                 // A skip that says the range is exhausted is how a completed
-                // backfill ends, and it is not a failure.
+                // backfill ends, and it is not a failure. A skip because another
+                // pass holds the series fetched nothing too, and is neither: the
+                // range is not done, and reporting it done would leave the
+                // operator no reason to re-run.
                 var exhausted = run.Outcome == IngestionOutcome.Skipped && run.BarsFetched == 0
-                    && previous is not null;
+                    && previous is not null
+                    && !SeriesLockReasons.IsBusy(run);
 
                 Summarise(instrument.Ticker.Value, passes, stored, revised);
 

@@ -754,6 +754,191 @@ public sealed class MarketDataIngestionServiceTests
         Assert.Equal(AdjustedSource, refusal.Source);
     }
 
+    [Fact]
+    public async Task A_series_another_pass_holds_is_skipped_without_calling_the_provider()
+    {
+        // The scheduled host and an operator's 'pqt ingest' reading the same
+        // checkpoint would request the same range and race on the same bars.
+        // The second one in does nothing, and says why.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday));
+        harness.Lock.HoldElsewhere(harness.InstrumentId, BarInterval.OneDay);
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Skipped, run.Outcome);
+        Assert.Equal(SeriesLockReasons.Busy, run.FailureReason);
+        Assert.True(SeriesLockReasons.IsBusy(run));
+        Assert.Equal(Source, run.Source);
+        Assert.Equal(0, harness.Provider.CallCount);
+        Assert.Empty(harness.Bars.All);
+        Assert.Empty(harness.Journal.Checkpoints);
+        Assert.Empty(harness.Journal.RawBatches);
+        Assert.Single(harness.Journal.Runs);
+    }
+
+    [Fact]
+    public async Task A_skipped_pass_leaves_the_holders_lease_alone()
+    {
+        // Only the pass that took the series may give it back. A skipped pass
+        // releasing it would let a third pass in beside the first.
+        var harness = new Harness();
+        harness.Lock.HoldElsewhere(harness.InstrumentId, BarInterval.OneDay);
+
+        // Act
+        await harness.IngestAsync();
+
+        // Assert
+        Assert.True(harness.Lock.IsHeld(harness.InstrumentId, BarInterval.OneDay));
+        Assert.Equal(0, harness.Lock.Released);
+    }
+
+    [Fact]
+    public async Task Another_resolution_of_the_same_instrument_is_not_excluded()
+    {
+        // The series is the instrument at one resolution. An hourly backfill
+        // shares no checkpoint and no bar with the daily one.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday));
+        harness.Lock.HoldElsewhere(harness.InstrumentId, BarInterval.OneHour);
+
+        // Act
+        var run = await harness.IngestAsync(interval: BarInterval.OneDay);
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Succeeded, run.Outcome);
+        Assert.Equal(1, harness.Provider.CallCount);
+    }
+
+    [Fact]
+    public async Task The_series_is_held_while_the_provider_is_called()
+    {
+        var harness = new Harness();
+        var heldDuringFetch = false;
+        harness.Intercept(_ =>
+        {
+            heldDuringFetch = harness.Lock.IsHeld(harness.InstrumentId, BarInterval.OneDay);
+            return [Bar(Yesterday)];
+        });
+
+        // Act
+        await harness.IngestAsync();
+
+        // Assert
+        Assert.True(heldDuringFetch);
+    }
+
+    [Fact]
+    public async Task The_series_is_released_after_a_successful_pass()
+    {
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday));
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Succeeded, run.Outcome);
+        Assert.Equal(1, harness.Lock.Acquired);
+        Assert.Equal(1, harness.Lock.Released);
+        Assert.False(harness.Lock.IsHeld(harness.InstrumentId, BarInterval.OneDay));
+    }
+
+    [Fact]
+    public async Task The_series_is_released_after_a_recorded_provider_failure()
+    {
+        var harness = new Harness();
+        harness.Fails(new MarketDataProviderException("The source is down.", isTransient: true));
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Failed, run.Outcome);
+        Assert.Equal(1, harness.Lock.Released);
+        Assert.False(harness.Lock.IsHeld(harness.InstrumentId, BarInterval.OneDay));
+    }
+
+    [Fact]
+    public async Task The_series_is_released_when_the_pass_throws()
+    {
+        // An exception the pipeline does not handle still unwinds through the
+        // lease. Leaking it would keep every later pass off the series until it
+        // expired on its own.
+        var harness = new Harness();
+        harness.Fails(new InvalidOperationException("Something nobody predicted."));
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.IngestAsync());
+
+        // Assert
+        Assert.Equal(1, harness.Lock.Released);
+        Assert.False(harness.Lock.IsHeld(harness.InstrumentId, BarInterval.OneDay));
+    }
+
+    [Fact]
+    public async Task The_series_is_released_when_the_pass_is_cancelled()
+    {
+        // Ctrl+C on a backfill, or the host stopping mid-pass.
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        var harness = new Harness();
+        harness.Calls(_ =>
+        {
+            cancellation.Cancel();
+            return Task.FromException<MarketDataFetchResult>(
+                new OperationCanceledException(cancellation.Token));
+        });
+
+        // Act
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => harness.IngestAsync(cancellationToken: cancellation.Token));
+
+        // Assert
+        Assert.Equal(1, harness.Lock.Released);
+        Assert.False(harness.Lock.IsHeld(harness.InstrumentId, BarInterval.OneDay));
+    }
+
+    [Fact]
+    public async Task An_unreachable_lock_store_fails_closed()
+    {
+        // Not knowing whether another pass holds the series is not knowing
+        // that none does. Proceeding would be the race the lock exists to stop.
+        var harness = new Harness();
+        harness.Returns(Bar(Yesterday));
+        harness.Lock.Reachable = false;
+
+        // Act
+        var run = await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(IngestionOutcome.Failed, run.Outcome);
+        Assert.Contains("lock store", run.FailureReason, StringComparison.Ordinal);
+        Assert.Equal(0, run.Attempts);
+        Assert.False(SeriesLockReasons.IsBusy(run));
+        Assert.Equal(0, harness.Provider.CallCount);
+        Assert.Empty(harness.Bars.All);
+        Assert.Empty(harness.Journal.Checkpoints);
+        Assert.Single(harness.Journal.Runs);
+        Assert.Equal(1, harness.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task An_unknown_instrument_takes_no_lock()
+    {
+        // Nothing would be written to the series, so there is nothing to
+        // exclude anyone from — and nothing to leak.
+        var harness = new Harness(knownInstrument: false);
+
+        // Act
+        await harness.IngestAsync();
+
+        // Assert
+        Assert.Equal(0, harness.Lock.Acquired);
+    }
+
     private static readonly SourceCode AdjustedSource = SourceCode.Create("ADJ");
 
     private static ScriptedProvider AdjustedProvider() =>
@@ -802,6 +987,7 @@ public sealed class MarketDataIngestionServiceTests
             Journal = new FakeIngestionJournal();
             UnitOfWork = new FakeUnitOfWork();
             Inspector = new NoOpQualityInspector();
+            Lock = new FakeSeriesLock();
 
             Provider = new ScriptedProvider(Source, request => _behaviour(request))
             {
@@ -839,6 +1025,7 @@ public sealed class MarketDataIngestionServiceTests
                 Bars,
                 Journal,
                 UnitOfWork,
+                Lock,
                 policy,
                 Clock,
                 NullLogger<MarketDataIngestionService>.Instance);
@@ -856,6 +1043,8 @@ public sealed class MarketDataIngestionServiceTests
 
         public NoOpQualityInspector Inspector { get; }
 
+        public FakeSeriesLock Lock { get; }
+
         public ScriptedProvider Provider { get; }
 
         public ScriptedProvider? Second { get; }
@@ -871,17 +1060,23 @@ public sealed class MarketDataIngestionServiceTests
         public void Fails(Exception exception) =>
             _behaviour = _ => Task.FromException<MarketDataFetchResult>(exception);
 
+        public void Calls(Func<MarketDataRequest, Task<MarketDataFetchResult>> behaviour) =>
+            _behaviour = behaviour;
+
         public async Task<IngestionRun> IngestAsync(
             BarInterval interval = BarInterval.OneDay,
             SourceCode? source = null,
             DateTimeOffset? from = null,
-            DateTimeOffset? to = null)
+            DateTimeOffset? to = null,
+            CancellationToken? cancellationToken = null)
         {
             Assert.True(IngestionInstruction.TryCreate(
                 InstrumentId, interval, source, from, to, out var instruction, out var problem),
                 problem);
 
-            return await _service.IngestAsync(instruction, TestContext.Current.CancellationToken);
+            return await _service.IngestAsync(
+                instruction,
+                cancellationToken ?? TestContext.Current.CancellationToken);
         }
     }
 }

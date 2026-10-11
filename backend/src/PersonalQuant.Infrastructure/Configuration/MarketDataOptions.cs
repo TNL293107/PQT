@@ -22,7 +22,7 @@ namespace PersonalQuant.Infrastructure.Configuration;
 /// configuration dependency at all.
 /// </para>
 /// </remarks>
-public sealed class MarketDataOptions
+public sealed class MarketDataOptions : IValidatableObject
 {
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "MarketData";
@@ -243,6 +243,78 @@ public sealed class MarketDataOptions
     /// </remarks>
     [Range(1, 5_000)]
     public int IngestionUniverseLimit { get; set; } = 250;
+
+    /// <summary>
+    /// Gets or sets how long one ingestion pass may hold its series before the
+    /// lock expires on its own, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The expiry exists for the process that dies holding the lock — killed,
+    /// or cut off from Redis before it could release. Without one, a crashed
+    /// pass would keep its series closed until somebody deleted the key by hand.
+    /// </para>
+    /// <para>
+    /// Ten minutes, because a pass is one provider call. Under the defaults its
+    /// worst case is three attempts of thirty seconds with two backoffs of at
+    /// most thirty — two and a half minutes — plus the database work, which is
+    /// seconds. Ten minutes is four times that, so a slow pass is never
+    /// overtaken by a second one, and short enough that a crashed pass blocks
+    /// the series for less than one default schedule period. A
+    /// backfill is many passes and takes the lock once per pass, so its length
+    /// does not count against this.
+    /// </para>
+    /// <para>
+    /// The pass is not able to renew the lock, so the expiry must exceed the
+    /// longest pass the retry policy permits. That is checked against the
+    /// policy here rather than left to whoever raises the timeout.
+    /// </para>
+    /// </remarks>
+    [Range(30, 86_400)]
+    public int IngestionLockTtlSeconds { get; set; } = 600;
+
+    /// <summary>
+    /// Returns how long a pass may hold its series.
+    /// </summary>
+    /// <returns>The lock expiry.</returns>
+    public TimeSpan BuildIngestionLockTtl() => TimeSpan.FromSeconds(IngestionLockTtlSeconds);
+
+    /// <summary>
+    /// Returns the longest one pass can spend calling its source under the
+    /// configured retry policy.
+    /// </summary>
+    /// <remarks>
+    /// Every attempt timing out, with the longest permitted wait between each.
+    /// The call spacing is left out: it is milliseconds against a bound
+    /// measured in minutes.
+    /// </remarks>
+    /// <returns>The worst-case fetch duration.</returns>
+    public TimeSpan LongestFetch() =>
+        (TimeSpan.FromSeconds(ProviderTimeoutSeconds) * MaxAttempts)
+        + (TimeSpan.FromMilliseconds(MaxBackoffMilliseconds) * (MaxAttempts - 1));
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A lock that expires mid-pass admits a second pass over the same series
+    /// while the first is still writing — the race the lock exists to stop,
+    /// arriving silently and only on the slowest days. The bound is a setting
+    /// that has to agree with three others, so it is checked against them
+    /// rather than trusted.
+    /// </remarks>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        var longest = LongestFetch();
+
+        if (BuildIngestionLockTtl() <= longest)
+        {
+            yield return new ValidationResult(
+                $"IngestionLockTtlSeconds ({IngestionLockTtlSeconds}) must exceed the longest a pass "
+                    + $"may spend calling its source, {longest.TotalSeconds:0}s "
+                    + "(MaxAttempts x ProviderTimeoutSeconds plus the backoffs between them). "
+                    + "Otherwise the lock can expire while the pass is still writing.",
+                [nameof(IngestionLockTtlSeconds)]);
+        }
+    }
 
     /// <summary>
     /// Converts the validated settings into the policy the pipeline uses.
