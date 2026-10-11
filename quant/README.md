@@ -11,6 +11,25 @@ rank → deciles → returns → IC/IR). Run the slice over an export:
 python -m personal_quant.research.momentum_slice --root ../data/tmp/datasets --dataset <id>
 ```
 
+And the U7 analytical tier: SQL over a verified build, through embedded DuckDB.
+
+```python
+from pathlib import Path
+
+from personal_quant.research.analytical import connect
+from personal_quant.research.datasets import LocalDatasetProvider
+
+with connect(LocalDatasetProvider(Path("../data/tmp/datasets")), "<id>") as db:
+    db.sql("SELECT dataset_version, content_hash FROM manifest").show()
+    db.sql("SELECT instrument_id, max(close) FROM bars GROUP BY ALL").show()
+```
+
+`connect` verifies the build first and refuses a tampered one. The views —
+`bars`, `membership`, `manifest` — read the verified bytes held in memory; the
+connection cannot read files, so `read_parquet` on the build's path is refused
+by design. Prices are `DECIMAL(38,10)`, never `DOUBLE`. Take results out
+through Python (`fetchall`, `arrow`, `df`), not `COPY`.
+
 ## Layout
 
 ```
@@ -18,7 +37,8 @@ quant/
 ├── pyproject.toml              packaging, pytest, ruff and mypy configuration
 ├── src/personal_quant/
 │   ├── environment.py          reads the shared POSTGRES_* configuration
-│   ├── research/               protocols, datasets, point-in-time harness, the slice (U6)
+│   ├── research/               protocols, datasets, point-in-time harness, the slice (U6);
+│   │                           DuckDB over a verified build (U7)
 │   ├── factors/                factor definitions — momentum (U6)
 │   ├── strategies/             signals and portfolio construction (U6)
 │   ├── backtesting/            close-to-close returns (U6); the backtester (Phase 8)

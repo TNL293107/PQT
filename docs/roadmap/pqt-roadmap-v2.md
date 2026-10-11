@@ -546,7 +546,7 @@ was added, `pyarrow`.
 | System of record | PostgreSQL 17, `quant` schema | Unchanged; correct |
 | Raw store | PostgreSQL today, behind a payload-store seam | Object storage becomes an implementation, not a migration |
 | Research store | Parquet — immutable, versioned, hashed | A dataset version becomes a file with a hash, not a database state |
-| Analytical store | DuckDB, embedded | Reads Parquet natively; no server, no operations |
+| Analytical store | DuckDB, embedded ✅ | Reads Parquet natively; no server, no operations |
 | Experiment store | PostgreSQL, `research` schema | Must be transactional and joinable to instruments |
 | Cache | Redis | Given a real job — a distributed ingestion lock and manifest caching — or removed from the readiness gate |
 
@@ -557,6 +557,18 @@ bars across more than 500 instruments over more than three years — roughly 150
 million rows — or when a range query on `bars` exceeds about a second.
 
 Qlib's `.bin` format is adapter scratch space and never a PQT storage tier.
+
+**Analytical tier implemented, 11 October 2026.**
+`personal_quant.research.analytical.connect` verifies a build and opens an
+in-memory DuckDB connection over it, with three views: `bars` (prices
+`DECIMAL(38,10)` cast from the exporter's strings, never through `DOUBLE`;
+`session` the UTC date of the bar), `membership` (the manifest's spells, or
+one open spell per instrument for an as-of build) and `manifest` (one row —
+dataset id, version and content hash among it — so every answer is tied to its
+build). DuckDB is handed the verified bytes as Arrow, not the file's path, and
+the connection cannot read a file at all, so no query sees data that was not
+verified. Tests hold it to the Python loader row for row and value for value.
+`duckdb` is the package's second runtime dependency.
 
 ---
 

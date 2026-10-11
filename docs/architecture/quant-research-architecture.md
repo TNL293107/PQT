@@ -240,8 +240,19 @@ breadth — and added when a computation needs them, not before.
 **U6 added one: `pyarrow`**, because nothing else reads the dataset's Parquet.
 The vertical slice's arithmetic — a 12-1 return, a rank, a quantile mean, a
 rank correlation — runs on the standard library over a few dozen names, with
-prices kept `Decimal` as the dataset stores them. The table below is where the
-rest is expected to come from, starting with Phase 7.
+prices kept `Decimal` as the dataset stores them.
+
+**U7 added a second: `duckdb`**, the analytical tier — SQL over a dataset
+build, embedded, with no server to run. It queries Arrow tables in place and
+holds prices as `DECIMAL`, so a query answers in the same exact arithmetic as
+the Python loader. `personal_quant.research.analytical`
+gives it only the bytes `LocalDatasetProvider.verify` hashed, never a path,
+and opens the connection with file access off and its configuration locked:
+a query that read the build from disk would read whatever is there now, not
+what was verified.
+
+The table below is where the rest is expected to come from, starting with
+Phase 7.
 
 | Package | Role |
 | --- | --- |
