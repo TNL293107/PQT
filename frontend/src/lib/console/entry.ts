@@ -59,8 +59,26 @@ export const VERBS: readonly FunctionSpec[] = [
   { code: "HELP", summary: "This list", options: [] },
   { code: "HEALTH", summary: "Whether this deployment's dependencies answer", options: [] },
   { code: "FIND", summary: "Search the instrument master by ticker or name", options: [] },
+  {
+    code: "UNIVERSES",
+    summary: "Every universe — its declared coverage and today's members",
+    options: [],
+  },
+  {
+    code: "BREADTH",
+    summary: "Advancers, decliners and no-data members of a universe on a session",
+    options: ["on"],
+  },
   { code: "CLEAR", summary: "Empty the transcript", options: [] },
 ];
+
+/**
+ * The verbs that take the rest of the line as their argument.
+ *
+ * FIND's is a search query; BREADTH's is a universe code. Neither names a
+ * security, so neither is resolved against the instrument master.
+ */
+const VERBS_WITH_ARGUMENT = new Set(["FIND", "BREADTH"]);
 
 /** One console line, split into what it names and what it asks for. */
 export interface ConsoleEntry {
@@ -70,7 +88,10 @@ export interface ConsoleEntry {
   /** The bare verb, upper-cased, when the line names one. */
   readonly verb: string | null;
 
-  /** The security half, when the line names one. */
+  /**
+   * The security half, when the line names one — or, for a verb that takes an
+   * argument, that argument (FIND's query, BREADTH's universe code).
+   */
   readonly securityQuery: string;
 
   /** The recognised function mnemonic, upper-cased, or null. */
@@ -102,13 +123,13 @@ export function parseEntry(input: string): ConsoleEntry {
 
   const first = (words[0] ?? "").toUpperCase();
 
-  // A bare verb consumes the whole line, except FIND, which takes the rest as
-  // its query.
+  // A bare verb consumes the whole line, except FIND and BREADTH, which take
+  // the rest as their argument.
   if (VERB_CODES.has(first)) {
     return {
       raw,
       verb: first,
-      securityQuery: first === "FIND" ? words.slice(1).join(" ") : "",
+      securityQuery: VERBS_WITH_ARGUMENT.has(first) ? words.slice(1).join(" ") : "",
       functionCode: null,
       options,
     };

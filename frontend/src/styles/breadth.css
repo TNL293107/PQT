@@ -1,0 +1,77 @@
+/*
+ * Market breadth.
+ *
+ * The advance/decline bar is the one graphic here, and it never carries
+ * direction by colour alone: every segment holds its glyph, the bar is
+ * labelled with the counts, and no-data is hatched as well as greyed — it is
+ * the segment most worth not mistaking for "unchanged".
+ *
+ * Every value comes from tokens.css.
+ */
+
+.is-flat {
+  color: var(--text-secondary);
+}
+
+.ad-bar {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  max-width: 52rem;
+  height: 1.5rem;
+  margin: var(--space-2) 0;
+}
+
+.ad-bar__seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-basis: 0;
+  min-width: 1.25rem;
+  font-size: var(--text-xs);
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ad-bar__seg--up {
+  background: var(--state-online-wash);
+  border-color: var(--state-online);
+  color: var(--state-online);
+}
+
+.ad-bar__seg--down {
+  background: var(--state-offline-wash);
+  border-color: var(--state-offline);
+  color: var(--state-offline);
+}
+
+.ad-bar__seg--flat {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.ad-bar__seg--none {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--state-unknown-wash) 0 4px,
+    transparent 4px 8px
+  );
+  border-color: var(--border-subtle);
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.movers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: var(--space-2) var(--space-6);
+  max-width: 78rem;
+  margin-top: var(--space-2);
+}
+
+.movers__side .score__key {
+  margin: 0;
+}

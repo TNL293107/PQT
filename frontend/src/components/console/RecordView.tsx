@@ -2,6 +2,7 @@ import type { Instrument } from "../../types/instrument";
 import type { Bar, DataQualityIssue, IngestionRun } from "../../types/marketData";
 import { FUNCTIONS, VERBS } from "../../lib/console/entry";
 import type { ConsoleRecord } from "../../lib/console/records";
+import { BreadthView, UniversesView } from "./BreadthView";
 import { Sparkline } from "./Sparkline";
 
 /** Renders whatever a command produced. */
@@ -67,6 +68,12 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
     case "ingestion":
       return <IngestionView instrument={record.instrument} runs={record.runs} />;
 
+    case "universes":
+      return <UniversesView listing={record.listing} />;
+
+    case "breadth":
+      return <BreadthView breadth={record.breadth} />;
+
     default:
       return null;
   }
@@ -85,7 +92,14 @@ function HelpView() {
           {VERBS.map((verb) => (
             <tr key={verb.code}>
               <td className="grid__key lit">{verb.code.toLowerCase()}</td>
-              <td className="grid__note">{verb.summary}</td>
+              <td className="grid__note">
+                {verb.summary}
+                {verb.options.length > 0 ? (
+                  <span className="out__opts">
+                    {verb.options.map((option) => ` --${option}`).join("")}
+                  </span>
+                ) : null}
+              </td>
             </tr>
           ))}
           {FUNCTIONS.map((fn) => (

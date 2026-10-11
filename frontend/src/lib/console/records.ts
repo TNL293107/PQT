@@ -6,6 +6,7 @@ import type {
   IngestionRun,
 } from "../../types/marketData";
 import type { SystemHealth } from "../../types/health";
+import type { Breadth, UniverseList } from "../../types/universe";
 
 /**
  * What a command produced.
@@ -45,7 +46,9 @@ export type ConsoleRecord =
       readonly kind: "ingestion";
       readonly instrument: Instrument;
       readonly runs: readonly IngestionRun[];
-    };
+    }
+  | { readonly kind: "universes"; readonly listing: UniverseList }
+  | { readonly kind: "breadth"; readonly breadth: Breadth };
 
 /** One exchange in the transcript: what was typed, and what came back. */
 export interface TranscriptItem {
