@@ -11,21 +11,18 @@ engineering project.
 ## Current status
 
 ```
-Phase 0–4                     COMPLETE *
-Research Foundation Upgrade   IN PROGRESS   ← current work
-Phase 5–20                    PLANNED
-
-* implemented and tested, but empirically unvalidated against
-  real Vietnamese market data until U3 is completed.
+Phase 0–4                     COMPLETE
+Research Foundation Upgrade   IN PROGRESS   ← Gate A passed 2026-10-11; Gate B current
+Phase 5–20                    PLANNED       ← Phase 5 unlocked by Gate A
 ```
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
 | **Complete** | Phases 0–4 — master, ingestion, quality, adjusted prices      |
-| **Current**  | Research Foundation Upgrade — U1–U10 (phases run 0–20)        |
-| **Next**     | Phase 5 — Market Intelligence Terminal, after **Gate A**      |
+| **Current**  | Gate B of the Research Foundation Upgrade — U6 first          |
+| **Next**     | Phase 5 — Market Intelligence Terminal, unlocked by Gate A    |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 863 unit, 129 integration (2026-09-19); React, Python and C++ suites green in CI |
+| **Tests**    | 856 unit, 138 integration (2026-10-11); React, Python and C++ suites green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
@@ -51,8 +48,9 @@ CafeF bars for its 32 names, five more entitlements found from price-limit
 breaches and explained, and a point-in-time dataset holding exactly 30 members
 on every session across the 3 August 2026 review
 ([ADR-024](docs/architecture/decisions/ADR-024-point-in-time-dataset-membership.md)).
-Every Gate A criterion is evidenced; declaring the gate passed is the operator's
-call. See the [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
+**Gate A passed on 11 October 2026**, declared by the operator on that
+evidence. Phase 5 may begin, and Gate B begins with U6. See the
+[canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
 
 **What exists.** Liveness and readiness endpoints that probe PostgreSQL and
 Redis for real; a complete instrument master — identity and listing lifecycle,
@@ -129,15 +127,11 @@ daily FPT bars from a native Vietcap adapter, the real exchange calendar for
 automatic fallback, and an
 [operator CLI](docs/development/operator-cli.md) that makes ingestion, backfill
 and finding resolution instructions rather than configuration plus a restart.
-What it has not done is the thing Gate A asks for: one known bonus, rights issue
-or split reproduced through the corporate action engine. The source ingested so
-far serves prices **already adjusted**, leaving no discontinuity for the engine
-to explain, and that was recorded as unreachable from free sources. It is not —
-CafeF serves raw closes back to listing, and `FPT` on 27 May 2016 carries the
-gap the engine has to account for
-([ADR-021](docs/architecture/decisions/ADR-021-raw-vietnamese-price-history.md)).
-The adapter does not exist yet, so U3 is not complete and Gate A does not pass,
-but what remains is work rather than a search. U4–U10 have no code.
+It has since done the thing Gate A asks for: Vietcap serves prices already
+adjusted, so the raw series comes from CafeF
+([ADR-021](docs/architecture/decisions/ADR-021-raw-vietnamese-price-history.md)),
+and the `FPT` entitlements of 27 May 2016 are reproduced through the corporate
+action engine, as described above. U1–U5 are complete; U6–U10 are Gate B.
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A.

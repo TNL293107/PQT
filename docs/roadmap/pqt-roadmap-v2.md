@@ -143,7 +143,7 @@ and use the new numbering throughout.
 | 2 | Market Data Ingestion | Fetch, normalise, deduplicate, provenance, resume checkpoints, audit | COMPLETE * |
 | 3 | Data Normalization & Quality | Trading calendar, price bands, gaps, staleness, recorded findings | COMPLETE * |
 | 4 | Corporate Actions & Adjusted Data | Eight action types, adjustment factors, adjustment-on-read | COMPLETE * |
-| — | **Research Foundation Upgrade** | **U1–U10; Gate A and Gate B** | **IN PROGRESS** |
+| — | **Research Foundation Upgrade** | **U1–U10; Gate A passed 2026-10-11, Gate B current** | **IN PROGRESS** |
 | 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry | PLANNED |
 | 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` | PLANNED |
 | 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate, declarative labelled-dataset specification | PLANNED |
@@ -235,7 +235,7 @@ Phase 8 needs both gates.
 
 ---
 
-### U1 — Temporal / Point-in-Time Correctness · Gate A
+### U1 — Temporal / Point-in-Time Correctness · Gate A ✅
 
 **Objective.** Make "what did PQT believe at instant *T*" answerable in SQL,
 without regressing any Phase 2–4 behaviour.
@@ -273,7 +273,7 @@ halves — per
 
 ---
 
-### U2 — Universe & Survivorship Correctness · Gate A
+### U2 — Universe & Survivorship Correctness · Gate A ✅
 
 **Objective.** Make historical constituent sets a recorded fact, and let the
 ingestion universe be driven by them.
@@ -324,7 +324,7 @@ is populated; it is an option, not a prerequisite.
 
 ---
 
-### U3 — Real Vietnamese Data Provider Integration · Gate A · **MANDATORY**
+### U3 — Real Vietnamese Data Provider Integration · Gate A · **MANDATORY** ✅
 
 > **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
 > fixtures.** Synthetic data does not satisfy Gate A. No claim about Phase 2–4
@@ -503,7 +503,7 @@ storage architecture. The two gates do not collide.
 
 ---
 
-### U6 — Quant Research Abstraction Layer · Gate B
+### U6 — Quant Research Abstraction Layer · Gate B · `IN PROGRESS`
 
 **Objective.** PQT-owned, framework-agnostic research contracts. **PQT owns the
 abstractions; third-party engines implement adapters against them.** Qlib's
@@ -761,6 +761,15 @@ tools cannot reach an order path for which no tool exists.
 - **Real Vietnamese market data passing through Phases 2–4 end to end**
 
 Once Gate A passes, Phase 5 may begin.
+
+**Passed on 11 October 2026**, declared by the operator. The evidence, criterion
+by criterion: U1 and U4 by the as-of reads and announcement-aware adjustment;
+U2 by VN30 membership for August 2024 to September 2026, transcribed from HOSE's
+tables; U3 by the `FPT` 2016 entitlements reproduced through the engine from raw
+CafeF bars; U5 by `pqt dataset export` / `verify`; and the end-to-end criterion
+by the point-in-time VN30 dataset `3856e4ce77841c1a` — 15,708 rows from real
+CafeF bars, every price-limit breach in them explained by a sourced entitlement.
+Phase 5 and Gate B may both proceed.
 
 ### Gate B — Complete Research Foundation · *gates declaring the Upgrade COMPLETE*
 
