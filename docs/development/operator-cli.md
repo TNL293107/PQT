@@ -52,7 +52,7 @@ PowerShell: `$env:Redis__Host = 'localhost'`, and so on. A Redis the CLI cannot
 reach does not stop the command from starting, and does not let it ingest
 unlocked either: each pass is recorded as failed, naming the lock store, and the
 command exits 1. The commands that never ingest — `provider`, `quality`,
-`schema`, `calendar`, `dataset` — do not touch Redis.
+`coverage`, `schema`, `calendar`, `dataset` — do not touch Redis.
 
 Nothing about the CLI starts the API's hosted services. It never migrates, never
 seeds and never begins a scheduled pass.
@@ -185,6 +185,66 @@ of them and without a reason.
 
 A finding that is already closed cannot be closed again. Overwriting the first
 resolution would erase the audit trail the finding exists to leave.
+
+### `coverage`
+
+```bash
+pqt coverage <TICKER|INSTRUMENT-ID> [--exchange <VENUE>]
+```
+
+What PQT holds for one instrument, dataset by dataset — the Phase 5 coverage
+registry ([ADR-026](../architecture/decisions/ADR-026-market-intelligence-terminal.md)).
+The word after `coverage` is the security: a ticker resolved through the
+instrument master, or an instrument identifier read as is. A ticker live on two
+venues is refused with both named; pass `--exchange` or the identifier.
+
+```text
+FPT  FPT Corporation  HOSE  01a129bf-1d0c-7473-a773-85b7ccbd4d64
+
+DATASET            STATE            EXTENT                   DETAIL
+Price 1d           ✓ held           2015-01-02 → 2026-08-28  2,900 bars · VNX · 1 of 2,901 sessions missing · 1 open finding · last attempt 2026-08-29 VNX Succeeded
+Price 1h           ✓ held           2026-08-03 → 2026-08-07  30 bars · VNX · missing sessions not measured
+                                                             Missing sessions are measured for the daily series only.
+Price 5m           — not collected                           No registered source serves 5m bars for HOSE Equity.
+Corporate actions  ✗ not held                                No corporate action is recorded for this instrument.
+Universe VN100     ✗ not held                                Not a member at any time from 2024-01-01 onward, the window VN100 declares; outside it, unknown.
+Universe VN30      ✓ held           2024-01-02 → now         1 spell
+                                                             VN30 claims to know its membership from 2024-01-01 onward.
+Universe VNMID     ? not measured                            VNMID declares no coverage, so the absence of a spell says nothing about membership.
+Fundamentals       — not collected                           Phase 6
+
+✓ held · ✗ not held (known absent) · ? not measured (cannot say) · — not collected yet
+```
+
+Every dataset is in exactly one of four states, printed as a mark **and** a word
+so a terminal that drops the mark still keeps them apart:
+
+| Printed | State | Means |
+| --- | --- | --- |
+| `✓ held` | `Held` | PQT holds it; the extent is on the line |
+| `✗ not held` | `NotHeld` | PQT collects this kind of data and holds none for this instrument |
+| `? not measured` | `NotMeasured` | Whether PQT should hold it cannot be said |
+| `— not collected` | `NotCollected` | PQT does not collect this kind of data yet |
+
+**`? not measured` is never `✗ not held`.** A universe that never declared its
+coverage window cannot say an instrument was not a member, so a spell-less
+instrument is *not measured* there; it is *not held* only in a universe that
+declared a window, and only for that window — the line says which.
+
+**Missing sessions are counted only where they can be.** For the daily series,
+against the venue calendar's trading days between the first and last session
+held, and only when the calendar was transcribed for that whole span. Otherwise
+the line says *missing sessions not measured* rather than printing zero. A bar
+stored on a closed day is not counted, so it cannot hide a genuinely missing
+session. Intraday series are not counted in sessions at all.
+
+A price resolution is *not collected* when no registered source serves it for
+the instrument's venue and asset type; `pqt provider list` shows what is
+registered. Bars already stored are *held* whatever is registered now.
+
+The same answer is served at `GET /instruments/{id}/coverage` and by the
+console's `COV` function. All three call one application query, so they cannot
+disagree about what a state means.
 
 ### `schema` and `calendar`
 
@@ -410,6 +470,9 @@ docker compose exec backend dotnet cli/PersonalQuant.Cli.dll \
 # Fetch it, one instruction, with an audit trail naming the range asked for.
 docker compose exec backend dotnet cli/PersonalQuant.Cli.dll \
     ingest backfill --instrument FPT --interval 1d --source VCI --from 2021-01-01
+
+# What does PQT now hold for it, and how much of the span is missing?
+docker compose exec backend dotnet cli/PersonalQuant.Cli.dll coverage FPT
 
 # What did the quality rules find?
 docker compose exec backend dotnet cli/PersonalQuant.Cli.dll \
