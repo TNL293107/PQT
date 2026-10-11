@@ -143,6 +143,8 @@ services:
       MarketData__IngestionTickers: ${MARKET_DATA_INGESTION_TICKERS:-}
 
       Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-http://localhost:3100}
+      # Every write endpoint requires it; empty disables writes (ADR-027).
+      Terminal__OperatorKey: ${PQT_OPERATOR_KEY:-}
 
       # The research store. A writable volume rather than a bind mount into the
       # repository: an exported dataset holds real market prices, and the

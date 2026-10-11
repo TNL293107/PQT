@@ -16,6 +16,14 @@ builder.Services
     .AddOptions<CorsOptions>()
     .Bind(builder.Configuration.GetSection(CorsOptions.SectionName));
 
+// Validated at start-up: a key too short to be a key fails the deployment
+// rather than guarding writes with something guessable (ADR-027).
+builder.Services
+    .AddOptions<OperatorKeyOptions>()
+    .Bind(builder.Configuration.GetSection(OperatorKeyOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 // --- Layers ----------------------------------------------------------------
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -36,7 +44,7 @@ builder.Services.AddCors(options => options.AddPolicy(
     CorsOptions.PolicyName,
     policy => policy
         .WithOrigins(corsOptions.ParseAllowedOrigins())
-        .WithHeaders("Content-Type", "Accept")
+        .WithHeaders("Content-Type", "Accept", "Authorization")
         .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")));
 
 var app = builder.Build();
