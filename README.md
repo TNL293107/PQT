@@ -22,7 +22,7 @@ Phase 5–20                    PLANNED       ← Phase 5 unlocked by Gate A
 | **Current**  | Gate B — U6–U10 all evidenced (2026-10-11); declaration pending |
 | **Next**     | Phase 5 — Market Intelligence Terminal, unlocked by Gate A    |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 946 unit, 162 integration, 226 Python + 51 Qlib (2026-10-11); React and C++ green in CI |
+| **Tests**    | 946 unit, 162 integration, 262 Python + 91 Qlib (2026-10-11); React and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
