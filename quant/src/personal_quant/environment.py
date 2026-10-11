@@ -15,12 +15,20 @@ import os
 from dataclasses import dataclass
 from urllib.parse import quote
 
-__all__ = ["DatabaseSettings", "MissingConfigurationError", "load_database_settings"]
+__all__ = [
+    "RESEARCH_ROLE",
+    "DatabaseSettings",
+    "MissingConfigurationError",
+    "load_database_settings",
+    "load_research_settings",
+]
 
 _DEFAULT_HOST = "localhost"
 _DEFAULT_PORT = 5432
 _DEFAULT_DATABASE = "personal_quant"
 _DEFAULT_USER = "quant_user"
+
+RESEARCH_ROLE = "quant_research"
 
 _MIN_PORT = 1
 _MAX_PORT = 65535
@@ -114,5 +122,37 @@ def load_database_settings() -> DatabaseSettings:
         port=_read_port("POSTGRES_PORT", _DEFAULT_PORT),
         database=_read("POSTGRES_DATABASE", _DEFAULT_DATABASE),
         username=_read("POSTGRES_USER", _DEFAULT_USER),
+        password=password,
+    )
+
+
+def load_research_settings() -> DatabaseSettings:
+    """Load the settings the quant worker connects with.
+
+    The same host, port and database as :func:`load_database_settings`, but
+    always as the ``quant_research`` role (ADR-016): it reads ``quant`` and
+    writes only ``research``. The worker never borrows the owner's
+    credentials, so a bug in research code cannot write the system of record.
+
+    Returns:
+        The resolved settings.
+
+    Raises:
+        MissingConfigurationError: If ``RESEARCH_DB_PASSWORD`` is not set, or if
+            ``POSTGRES_PORT`` is not a valid port number.
+    """
+    password = os.environ.get("RESEARCH_DB_PASSWORD", "").strip()
+    if not password:
+        message = (
+            "RESEARCH_DB_PASSWORD is not set. The backend gives the quant_research role "
+            "its login from the same variable; set it in .env for both."
+        )
+        raise MissingConfigurationError(message)
+
+    return DatabaseSettings(
+        host=_read("POSTGRES_HOST", _DEFAULT_HOST),
+        port=_read_port("POSTGRES_PORT", _DEFAULT_PORT),
+        database=_read("POSTGRES_DATABASE", _DEFAULT_DATABASE),
+        username=RESEARCH_ROLE,
         password=password,
     )

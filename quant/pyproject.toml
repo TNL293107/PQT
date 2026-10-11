@@ -5,7 +5,7 @@ description = "Quantitative research layer for the Personal Quant Terminal."
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
 
-# Two runtime dependencies, each added because nothing else can do its job.
+# Three runtime dependencies, each added because nothing else can do its job.
 #
 # pyarrow (U6) reads the canonical dataset's Parquet. Everything the momentum
 # vertical slice computes — a 12-1 return, a rank, a decile mean, a rank
@@ -17,16 +17,23 @@ license = { text = "Proprietary" }
 # DECIMAL. The floor is the oldest release the tests, its file-access
 # lockdown among them, were run against (1.5.0; also 1.5.6).
 #
+# psycopg (U10) is how the quant worker reaches research.jobs, connected as
+# the quant_research role. It is a driver, not an ORM: the worker's SQL is
+# three statements, and the schema belongs to the backend's migrations.
+#
 # numpy, polars and the rest arrive when a computation needs them (Phase 7),
 # not before: a dependency added before a computation justifies it is one
 # nobody can argue for removing later.
 dependencies = [
     "pyarrow>=18",
     "duckdb>=1.5",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "pyyaml>=6",
+    "types-PyYAML>=6",
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.9",

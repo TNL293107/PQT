@@ -166,6 +166,37 @@ services:
       start_period: 20s
 
   # ---------------------------------------------------------------------------
+  # Quant worker — runs the research jobs the backend queues (ADR-016).
+  # ---------------------------------------------------------------------------
+  # Behind a profile, so `docker compose up` starts the terminal without it;
+  # `docker compose --profile research up` adds it. Nothing depends on it, and
+  # it has no healthcheck anything waits on: a crashing experiment can fail
+  # only itself. It connects as quant_research — read quant, write research —
+  # and is never given the owner's credentials.
+  quant-worker:
+    profiles: ["research"]
+    build:
+      context: ./quant
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:?set POSTGRES_DATABASE in .env}
+      # Unset, the worker refuses to start and says why. Not ":?": Compose
+      # interpolates every service, profiled or not, and the terminal must
+      # come up without it.
+      RESEARCH_DB_PASSWORD: ${RESEARCH_DB_PASSWORD:-}
+      PQT_DATASET_ROOT: /app/datasets
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+    volumes:
+      # The backend's exports, read-only: the worker verifies and reads them,
+      # and a research process must not be able to alter a dataset version.
+      - dataset-data:/app/datasets:ro
+
+  # ---------------------------------------------------------------------------
   # Frontend — React terminal, compiled and served by nginx.
   # ---------------------------------------------------------------------------
   frontend:

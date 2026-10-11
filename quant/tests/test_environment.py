@@ -8,6 +8,7 @@ from personal_quant.environment import (
     DatabaseSettings,
     MissingConfigurationError,
     load_database_settings,
+    load_research_settings,
 )
 
 POSTGRES_VARIABLES = [
@@ -115,3 +116,29 @@ def test_repr_does_not_expose_the_password() -> None:
 
     assert "super-secret" not in repr(settings)
     assert "***" in repr(settings)
+
+
+def test_the_worker_always_connects_as_the_research_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Never the owner, even when the owner's variables are set beside it.
+    monkeypatch.setenv("POSTGRES_HOST", "postgres")
+    monkeypatch.setenv("POSTGRES_USER", "quant_user")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "owner-password")
+    monkeypatch.setenv("RESEARCH_DB_PASSWORD", "research-password")
+
+    settings = load_research_settings()
+
+    assert settings.username == "quant_research"
+    assert settings.password == "research-password"
+    assert settings.host == "postgres"
+
+
+def test_the_worker_without_a_research_password_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", "owner-password")
+    monkeypatch.delenv("RESEARCH_DB_PASSWORD", raising=False)
+
+    with pytest.raises(MissingConfigurationError, match="RESEARCH_DB_PASSWORD"):
+        load_research_settings()
