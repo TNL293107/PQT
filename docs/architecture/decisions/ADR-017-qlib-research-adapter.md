@@ -121,18 +121,50 @@ Implemented as decided for the model zoo, with these specifics:
 - **Pinned `pyqlib==0.9.7`** in the `research` extra — the newest release for
   CPython 3.12, and the last ABI it publishes wheels for, so the extra needs a
   3.12 interpreter. `describe()` returns `research_engine` and
-  `research_engine_version` (and the LightGBM version) for U9's run record.
+  `research_engine_version` for U9's run record, with the LightGBM, NumPy,
+  pandas and MLflow versions beside them: a fit is repeatable within one
+  environment, so the environment is part of the record.
+- **Repeatable fits.** LightGBM runs single-threaded, `deterministic` and
+  `force_row_wise`. The settings carry bagging and feature sampling, so the
+  seed can matter; the tests show that it does, that two fits with one seed
+  agree, and that they agree bit for bit across two processes.
 - **The guard** is `quant/tests/test_qlib_confinement.py`, an AST scan run by
-  `pytest` in the default CI job, proven by eleven planted imports. It guards
-  `mlflow` as well as `qlib`, since MLflow is contained in the adapter too.
+  `pytest` in the default CI job. It guards `mlflow` as well as `qlib`, since
+  MLflow is contained in the adapter too. Outside
+  `quant/src/personal_quant/integrations/qlib/` — anchored there, not matched
+  anywhere in a path — it flags import statements; any string literal that is
+  a guarded name (`"qlib"`, `"mlflow.tracking"`), which covers importers under
+  any alias and by keyword; and any non-docstring literal that parses as
+  source importing one, which covers `exec` and `python -c`. Only the guard
+  and `test_qlib_optional.py` may name the packages, and neither may import
+  them. It is proven by twenty-eight planted strays. A name computed at run
+  time (`"q" + "lib"`) is not caught, and a test records that: the guard
+  catches accidents; review catches intent.
 - **Optional, proven in fresh interpreters**: with Qlib made unimportable every
-  module imports, and with it installed importing every module loads none of
-  Qlib, MLflow or LightGBM. Absent Qlib the engine tests skip; a separate,
-  non-required CI job installs the extra and runs them.
+  module imports; with it installed, importing every module loads none of
+  Qlib, MLflow, LightGBM or pandas (NumPy arrives through pyarrow, not the
+  adapter), and importing the adapter alone loads none of them or NumPy.
+  Absent Qlib the engine tests skip; a separate, non-required CI job installs
+  the extra and runs them.
 - **MLflow is contained in scratch, which took more than the ADR assumed.**
   `LGBModel.fit` logs through Qlib's Recorder, which needs `qlib.init`; the
   adapter initialises Qlib once per process with an unused, empty
   `provider_uri` and MLflow on SQLite in its scratch directory (MLflow 3
   refuses its file store), and creates the experiment itself with its
   artifact location there, because a Qlib-created one writes the recorder's
-  `git diff` of the working directory into `./mlruns`.
+  `git diff` of the working directory into `./mlruns`. A test shows it from a
+  fresh process run in a git checkout with an uncommitted change: the diff
+  lands in the scratch and the checkout is untouched.
+- **Scratch.** Unless a model is given one, the scratch is a per-process
+  `tempfile.mkdtemp(prefix="pqt-qlib-")` directory, owner-only, removed at
+  interpreter exit once MLflow's SQLite connections are closed. It holds a
+  diff of the working directory, so it is neither shared nor left behind.
+  Recorder runs are named with a UUID.
+- **One process, serialised fits.** Qlib's configuration, its recorder and
+  MLflow's active run are process-global. One lock covers initialisation,
+  experiment creation and each recorded fit, so fits in two threads take
+  turns. `warnings.catch_warnings()`, which a fit without validation rows
+  uses to silence one LightGBM warning, is process-wide and not thread-safe;
+  under the lock no two fits race it, but code outside the adapter changing
+  warning filters during a fit can. A process forked after the first fit
+  inherits the parent's configuration and scratch and should be given its own.
