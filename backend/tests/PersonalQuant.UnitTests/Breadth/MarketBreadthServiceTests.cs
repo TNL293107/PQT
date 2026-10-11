@@ -348,12 +348,14 @@ public sealed class MarketBreadthServiceTests
         harness.Universes.Add(lapsed);
 
         var directory = new UniverseDirectory(harness.Universes, new FakeClock(Harness.Now));
-        var listed = await directory.ListAsync(TestContext.Current.CancellationToken);
+        var listing = await directory.ListAsync(TestContext.Current.CancellationToken);
+        var listed = listing.Universes;
 
+        Assert.Equal(new DateOnly(2026, 10, 3), listing.AsOf);
         Assert.Equal(["OLD", "VN30T"], listed.Select(summary => summary.Code.Value));
         Assert.Null(listed[0].MemberCount);
         Assert.Equal(1, listed[1].MemberCount);
-        Assert.Equal(new DateOnly(2026, 10, 3), listed[1].AsOf);
+        Assert.Equal(1, harness.Universes.MemberReads);
     }
 
     /// <summary>One venue, one index, and the service over real calendar logic.</summary>

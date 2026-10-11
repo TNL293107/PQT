@@ -12,9 +12,16 @@ public interface IUniverseDirectory
     /// Lists every universe, by code, with today's member count where known.
     /// </summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>Every universe, ordered by code.</returns>
-    Task<IReadOnlyList<UniverseSummary>> ListAsync(CancellationToken cancellationToken = default);
+    /// <returns>Every universe, ordered by code, and the date counted as of.</returns>
+    Task<UniverseListing> ListAsync(CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Every universe, and the date their member counts were read as of.
+/// </summary>
+/// <param name="AsOf">Today, as the system clock reads it in UTC.</param>
+/// <param name="Universes">Every universe, ordered by code.</param>
+public sealed record UniverseListing(DateOnly AsOf, IReadOnlyList<UniverseSummary> Universes);
 
 /// <summary>
 /// One universe as a listing shows it.
@@ -25,18 +32,16 @@ public interface IUniverseDirectory
 /// <param name="Coverage">
 /// The span whose membership it claims to know, or null when it claims nothing.
 /// </param>
-/// <param name="AsOf">The date the member count was read as of — today.</param>
 /// <param name="MemberCount">
-/// How many members it has on <paramref name="AsOf"/>, or null when its
-/// coverage does not reach that date. Null is not zero: a universe whose
-/// claim ended last year has an unknown membership today, not an empty one.
+/// How many members it has on the listing's date, or null when its coverage
+/// does not reach that date. Null is not zero: a universe whose claim ended
+/// last year has an unknown membership today, not an empty one.
 /// </param>
 public sealed record UniverseSummary(
     UniverseCode Code,
     string Name,
     UniverseKind Kind,
     MembershipCoverage? Coverage,
-    DateOnly AsOf,
     int? MemberCount);
 
 /// <summary>
@@ -53,7 +58,7 @@ public sealed record UniverseSummary(
 internal sealed class UniverseDirectory(IUniverseRepository universes, IClock clock) : IUniverseDirectory
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<UniverseSummary>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<UniverseListing> ListAsync(CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         var defined = await universes.ListAsync(cancellationToken).ConfigureAwait(false);
@@ -68,9 +73,9 @@ internal sealed class UniverseDirectory(IUniverseRepository universes, IClock cl
                 : null;
 
             summaries.Add(new UniverseSummary(
-                universe.Code, universe.Name, universe.Kind, universe.Coverage, today, count));
+                universe.Code, universe.Name, universe.Kind, universe.Coverage, count));
         }
 
-        return summaries;
+        return new UniverseListing(today, summaries);
     }
 }
