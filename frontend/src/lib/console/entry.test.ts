@@ -21,6 +21,13 @@ describe("parseEntry", () => {
     expect(entry.functionCode).toBe("GP");
   });
 
+  it("reads COV as the coverage function", () => {
+    const entry = parseEntry("fpt cov");
+
+    expect(entry.securityQuery).toBe("fpt");
+    expect(entry.functionCode).toBe("COV");
+  });
+
   it("reads a security on its own", () => {
     const entry = parseEntry("fpt");
 

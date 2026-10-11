@@ -108,5 +108,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<Research.IResearchJobService, Research.ResearchJobService>();
         services.AddScoped<Terminal.IWatchlistService, Terminal.WatchlistService>();
         services.AddScoped<Terminal.IWorkspaceService, Terminal.WorkspaceService>();
+
+        // The coverage registry. Read-only introspection over everything
+        // above, owning no state; the API, the CLI and the console all call
+        // this one query (ADR-026).
+        services.AddScoped<
+            Coverage.IInstrumentCoverageService,
+            Coverage.InstrumentCoverageService>();
     }
 }

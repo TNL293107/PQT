@@ -78,6 +78,11 @@ out/
 .turbo/
 .vite/
 coverage/
+# The coverage registry's source folders are code, not a test-coverage report.
+# Git on Windows matches ignore rules case-insensitively, so the rule above
+# would otherwise swallow them.
+!backend/src/**/Coverage/
+!backend/tests/**/Coverage/
 *.tsbuildinfo
 .eslintcache
 .stylelintcache

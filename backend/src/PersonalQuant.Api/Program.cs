@@ -69,6 +69,7 @@ app.MapCorporateActionEndpoints();
 app.MapWatchlistEndpoints();
 app.MapWorkspaceEndpoints();
 app.MapUniverseEndpoints();
+app.MapCoverageEndpoints();
 
 await app.RunAsync();
 

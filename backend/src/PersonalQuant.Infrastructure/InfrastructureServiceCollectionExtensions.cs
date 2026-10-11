@@ -108,6 +108,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
         services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
         services.AddScoped<IUniverseRepository, UniverseRepository>();
+        services.AddScoped<Application.Coverage.ICoverageRepository, CoverageRepository>();
         services.AddScoped<Application.Research.IResearchJobRepository, ResearchJobRepository>();
         services.AddScoped<Application.Research.IExperimentRepository, ExperimentRepository>();
         services.AddScoped<Application.Research.IResearchRunRepository, ResearchRunRepository>();

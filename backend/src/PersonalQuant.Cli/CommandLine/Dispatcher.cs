@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.CorporateActions;
+using PersonalQuant.Application.Coverage;
 using PersonalQuant.Application.Datasets;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
@@ -121,6 +122,13 @@ internal static class Dispatcher
                         output)
                     .RunAsync(command, cancellationToken);
 
+            case "coverage":
+                return new CoverageCommands(
+                        Defer<IInstrumentCoverageService>(services),
+                        Defer<IInstrumentResolver>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             case "watchlist":
                 return new WatchlistCommands(
                         Defer<IWatchlistService>(services),
@@ -135,7 +143,7 @@ internal static class Dispatcher
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
-                        + "quality, adjust, dataset, research, universe, watchlist, workspace, schema or calendar.");
+                        + "quality, coverage, adjust, dataset, research, universe, watchlist, workspace, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

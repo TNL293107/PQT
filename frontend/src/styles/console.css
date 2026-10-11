@@ -501,3 +501,48 @@
 .fold summary:focus-visible {
   color: var(--accent);
 }
+
+/* --- Coverage ----------------------------------------------------------- */
+
+/*
+ * Each state is a mark and a word; the colour only reinforces them. Not
+ * measured is set apart from not held by its mark, its word and its style —
+ * italic, as the one state that is an absence of knowledge rather than a fact.
+ */
+.cov-state {
+  display: inline-flex;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.cov-state__mark {
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+  font-weight: 600;
+}
+
+.cov-state--Held {
+  color: var(--state-online);
+}
+
+.cov-state--NotHeld {
+  color: var(--state-offline);
+}
+
+.cov-state--NotMeasured {
+  color: var(--state-degraded);
+  font-style: italic;
+}
+
+.cov-state--NotCollected {
+  color: var(--text-muted);
+}
+
+.coverage td {
+  vertical-align: top;
+}
+
+.coverage__note {
+  color: var(--text-muted);
+}

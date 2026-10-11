@@ -4,6 +4,7 @@ import { FUNCTIONS, VERBS } from "../../lib/console/entry";
 import type { ConsoleRecord } from "../../lib/console/records";
 import { PriceChart } from "./PriceChart";
 import { BreadthView, UniversesView } from "./BreadthView";
+import { CoverageView } from "./CoverageView";
 
 /** Renders whatever a command produced. */
 export function RecordView({ record }: { readonly record: ConsoleRecord }) {
@@ -73,6 +74,8 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
 
     case "breadth":
       return <BreadthView breadth={record.breadth} />;
+    case "coverage":
+      return <CoverageView coverage={record.coverage} />;
 
     default:
       return null;

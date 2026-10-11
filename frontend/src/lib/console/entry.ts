@@ -52,6 +52,11 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     summary: "Ingestion history — every attempt, not only the ones that worked",
     options: ["interval"],
   },
+  {
+    code: "COV",
+    summary: "Coverage — which datasets PQT holds for it, and to what extent",
+    options: [],
+  },
 ];
 
 /** The verbs that name no security. */

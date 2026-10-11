@@ -8,6 +8,7 @@ import type {
 import type { SystemHealth } from "../../types/health";
 import type { ChartStyle } from "../chart/series";
 import type { Breadth, UniverseList } from "../../types/universe";
+import type { InstrumentCoverage } from "../../types/coverage";
 
 /**
  * What a command produced.
@@ -51,7 +52,12 @@ export type ConsoleRecord =
       readonly runs: readonly IngestionRun[];
     }
   | { readonly kind: "universes"; readonly listing: UniverseList }
-  | { readonly kind: "breadth"; readonly breadth: Breadth };
+  | { readonly kind: "breadth"; readonly breadth: Breadth }
+  | {
+      readonly kind: "coverage";
+      readonly instrument: Instrument;
+      readonly coverage: InstrumentCoverage;
+    };
 
 /** One exchange in the transcript: what was typed, and what came back. */
 export interface TranscriptItem {
