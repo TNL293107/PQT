@@ -114,6 +114,13 @@ internal static class Dispatcher
                 return new ResearchCommands(Defer<IResearchJobService>(services), output)
                     .RunAsync(command, cancellationToken);
 
+            case "universe":
+                return new UniverseCommands(
+                        Defer<IUniverseDirectory>(services),
+                        Defer<Application.Breadth.IMarketBreadthService>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             case "watchlist":
                 return new WatchlistCommands(
                         Defer<IWatchlistService>(services),
@@ -128,7 +135,7 @@ internal static class Dispatcher
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
-                        + "quality, adjust, dataset, research, watchlist, workspace, schema or calendar.");
+                        + "quality, adjust, dataset, research, universe, watchlist, workspace, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

@@ -52,7 +52,7 @@ PowerShell: `$env:Redis__Host = 'localhost'`, and so on. A Redis the CLI cannot
 reach does not stop the command from starting, and does not let it ingest
 unlocked either: each pass is recorded as failed, naming the lock store, and the
 command exits 1. The commands that never ingest — `provider`, `quality`,
-`schema`, `calendar`, `dataset` — do not touch Redis.
+`schema`, `calendar`, `dataset`, `universe` — do not touch Redis.
 
 Nothing about the CLI starts the API's hosted services. It never migrates, never
 seeds and never begins a scheduled pass.
@@ -357,6 +357,68 @@ the worker runs the latest build at the moment it claims the job. `show` exits
 Start the worker with `docker compose --profile research up -d quant-worker`;
 it needs `RESEARCH_DB_PASSWORD` in `.env`, the same value the backend uses to
 give the role its login.
+
+### `universe`
+
+Lists the universes a deployment defines, and counts how one moved on a session
+(ADR-026). The count is the application layer's — the same one
+`GET /universes/{code}/breadth` and the console's `BREADTH` render.
+
+```bash
+pqt universe list
+pqt universe breadth <CODE> [--on yyyy-MM-dd]
+```
+
+`list` shows each universe's kind, the coverage it declares, and how many
+members it has today. A universe whose coverage does not reach today shows
+`unknown`, never `0`: its membership today is not known, which is not the same as
+empty.
+
+```text
+CODE  KIND   COVERAGE      MEMBERS 2026-10-11  NAME
+VN30  Index  2026-07-01 →  30                  VN30 Index
+```
+
+`breadth` prints a summary line, the volume behind each side, the session each
+member was measured against, and then every member sorted by change, members
+without data last (the figures below are illustrative, not market data):
+
+```text
+VN30 2026-09-30  ▲ 18  ▼ 9  = 2  no data 1
+volume  ▲ 41,220,300  ▼ 18,904,100  = 1,250,000
+against HOSE 2026-09-29
+
+   TICKER  CHANGE   CLOSE   PREV    VOLUME     NOTE
+▲  MWG     +3.85%   67,500  65,000  6,120,400
+…
+=  REE     0.00%    68,000  68,000  310,200    ex-date: previous close 70,000 restated
+▼  VJC     -2.10%   93,300  95,300  1,402,000
+·  BSR     no data  unknown 21,450  unknown    no bar on the session
+```
+
+What it counts, and what it refuses:
+
+- **Members** are those whose spell contains the session, read through the
+  universe's coverage claim. A session the universe does not claim to know is
+  refused rather than counted over an empty set.
+- **The previous session** is the previous trading day on each member's own
+  venue calendar. The session must be a trading day on every venue a member
+  trades on; a weekend or recorded closure is refused, and so is a session — or
+  a previous session — the calendar was not transcribed for.
+- **The change** is measured on prices adjusted for actions going ex on the
+  session: the previous close is multiplied by their factor, which is the
+  exchange's own reference-price rule. An ex-dividend gap is therefore not a
+  decline, and the row says the previous close was restated. This differs from
+  a broker's board on an ex-date, deliberately.
+- **No data** is a member without a bar on the session or on the previous one.
+  It is never counted as unchanged.
+- Without `--on`, the session is the latest one up to today on which some
+  member — a member that day — has a daily bar, looking back at most 31 days.
+  The output says it chose. If no member has a bar in that window, the command
+  refuses rather than reaching further back.
+
+A refusal exits 1 with its reason on standard error; an unknown universe code is
+a refusal too, since whether one exists is the deployment's answer.
 
 ### `watchlist`
 

@@ -56,6 +56,10 @@ internal static class Usage
         output.WriteLine("  pqt workspace show|delete <NAME>");
         output.WriteLine("  pqt workspace save <NAME> \"<console line>\" [\"<console line>\"...]");
         output.WriteLine();
+        output.WriteLine("  pqt universe list");
+        output.WriteLine("  pqt universe breadth <CODE> [--on yyyy-MM-dd]");
+        output.WriteLine("                     (latest session with member bars when --on is omitted)");
+        output.WriteLine();
         output.WriteLine("  pqt schema status");
         output.WriteLine("  pqt calendar status");
         output.WriteLine();

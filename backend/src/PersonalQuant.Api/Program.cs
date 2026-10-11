@@ -68,6 +68,7 @@ app.MapMarketDataEndpoints();
 app.MapCorporateActionEndpoints();
 app.MapWatchlistEndpoints();
 app.MapWorkspaceEndpoints();
+app.MapUniverseEndpoints();
 
 await app.RunAsync();
 

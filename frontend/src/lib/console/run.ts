@@ -7,6 +7,7 @@ import {
   fetchQuality,
   fetchQualityIssues,
 } from "../api/marketData";
+import { fetchBreadth, fetchUniverses, UniverseApiError } from "../api/universes";
 import { parseEntry, readCount } from "./entry";
 import { failure, lines, type ConsoleRecord } from "./records";
 
@@ -22,6 +23,8 @@ export interface ConsoleServices {
   readonly issues: typeof fetchQualityIssues;
   readonly ingestion: typeof fetchIngestionHistory;
   readonly health: typeof fetchSystemHealth;
+  readonly universes: typeof fetchUniverses;
+  readonly breadth: typeof fetchBreadth;
 }
 
 /** The live services, reaching the API. */
@@ -33,6 +36,8 @@ export const liveServices: ConsoleServices = {
   issues: fetchQualityIssues,
   ingestion: fetchIngestionHistory,
   health: fetchSystemHealth,
+  universes: fetchUniverses,
+  breadth: fetchBreadth,
 };
 
 /** What running a line produced, and whether it also clears the transcript. */
@@ -76,6 +81,12 @@ export async function runEntry(
 
       case "FIND":
         return { record: await find(entry.securityQuery, services, signal) };
+
+      case "UNIVERSES":
+        return { record: { kind: "universes", listing: await services.universes(signal) } };
+
+      case "BREADTH":
+        return { record: await breadth(entry.securityQuery, entry.options, services, signal) };
 
       default:
         break;
@@ -302,6 +313,63 @@ function readDay(
   }
 
   return { day: value };
+}
+
+/** What to try next, for each reason the server gives for not counting. */
+const BREADTH_HINTS: Readonly<Record<string, string>> = {
+  UnknownUniverse: "Type 'universes' for the universes this deployment defines.",
+  MembershipUnknown:
+    "The universe's declared coverage does not reach that session — 'universes' shows each one's.",
+  CalendarNotCovered:
+    "The venue calendar has to be transcribed for that session first — 'pqt calendar status' shows how far it reaches.",
+  NotATradingDay: "Name a trading session with --on yyyy-MM-dd.",
+  NoData: "No member has a recent bar. Name a session with --on yyyy-MM-dd.",
+};
+
+/**
+ * Asks the server for a universe's breadth.
+ *
+ * The console counts nothing: advancing, declining and the ex-date rule are
+ * the server's (ADR-026). A refusal is shown in the server's own words with
+ * what to try instead, because "not a trading day" and "the calendar does not
+ * reach" need different next steps and the same red line would hide that.
+ */
+async function breadth(
+  query: string,
+  options: Readonly<Record<string, string | null>>,
+  services: ConsoleServices,
+  signal?: AbortSignal,
+): Promise<ConsoleRecord> {
+  const code = query.trim();
+
+  if (code === "") {
+    return failure(
+      "'breadth' needs a universe.",
+      "breadth VN30 --on 2026-09-30 — 'universes' lists them.",
+    );
+  }
+
+  if (!/^[A-Za-z0-9_]+$/u.test(code)) {
+    return failure(`'${code}' is not a universe code.`, "breadth VN30 --on 2026-09-30");
+  }
+
+  const on = readDay(options, "on");
+
+  if ("record" in on) {
+    return on.record;
+  }
+
+  try {
+    const counted = await services.breadth(code.toUpperCase(), on.day ?? undefined, signal);
+
+    return { kind: "breadth", breadth: counted };
+  } catch (error) {
+    if (error instanceof UniverseApiError && error.status >= 400 && error.status < 500) {
+      return failure(error.message, BREADTH_HINTS[error.outcome ?? ""]);
+    }
+
+    throw error;
+  }
 }
 
 async function ingestion(

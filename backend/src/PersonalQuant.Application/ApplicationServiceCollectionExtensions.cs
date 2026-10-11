@@ -40,6 +40,10 @@ public static class ApplicationServiceCollectionExtensions
 
         AddMarketData(services);
 
+        // Market breadth (ADR-026 slice 2). The one count every interface reads.
+        services.AddScoped<Universes.IUniverseDirectory, Universes.UniverseDirectory>();
+        services.AddScoped<Breadth.IMarketBreadthService, Breadth.MarketBreadthService>();
+
         return services;
     }
 
