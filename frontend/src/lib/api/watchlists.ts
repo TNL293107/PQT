@@ -73,7 +73,7 @@ function instrumentPath(name: string, instrumentId: string): string {
   return `/watchlists/${encodeURIComponent(name)}/instruments/${encodeURIComponent(instrumentId)}`;
 }
 
-async function send<T>(
+export async function send<T>(
   method: string,
   path: string,
   key: string | null,
