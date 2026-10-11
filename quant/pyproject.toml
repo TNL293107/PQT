@@ -39,6 +39,17 @@ dev = [
     "ruff>=0.9",
     "mypy>=1.14",
 ]
+# Qlib, research only (U8, ADR-017): the model zoo behind PQT's Model
+# protocol, imported only by personal_quant.integrations.qlib. Never a base
+# dependency — the package and its tests run without it, and the adapter's
+# tests skip. Pinned exactly, because a run records the engine version that
+# produced it (research_engine_version) and the last tagged release is slow
+# to move. pyqlib 0.9.7 publishes wheels for CPython 3.8–3.12 only, so this
+# extra needs a 3.12 interpreter; it brings LightGBM, pandas and MLflow, all
+# of which stay inside the adapter.
+research = [
+    "pyqlib==0.9.7",
+]
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -117,4 +128,12 @@ warn_unreachable = true
 # to typed Bars at once, so nothing untyped travels further.
 [[tool.mypy.overrides]]
 module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+
+# Qlib ships no type information, and none of Qlib, MLflow or pandas is
+# installed without the research extra. All three are imported only inside
+# personal_quant.integrations.qlib, which converts everything they return to
+# builtins before it leaves, so nothing untyped travels further.
+[[tool.mypy.overrides]]
+module = ["qlib", "qlib.*", "mlflow", "mlflow.*", "pandas", "pandas.*"]
 ignore_missing_imports = true
