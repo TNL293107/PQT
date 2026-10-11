@@ -66,14 +66,23 @@ const UNSAVED_VERBS = new Set(["KEY", "WS", "CLEAR", "HELP"]);
  * Whether a line belongs in a saved workspace.
  *
  * A workspace replays views. Saving the key into one would publish it to every
- * reader of `GET /workspaces`, and saving `ws` lines would make a replay
- * recurse.
+ * reader of `GET /workspaces`, saving `ws` lines would make a replay recurse,
+ * and saving a watchlist write would repeat it on every load.
  */
 export function isReplayable(line: string): boolean {
-  const first = line.trim().split(/\s+/u)[0]?.toUpperCase() ?? "";
+  const [first = "", second = ""] = line.trim().toUpperCase().split(/\s+/u);
 
-  return first !== "" && !UNSAVED_VERBS.has(first);
+  if (first === "" || UNSAVED_VERBS.has(first)) {
+    return false;
+  }
+
+  // A workspace replays views, never writes: loading one in a tab that holds
+  // the key must not create, fill or empty a watchlist as a side effect.
+  return first !== "WL" || WATCHLIST_READS.has(second);
 }
+
+/** The watchlist sub-commands that only read. */
+const WATCHLIST_READS = new Set(["", "LIST", "SHOW"]);
 
 /**
  * How a line is echoed into the transcript and the history.

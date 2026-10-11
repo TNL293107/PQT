@@ -75,10 +75,13 @@ describe("the operator key", () => {
     expect(fake.key.write).toHaveBeenCalledWith(KEY);
   });
 
-  it("is kept out of saved workspaces, and so are workspace lines", () => {
+  it("is kept out of saved workspaces, and so are workspace lines and watchlist writes", () => {
     expect(isReplayable(`key ${KEY}`)).toBe(false);
     expect(isReplayable("ws load morning")).toBe(false);
     expect(isReplayable("FPT GP")).toBe(true);
+    expect(isReplayable("wl show core")).toBe(true);
+    expect(isReplayable("wl add core FPT")).toBe(false);
+    expect(isReplayable("wl create core")).toBe(false);
   });
 });
 
