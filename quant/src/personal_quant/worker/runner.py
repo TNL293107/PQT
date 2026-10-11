@@ -100,7 +100,7 @@ class Worker:
             return
 
         try:
-            result = handler(job.payload)
+            outcome = handler(job.payload)
         except JobRejectedError as rejection:
             self._fail(job, f"Rejected: {rejection}")
             return
@@ -110,7 +110,7 @@ class Worker:
             return
 
         try:
-            self._queue.complete(job, self._name, result)
+            self._queue.complete(job, self._name, outcome.result, outcome.run)
         except LeaseLostError:
             _log.warning("Job %s finished after its lease was lost; result discarded.", job.id)
             return

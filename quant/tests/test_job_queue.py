@@ -1,6 +1,6 @@
 """The job queue's SQL, against real PostgreSQL.
 
-The table is built from ``fixtures/research_jobs.sql``, the backend's own
+The tables are built from ``fixtures/research_schema.sql``, the backend's own
 definition (an integration test there fails if the two drift), inside a
 throwaway schema that is dropped afterwards, so these tests never touch a real
 ``research`` schema. They run when ``PQT_TEST_DATABASE_URL`` names a database
@@ -13,7 +13,8 @@ import os
 import re
 import uuid
 from collections.abc import Iterator
-from datetime import timedelta
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -21,10 +22,11 @@ import psycopg
 import pytest
 from psycopg import sql
 
+from personal_quant.research.experiments import RunRecord
 from personal_quant.worker.queue import LeaseLostError, PostgresJobQueue
 
 DATABASE_URL = os.environ.get("PQT_TEST_DATABASE_URL", "")
-FIXTURE = Path(__file__).parent / "fixtures" / "research_jobs.sql"
+FIXTURE = Path(__file__).parent / "fixtures" / "research_schema.sql"
 LEASE = timedelta(minutes=5)
 
 pytestmark = pytest.mark.skipif(
@@ -35,7 +37,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def schema() -> Iterator[str]:
-    """Create a throwaway copy of research.jobs and drop it afterwards."""
+    """Create a throwaway copy of the research schema and drop it afterwards."""
     name = f"research_test_{uuid.uuid4().hex[:12]}"
     ddl = re.sub(r"\bresearch(?=[.;])", name, FIXTURE.read_text(encoding="utf-8"))
 
@@ -179,3 +181,117 @@ def test_a_worker_that_lost_its_job_cannot_finish_it(
         queue.complete(stale, "w1", {"late": True})
 
     assert _row(schema, connection, stale.id)[:2] == ("running", "w2")
+
+
+def _run(**changes: Any) -> RunRecord:  # noqa: ANN401
+    record = RunRecord(
+        experiment="momentum-test",
+        strategy="momentum_slice",
+        universe_code="VN30",
+        universe_as_of=None,
+        membership="point_in_time",
+        dataset_id="0123456789abcdef",
+        dataset_version=1,
+        schema_version=2,
+        content_hash="a" * 64,
+        factor_version="momentum_12_1@1",
+        parameters={"dataset_id": "0123456789abcdef", "version": 1},
+        metrics={"ic_mean": 0.07, "t_statistic": None},
+        started_at=datetime(2026, 10, 11, 1, 0, tzinfo=UTC),
+        finished_at=datetime(2026, 10, 11, 1, 1, tzinfo=UTC),
+    )
+    return replace(record, **changes)
+
+
+def _trials(schema: str, connection: psycopg.Connection[Any]) -> list[tuple[Any, ...]]:
+    rows = connection.execute(
+        sql.SQL(
+            "SELECT trial_index, trial_count, reproduces_run_id IS NOT NULL FROM {} "
+            "ORDER BY finished_at_utc, trial_index NULLS LAST"
+        ).format(sql.Identifier(schema, "runs"))
+    ).fetchall()
+    connection.commit()
+    return [tuple(row) for row in rows]
+
+
+def test_a_completed_job_records_its_run_and_counts_the_trial(
+    schema: str, connection: psycopg.Connection[Any]
+) -> None:
+    # The experiment is named by the run and created on first use; every
+    # configuration after it is counted against it.
+    _queue(schema, connection, ("a", "2026-10-11T01:00Z"), ("b", "2026-10-11T02:00Z"))
+    queue = PostgresJobQueue(connection, schema)
+
+    for _ in range(2):
+        job = queue.claim("w1", LEASE)
+        assert job is not None
+        queue.complete(job, "w1", {"ok": True}, _run())
+
+    assert _trials(schema, connection) == [(1, 1, False), (2, 2, False)]
+
+    metrics = connection.execute(
+        sql.SQL("SELECT name, value FROM {} ORDER BY name").format(
+            sql.Identifier(schema, "run_metrics")
+        )
+    ).fetchall()
+    connection.commit()
+    assert [tuple(row) for row in metrics] == [
+        ("ic_mean", 0.07),
+        ("ic_mean", 0.07),
+        ("t_statistic", None),
+        ("t_statistic", None),
+    ]
+
+
+def test_the_result_names_the_run_it_recorded(
+    schema: str, connection: psycopg.Connection[Any]
+) -> None:
+    _queue(schema, connection, ("a", "2026-10-11T01:00Z"))
+    queue = PostgresJobQueue(connection, schema)
+    job = queue.claim("w1", LEASE)
+    assert job is not None
+    run = _run()
+
+    queue.complete(job, "w1", {"ok": True}, run)
+
+    result = _row(schema, connection, job.id)[3]
+    assert result == {"ok": True, "run": {"run_id": str(run.run_id), "trial_index": 1}}
+
+
+def test_a_reproduction_is_recorded_without_counting_as_a_trial(
+    schema: str, connection: psycopg.Connection[Any]
+) -> None:
+    _queue(schema, connection, ("a", "2026-10-11T01:00Z"), ("b", "2026-10-11T02:00Z"))
+    queue = PostgresJobQueue(connection, schema)
+    original = _run()
+
+    first = queue.claim("w1", LEASE)
+    assert first is not None
+    queue.complete(first, "w1", {}, original)
+    second = queue.claim("w1", LEASE)
+    assert second is not None
+    queue.complete(
+        second,
+        "w1",
+        {},
+        _run(reproduces_run_id=original.run_id, finished_at=datetime(2026, 10, 11, 2, tzinfo=UTC)),
+    )
+
+    assert _trials(schema, connection) == [(1, 1, False), (None, None, True)]
+
+
+def test_a_job_whose_lease_was_lost_records_no_run(
+    schema: str, connection: psycopg.Connection[Any]
+) -> None:
+    # The run and the job's outcome commit together or not at all; a late
+    # worker must not leave a run behind a job someone else now holds.
+    _queue(schema, connection, ("only", "2026-10-11T01:00Z"))
+    queue = PostgresJobQueue(connection, schema)
+    stale = queue.claim("w1", timedelta(seconds=-1))
+    assert stale is not None
+    assert queue.claim("w2", LEASE) is not None
+
+    with pytest.raises(LeaseLostError):
+        queue.complete(stale, "w1", {}, _run())
+
+    assert _trials(schema, connection) == []

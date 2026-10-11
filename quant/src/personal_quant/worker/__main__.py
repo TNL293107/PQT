@@ -24,6 +24,7 @@ from types import FrameType
 import psycopg
 
 from personal_quant.environment import MissingConfigurationError, load_research_settings
+from personal_quant.research.experiments import RunStore
 from personal_quant.worker.handlers import default_handlers
 from personal_quant.worker.queue import PostgresJobQueue
 from personal_quant.worker.runner import Worker
@@ -64,7 +65,6 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
 
-    handlers = default_handlers(Path(root))
     backoff = 1.0
 
     while not stop.is_set():
@@ -79,6 +79,7 @@ def main() -> int:
             ) as connection:
                 _log.info("Worker %s connected as %s.", name, settings.username)
                 backoff = 1.0
+                handlers = default_handlers(Path(root), RunStore(connection))
                 Worker(PostgresJobQueue(connection), handlers, name).run_forever(stop, poll)
         except psycopg.OperationalError as error:
             _log.warning("Database unavailable (%s); retrying in %.0fs.", error, backoff)

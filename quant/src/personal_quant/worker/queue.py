@@ -13,7 +13,10 @@ each other's lock. Each claim counts an attempt.
 **Finishing.** Completing or failing a job is conditional on still holding it:
 same worker, still running. A worker whose lease lapsed and whose job was
 claimed again by someone else must not overwrite the new holder's outcome; it
-gets :class:`LeaseLostError` instead.
+gets :class:`LeaseLostError` instead. A completed job's run is recorded in the
+experiment store in the same transaction (U9), so a run exists exactly when
+its job succeeded — never twice for a job claimed again, never for a job
+whose lease was lost.
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ from uuid import UUID
 import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
+
+from personal_quant.research.experiments import RunRecord, insert_run
 
 __all__ = ["Job", "JobQueue", "LeaseLostError", "PostgresJobQueue"]
 
@@ -53,8 +58,10 @@ class JobQueue(Protocol):
         """Take the oldest claimable job, or return ``None`` when there is none."""
         ...
 
-    def complete(self, job: Job, worker: str, result: Mapping[str, Any]) -> None:
-        """Record a job's result."""
+    def complete(
+        self, job: Job, worker: str, result: Mapping[str, Any], run: RunRecord | None = None
+    ) -> None:
+        """Record a job's result, and its run when it produced one."""
         ...
 
     def fail(self, job: Job, worker: str, error: str) -> None:
@@ -75,6 +82,7 @@ class PostgresJobQueue:
                 throwaway copy of the table from the backend's definition.
         """
         self._connection = connection
+        self._schema = schema
         self._table = sql.Identifier(schema, "jobs")
 
     def claim(self, worker: str, lease: timedelta) -> Job | None:
@@ -123,23 +131,35 @@ class PostgresJobQueue:
             attempts=int(attempts),
         )
 
-    def complete(self, job: Job, worker: str, result: Mapping[str, Any]) -> None:
-        """Record a job's result.
+    def complete(
+        self, job: Job, worker: str, result: Mapping[str, Any], run: RunRecord | None = None
+    ) -> None:
+        """Record a job's result, and its run, in one transaction.
 
         Args:
             job: The job.
             worker: This worker's name.
             result: A JSON-serialisable result.
+            run: The run to record in the experiment store, if the job produced one.
 
         Raises:
-            LeaseLostError: The job is no longer this worker's.
+            LeaseLostError: The job is no longer this worker's; nothing is recorded.
         """
-        self._finish(
-            job,
-            worker,
-            sql.SQL("status = 'succeeded', result = %(result)s"),
-            {"result": Jsonb(dict(result))},
-        )
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            recorded = dict(result)
+
+            if run is not None:
+                trial = insert_run(cursor, self._schema, job.id, run)
+                recorded["run"] = {"run_id": str(run.run_id), "trial_index": trial}
+
+            # Raised inside the transaction, so a lost lease rolls the run back too.
+            self._update(
+                cursor,
+                job,
+                worker,
+                sql.SQL("status = 'succeeded', result = %(result)s"),
+                {"result": Jsonb(recorded)},
+            )
 
     def fail(self, job: Job, worker: str, error: str) -> None:
         """Record why a job failed.
@@ -152,10 +172,18 @@ class PostgresJobQueue:
         Raises:
             LeaseLostError: The job is no longer this worker's.
         """
-        self._finish(job, worker, sql.SQL("status = 'failed', error = %(error)s"), {"error": error})
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            self._update(
+                cursor,
+                job,
+                worker,
+                sql.SQL("status = 'failed', error = %(error)s"),
+                {"error": error},
+            )
 
-    def _finish(
+    def _update(
         self,
+        cursor: psycopg.Cursor[Any],
         job: Job,
         worker: str,
         outcome: sql.Composable,
@@ -169,11 +197,9 @@ class PostgresJobQueue:
             """
         ).format(table=self._table, outcome=outcome)
 
-        with self._connection.transaction(), self._connection.cursor() as cursor:
-            cursor.execute(statement, {**parameters, "id": job.id, "worker": worker})
-            finished = cursor.rowcount
+        cursor.execute(statement, {**parameters, "id": job.id, "worker": worker})
 
-        if finished != 1:
+        if cursor.rowcount != 1:
             raise LeaseLostError(
                 f"Job {job.id} is no longer held by {worker}; its lease lapsed and it was "
                 "claimed again, or it was finished elsewhere."

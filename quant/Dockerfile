@@ -11,6 +11,13 @@ WORKDIR /app
 # privilege in the container either.
 RUN useradd --create-home --uid 10001 worker
 
+# The commit the image is built from, recorded on every run (U9). Passed in,
+# because the build context is quant/ and holds no .git:
+#   PQT_CODE_COMMIT=$(git rev-parse HEAD) docker compose --profile research build quant-worker
+# Left empty, runs record no commit rather than a guess.
+ARG PQT_CODE_COMMIT=
+ENV PQT_CODE_COMMIT=${PQT_CODE_COMMIT}
+
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir .

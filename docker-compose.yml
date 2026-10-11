@@ -177,6 +177,8 @@ services:
     profiles: ["research"]
     build:
       context: ./quant
+      args:
+        PQT_CODE_COMMIT: ${PQT_CODE_COMMIT:-}
     restart: unless-stopped
     depends_on:
       postgres:

@@ -9,7 +9,8 @@ from uuid import uuid4
 
 import pytest
 
-from personal_quant.worker.handlers import JobRejectedError
+from personal_quant.research.experiments import RunRecord
+from personal_quant.worker.handlers import JobOutcome, JobRejectedError
 from personal_quant.worker.queue import Job, LeaseLostError
 from personal_quant.worker.runner import Worker
 
@@ -26,7 +27,9 @@ class _Queue:
     def claim(self, worker: str, lease: timedelta) -> Job | None:
         return self.pending.pop(0) if self.pending else None
 
-    def complete(self, job: Job, worker: str, result: Mapping[str, Any]) -> None:
+    def complete(
+        self, job: Job, worker: str, result: Mapping[str, Any], run: RunRecord | None = None
+    ) -> None:
         if self.lose_lease:
             raise LeaseLostError("lost")
 
@@ -43,15 +46,15 @@ def _job(kind: str = "echo", attempts: int = 1, **payload: Any) -> Job:  # noqa:
     return Job(id=uuid4(), kind=kind, payload=payload, attempts=attempts)
 
 
-def _echo(payload: Mapping[str, Any]) -> Mapping[str, Any]:
-    return {"echo": dict(payload)}
+def _echo(payload: Mapping[str, Any]) -> JobOutcome:
+    return JobOutcome({"echo": dict(payload)})
 
 
-def _crash(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+def _crash(payload: Mapping[str, Any]) -> JobOutcome:
     raise ZeroDivisionError("division by zero")
 
 
-def _reject(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+def _reject(payload: Mapping[str, Any]) -> JobOutcome:
     raise JobRejectedError("'quantiles' must be at least 1, not 0.")
 
 
@@ -99,9 +102,9 @@ def test_a_job_that_keeps_killing_its_worker_is_abandoned_unrun() -> None:
     # would be the fourth.
     ran: list[str] = []
 
-    def record(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    def record(payload: Mapping[str, Any]) -> JobOutcome:
         ran.append("ran")
-        return {}
+        return JobOutcome({})
 
     queue = _Queue(_job("echo", attempts=4))
 
@@ -122,7 +125,7 @@ def test_losing_the_lease_discards_the_outcome_without_stopping_the_worker() -> 
 
 
 def test_a_long_error_is_cut_to_fit() -> None:
-    def verbose(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    def verbose(payload: Mapping[str, Any]) -> JobOutcome:
         raise RuntimeError("x" * 10_000)
 
     queue = _Queue(_job("verbose"))

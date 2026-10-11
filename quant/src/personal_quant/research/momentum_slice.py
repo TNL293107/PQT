@@ -102,6 +102,7 @@ class SliceResult:
     dataset_id: str
     dataset_version: int
     content_hash: str
+    universe_code: str
     membership: str
     adjusted: bool
     announcement_policy: str
@@ -241,6 +242,7 @@ def run_momentum_slice(
         dataset_id=manifest.dataset_id,
         dataset_version=manifest.dataset_version,
         content_hash=manifest.content_hash,
+        universe_code=manifest.universe_code,
         membership=manifest.membership,
         adjusted=manifest.adjusted,
         announcement_policy=manifest.announcement_policy,
