@@ -863,6 +863,15 @@ Phase 5 and Gate B may both proceed.
 - Reproducibility workflow — a recorded run can be re-executed and its metrics diffed
 - Dataset hashing and verification enforced on load
 
+**Every criterion is evidenced as of 11 October 2026**; declaring Gate B passed
+— and the Upgrade `COMPLETE` — is the operator's call, as Gate A's was. The
+evidence: U6's slice over the real VN30 export; U7's DuckDB tier and Redis
+lock, each run against the live stack; U8's adapter fitting Qlib's LightGBM in
+a Python 3.12 environment while the suite passes without Qlib and a planted
+stray import is caught; U9's two counted runs and an identical reproduction on
+the same commit; U10's `42501` on every write to `quant` as `quant_research`;
+and hashes verified on every load, in .NET and Python alike.
+
 ---
 
 ## Documentation scope
