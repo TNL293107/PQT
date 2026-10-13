@@ -104,8 +104,8 @@ first import is 33 VN30 names; securities firms and insurers wait.
 | 6.1 | ADR-029: fundamentals source and licence | ✅ accepted 2026-10-13, after checking terms, coverage and templates |
 | 6.2 | Domain model: reports with `known_from_utc`, statement lines with an append-only reading history | ✅ `financial_reports`, `statement_lines` |
 | 6.3 | Provider and import pipeline: IDS collector, normaliser, `pqt fundamentals import` | ✅ FPT 2022: 12 reports, 3,728 lines, idempotent on re-read |
-| 6.4 | As-of read | next |
-| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | |
+| 6.4 | As-of read: `IFundamentalsReader`, `pqt fundamentals as-of` | ✅ a later filing and a later restatement are absent; FPT FY2021 read live before and after its audit |
+| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | next |
 
 **Sprint 5 — data reach, complete.**
 

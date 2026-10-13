@@ -583,6 +583,22 @@ The run prints two tables:
 | `ConflictingValues` | One line stated twice with different values |
 | `ValuesAppeared` | A report recorded without values now has some |
 
+`as-of` prints one statement of an issuer as it was known before a day's
+session opened (00:00 UTC, the cut `dataset export --known-as-of` uses):
+
+```bash
+pqt fundamentals as-of FPT --known-as-of 2022-03-10 --code 10
+pqt fundamentals as-of VCB --known-as-of 2024-02-01 --statement balance --scope separate
+```
+
+Each value comes from the latest report known by then, and the table names
+it:
+
+- A report filed later is absent; *reports withheld* counts it.
+- A value restated by a later report shows `yes` under *restated*.
+- `--scope` defaults to consolidated and `--statement` to income. Separate
+  and consolidated are never mixed.
+
 ## Exit codes
 
 | Code | Meaning |

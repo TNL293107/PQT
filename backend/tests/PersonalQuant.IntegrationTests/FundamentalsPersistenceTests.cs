@@ -118,6 +118,54 @@ public sealed class FundamentalsPersistenceTests(DependencyContainerFixture cont
         Assert.Contains("ux_statement_lines_", error.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task The_as_of_read_excludes_a_restatement_filed_after_the_instant()
+    {
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var instrument = await ArrangeAsync(scope, "FRE");
+        var original = Report(instrument, $"ids-{Guid.NewGuid():N}");
+        var restating = Report(instrument, $"ids-{Guid.NewGuid():N}", FiscalQuarter.Create(2022, 2), new DateOnly(2022, 7, 22));
+        scope.Fundamentals.Add(original);
+        scope.Fundamentals.Add(restating);
+        scope.Fundamentals.Add(Line(original, FinancialStatement.IncomeStatement, "10", Q1, PeriodSpan.Quarter, 100m));
+        scope.Fundamentals.Add(Line(restating, FinancialStatement.IncomeStatement, "10", Q1, PeriodSpan.Quarter, 110m));
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using var reader = await CreateScopeAsync();
+        var may = await reader.Reader.ReadAsync(
+            instrument, FinancialStatementScope.Consolidated, new DateTimeOffset(2022, 5, 1, 0, 0, 0, TimeSpan.Zero),
+            cancellationToken: TestContext.Current.CancellationToken);
+        var august = await reader.Reader.ReadAsync(
+            instrument, FinancialStatementScope.Consolidated, new DateTimeOffset(2022, 8, 1, 0, 0, 0, TimeSpan.Zero),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal((100m, false, 1), (Assert.Single(may.Values).Value, may.Values[0].Restated, may.ReportsWithheld));
+        Assert.Equal((110m, true), (Assert.Single(august.Values).Value, august.Values[0].Restated));
+    }
+
+    private static FinancialReport Report(
+        InstrumentId instrument,
+        string reference,
+        FiscalQuarter period,
+        DateOnly disclosedOn) =>
+        FinancialReport.Record(
+            instrument,
+            Ids,
+            reference,
+            FinancialReportKind.Quarterly,
+            FinancialStatementScope.Consolidated,
+            FinancialTemplate.NonFinancialCircular200,
+            period,
+            "Báo cáo tài chính hợp nhất",
+            disclosedOn,
+            disclosedAtUtc: null,
+            Vietnam,
+            isCorrection: false,
+            valuesFiled: true,
+            RecordedAt);
+
     private static FinancialReport Report(InstrumentId instrument, string reference) =>
         FinancialReport.Record(
             instrument,
@@ -187,6 +235,7 @@ public sealed class FundamentalsPersistenceTests(DependencyContainerFixture cont
             Exchanges = _scope.ServiceProvider.GetRequiredService<IExchangeRepository>();
             Instruments = _scope.ServiceProvider.GetRequiredService<IInstrumentRepository>();
             Fundamentals = _scope.ServiceProvider.GetRequiredService<IFundamentalsRepository>();
+            Reader = _scope.ServiceProvider.GetRequiredService<IFundamentalsReader>();
         }
 
         public IUnitOfWork UnitOfWork { get; }
@@ -196,6 +245,8 @@ public sealed class FundamentalsPersistenceTests(DependencyContainerFixture cont
         public IInstrumentRepository Instruments { get; }
 
         public IFundamentalsRepository Fundamentals { get; }
+
+        public IFundamentalsReader Reader { get; }
 
         public async ValueTask DisposeAsync()
         {

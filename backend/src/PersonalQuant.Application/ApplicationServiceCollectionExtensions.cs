@@ -32,6 +32,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IInstrumentTransferService, InstrumentTransferService>();
         services.AddScoped<IVenueHistoryImportService, VenueHistoryImportService>();
         services.AddScoped<Fundamentals.IFundamentalsImportService, Fundamentals.FundamentalsImportService>();
+        services.AddScoped<Fundamentals.IFundamentalsReader, Fundamentals.FundamentalsReader>();
         services.AddScoped<Universes.IUniverseCatalog, Universes.UniverseCatalog>();
         services.AddScoped<
             Universes.IUniverseCoverageReview,

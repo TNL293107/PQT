@@ -66,6 +66,8 @@ internal static class Usage
         output.WriteLine("                     (latest session with member bars when --on is omitted)");
         output.WriteLine();
         output.WriteLine("  pqt fundamentals import --provider <CODE> [--ticker FPT,VCB]");
+        output.WriteLine("  pqt fundamentals as-of <TICKER> --known-as-of yyyy-MM-dd [--scope consolidated|separate]");
+        output.WriteLine("                     [--statement balance|income|cash-direct|cash-indirect] [--code 10]");
         output.WriteLine("                     (disclosed reports, ADR-029; IDS reads the collector's filings)");
         output.WriteLine();
         output.WriteLine("  pqt schema status");

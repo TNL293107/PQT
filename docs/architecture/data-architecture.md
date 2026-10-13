@@ -285,7 +285,7 @@ table records what it said before.
 
 ## Fundamentals (Phase 6)
 
-**Status: model, tables and the IDS import exist (sprint 6, items 6.2 and 6.3). No as-of read yet.** The
+**Status: model, tables, the IDS import and the as-of read exist (sprint 6, items 6.2–6.4).** The
 source and its rules are in [ADR-029](decisions/ADR-029-fundamentals-source.md).
 
 ```

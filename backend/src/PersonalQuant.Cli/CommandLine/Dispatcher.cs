@@ -143,6 +143,8 @@ internal static class Dispatcher
             case "fundamentals":
                 return new FundamentalsCommands(
                         Defer<Application.Fundamentals.IFundamentalsImportService>(services),
+                        Defer<Application.Fundamentals.IFundamentalsReader>(services),
+                        Defer<IInstrumentResolver>(services),
                         output)
                     .RunAsync(command, cancellationToken);
 

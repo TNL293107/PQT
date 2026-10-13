@@ -1,21 +1,29 @@
 using System.Globalization;
 using PersonalQuant.Application.Fundamentals;
+using PersonalQuant.Application.Instruments;
 using PersonalQuant.Cli.CommandLine;
+using PersonalQuant.Domain.Fundamentals;
 using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Cli.Commands;
 
 /// <summary>
-/// <c>pqt fundamentals import</c> — records disclosed financial reports from
-/// one named provider (ADR-029).
+/// <c>pqt fundamentals</c> — records disclosed financial reports from one named
+/// provider, and reads them as they were known at an instant (ADR-029).
 /// </summary>
 /// <remarks>
 /// The provider is named, never defaulted, as for market data: an import that
 /// quietly read another source would date its values by that source's record.
 /// </remarks>
 /// <param name="imports">The import service.</param>
+/// <param name="reader">The point-in-time read.</param>
+/// <param name="instruments">Resolves a ticker.</param>
 /// <param name="output">Where the answer is written.</param>
-internal sealed class FundamentalsCommands(Lazy<IFundamentalsImportService> imports, Output output)
+internal sealed class FundamentalsCommands(
+    Lazy<IFundamentalsImportService> imports,
+    Lazy<IFundamentalsReader> reader,
+    Lazy<IInstrumentResolver> instruments,
+    Output output)
 {
     /// <summary>Runs one <c>fundamentals</c> verb.</summary>
     /// <param name="command">The parsed command line.</param>
@@ -25,7 +33,7 @@ internal sealed class FundamentalsCommands(Lazy<IFundamentalsImportService> impo
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!command.Validate(["provider", "ticker"], out var problem))
+        if (!command.Validate(["provider", "ticker", "known-as-of", "scope", "statement", "code"], out var problem))
         {
             output.Problem(problem);
             return Task.FromResult(ExitCode.Usage);
@@ -34,6 +42,7 @@ internal sealed class FundamentalsCommands(Lazy<IFundamentalsImportService> impo
         return (command.Verb, command.Operands) switch
         {
             ("import", []) => ImportAsync(command, cancellationToken),
+            ("as-of", [var ticker]) => AsOfAsync(ticker, command, cancellationToken),
             _ => Task.FromResult(Usage()),
         };
     }
@@ -107,9 +116,112 @@ internal sealed class FundamentalsCommands(Lazy<IFundamentalsImportService> impo
         return ExitCode.Ok;
     }
 
+    /// <summary>
+    /// Prints one statement of an issuer as it was known at the start of a
+    /// day: 00:00 UTC, before that day's session opened, the cut
+    /// <c>dataset export --known-as-of</c> uses.
+    /// </summary>
+    private async Task<int> AsOfAsync(string ticker, CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.TryDate("known-as-of", out var day, out var badDate))
+        {
+            output.Problem(badDate);
+            return ExitCode.Usage;
+        }
+
+        if (day is not { } knownAsOf)
+        {
+            output.Problem("'fundamentals as-of' needs --known-as-of yyyy-MM-dd.");
+            return ExitCode.Usage;
+        }
+
+        FinancialStatementScope? scope = (command.Value("scope") ?? "consolidated").ToLowerInvariant() switch
+        {
+            "consolidated" => FinancialStatementScope.Consolidated,
+            "separate" => FinancialStatementScope.Separate,
+            _ => null,
+        };
+
+        FinancialStatement? statement = (command.Value("statement") ?? "income").ToLowerInvariant() switch
+        {
+            "balance" => FinancialStatement.BalanceSheet,
+            "income" => FinancialStatement.IncomeStatement,
+            "cash-direct" => FinancialStatement.CashFlowDirect,
+            "cash-indirect" => FinancialStatement.CashFlowIndirect,
+            _ => null,
+        };
+
+        if (scope is null || statement is null)
+        {
+            output.Problem("--scope is consolidated or separate; --statement is balance, income, cash-direct or cash-indirect.");
+            return ExitCode.Usage;
+        }
+
+        string? code;
+
+        try
+        {
+            code = command.Value("code") is { } written ? StatementLine.NormaliseLineCode(written) : null;
+        }
+        catch (Domain.Common.DomainValidationException error)
+        {
+            output.Problem(error.Message);
+            return ExitCode.Usage;
+        }
+
+        var resolution = await instruments.Value.ResolveAsync(ticker, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (resolution.Outcome != InstrumentResolutionOutcome.Resolved || resolution.Instrument is not { } instrument)
+        {
+            output.Problem($"'{ticker}' does not name one active instrument.");
+            return ExitCode.Refused;
+        }
+
+        var instant = new DateTimeOffset(knownAsOf.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var read = await reader.Value.ReadAsync(instrument.InstrumentId, scope.Value, instant, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        var values = read.Values
+            .Where(value => value.Statement == statement && (code is null || value.LineCode == code))
+            .ToList();
+
+        output.Field("known as of", instant.ToString("yyyy-MM-dd HH:mm'Z'", CultureInfo.InvariantCulture), 22);
+        output.Field("reports known", Count(read.ReportsKnown), 22);
+        output.Field("reports withheld", Count(read.ReportsWithheld), 22);
+        output.Field("without values", Count(read.DisclosedWithoutValues.Count), 22);
+        output.Field("values (as filed)", $"{Count(read.AsFiled)} ({Count(read.Vendor)} vendor)", 22);
+
+        if (values.Count == 0)
+        {
+            output.Line("No values of that statement were known then.");
+            return ExitCode.Ok;
+        }
+
+        output.Blank();
+        output.Table(
+            ["code", "period", "span", "value", "stated by", "known from", "restated"],
+            [
+                .. values.Select(value => (IReadOnlyList<string>)
+                [
+                    value.LineCode,
+                    value.Period.ToString(),
+                    value.Span.ToString(),
+                    value.Value.ToString("#,##0.####", CultureInfo.InvariantCulture),
+                    value.ReportKind.ToString(),
+                    value.KnownFromUtc.ToString("yyyy-MM-dd HH:mm'Z'", CultureInfo.InvariantCulture),
+                    value.Restated ? "yes" : string.Empty,
+                ]),
+            ]);
+
+        return ExitCode.Ok;
+    }
+
     private int Usage()
     {
-        output.Problem("pqt fundamentals import --provider <CODE> [--ticker FPT,VCB]");
+        output.Problem(
+            "pqt fundamentals import --provider <CODE> [--ticker FPT,VCB]\n"
+                + "pqt fundamentals as-of <TICKER> --known-as-of yyyy-MM-dd [--scope consolidated|separate]\n"
+                + "                     [--statement balance|income|cash-direct|cash-indirect] [--code 10]");
         return ExitCode.Usage;
     }
 
