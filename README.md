@@ -98,10 +98,16 @@ its written definition of done, every criterion evidenced on the live stack
 closed it: one quote service shared by breadth and watchlists, tick-rounded
 ex-date references, venue-wide breadth, and the exchange calendar back to 2016.
 
-Next, by the [sprint plan](docs/roadmap/sprint-plan.md): widen real data before
-Phases 6–8 build on it. Raw CafeF history for VN30 from July 2023, every
-entitlement in that span sourced, a re-export the momentum slice can score in
-full, and venue history so a name that moved stays one instrument.
+Sprint 5, by the [sprint plan](docs/roadmap/sprint-plan.md), widens real data
+before Phases 6–8 build on it:
+
+| # | Item | State |
+| --- | --- | --- |
+| 5.1 | Raw CafeF history from July 2023 for every VN30 name, up to its admission | ✅ 36 names |
+| 5.2 | Every price-limit breach in that span accounted for | ✅ 31 of 31: 23 entitlements (VSD), 10 venue history, 2 CafeF errors |
+| 5.3 | VN30 re-exported with `--history 253` | ✅ 30 of 30 scored at every rebalance, VPL excepted until it has a year of prices; IC +0.081, t 1.33 over 24 rebalances |
+| 5.4 | Venue history ([ADR-028](docs/architecture/decisions/ADR-028-venue-history.md)) | ✅ BSR and MCH recorded; each session judged on its own venue |
+| 5.5 | Reproduction | ✅ a recorded run reproduces identically; the old runs were lost with the old machine's database |
 
 **Research Foundation Upgrade — complete.** Ten workstreams between Phase 4 and
 Phase 5 made the Phase 0–4 data architecture empirically valid and laid the

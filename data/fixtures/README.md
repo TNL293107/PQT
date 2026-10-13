@@ -13,6 +13,7 @@ that did may be added. The rules in [`../README.md`](../README.md) apply.
 | [`market-data/`](market-data/) | [market data CSV](../schemas/market-data-csv.md) | the file market data source, for bar ingestion |
 | [`corporate-actions.csv`](corporate-actions.csv) | [corporate action CSV](../schemas/corporate-action-csv.md) | the file corporate action source, for adjusted prices |
 | [`universes/`](universes/) | [universe CSV](../schemas/universe-csv.md) | the file universe source, for point-in-time constituent sets |
+| [`venue-history.csv`](venue-history.csv) | `symbol,exchange,effective_from,effective_to` | the file venue history source, for judging each session on its own venue |
 | [`instruments-fpt.csv`](instruments-fpt.csv) | [instrument symbol list](../schemas/instrument-csv.md) | the single-ticker list U3's first real ingest runs against |
 
 ## Instrument symbol list
@@ -220,6 +221,59 @@ Deliberately not recorded:
 - **VHM's 6,000₫ cash dividend.** It paid on 22 July and went ex on another
   session, outside this history.
 - **VIB's ESOP issue.** It is not pro rata and rescales nothing.
+
+### The 2023–2024 history entitlements (sprint 5)
+
+The sprint-5 backfill took every VN30 name back to 3 July 2023, up to the day
+before its first VN30 admission. It raised 31 price-limit breaches, and every
+one is now accounted for:
+
+- **23 by entitlements** (25 rows, plus TCX's 500₫ cash dividend of 7 April
+  2026, which was too small to breach). ACB, BID, CTG, FPT (×2), GAS, HDB,
+  MBB, SAB, SHB, TCB, VCB, VPB and LPB (2024-12-27) are each transcribed from
+  their VSD notice. LPB 2023-08-22, MCH 2025-02-11 and 2026-01-09, BSR
+  2025-10-29 and TCX 2026-05-25 are transcribed from VSD notices or, for LPB,
+  from the issuer's terms as the press reported them, because LPB's VSD notice
+  was not found. Each restated move sits inside its venue's band. Notice by
+  notice, the sources are in [`sources/`](sources/).
+- **10 by venue history.** MCH's UPCOM sessions moved inside UPCOM's ±15% band
+  and breached only HOSE's. See [Venue history](#venue-history).
+- **2 by CafeF errors**, dismissed with the reason. BSR on 2026-02-02 moved
+  across the 2026-01-29/30 gap. DGC on 2024-03-07: CafeF's 2024-03-06 close
+  of 111,000 is wrong. VNDirect has 113,000, and a 113,000 reference for the
+  7th, so that session was a +6.99% limit-up, and VSD lists no DGC entitlement
+  then.
+
+Two transcription choices to know about:
+
+- **MCH 2026-01-09** distributed 21.47% bonus shares and 1.03% treasury
+  shares on one record date. Both increase the holding, so they are one
+  `BonusShares` row at 0.225. The two cannot be separate rows, because the key
+  is (symbol, type, ex-date). HOSE's reference ignored the treasury part. The
+  adjusted series follows the holding, not the reference.
+- **Issues from owners' equity are `BonusShares`** (GAS, SAB, TCB, FPT 2024),
+  and payouts from retained profit are `StockDividend`. The two adjust prices
+  identically.
+
+## Venue history
+
+[`venue-history.csv`](venue-history.csv) records when an instrument changed
+venue, so each session is judged by its own venue's band and calendar
+([ADR-028](../../docs/architecture/decisions/ADR-028-venue-history.md)). Each
+instrument's spells must tile time: the first has no start, the last has no
+end and is the venue the instrument is on now, and each begins on the session
+the previous one ended. A name that never moved needs no rows.
+
+| Security | Old venue | Last session there | First session on HOSE |
+| -------- | --------- | ------------------ | --------------------- |
+| BSR | UPCOM | 2025-01-06 | 2025-01-17 |
+| MCH | UPCOM | 2025-12-17 | 2025-12-25 |
+
+The spell boundary is the first HOSE session, so the sessions between the last
+UPCOM trade and the first HOSE one fall in the UPCOM spell. They did not trade,
+and they show as missing sessions, which is true. LPB (2020), DGC (2020) and
+SHB (2021) moved before the data begins. VPL and TCX listed directly on HOSE.
+Sources are in [`sources/venue-history-and-upcom-era-actions.md`](sources/venue-history-and-upcom-era-actions.md).
 
 ## Universes
 
