@@ -171,17 +171,20 @@ look like a working backtest while measuring the future.
 1. **Terms.** Capture the IDS portal's consent dialog, any hsx.vn terms page and
    Vietcap's site terms. Record each in this ADR under a dated heading. If any
    forbids retention, that candidate is dropped and this ADR is rewritten
-   before going further. **Done 2026-10-13**, below. HOSE's fee schedule is
-   still to be read.
+   before going further. **Done 2026-10-13**, below, including HOSE's fee
+   schedule.
 2. **Disclosure coverage.** For one non-financial name, one bank and one
    securities firm in VN30, and for each quarter from Q1 2022 on, confirm a
    disclosure record and its date. Use IDS before 15 August 2024 and HOSE
    after. Confirm whether the IDS listing offers the structured Excel/XBRL
-   form for download, or only the PDF.
+   form for download, or only the PDF. **Done 2026-10-13 for FPT and VCB**,
+   below. SSI is still open.
 3. **Vendor fidelity.** For twelve of those statements, compare the Vietcap
-   values line by line against the filed PDF. Record how many differ and why.
+   values line by line against the filed values. Since verification 2, those
+   are the IDS form's values, not the PDF. Record how many differ and why.
    This decides whether `vendor` values are first-filed in practice, or
-   whether the leak in the trade-offs is real.
+   whether the leak in the trade-offs is real. It now matters only for the
+   names IDS cannot serve: insurers and securities firms.
 4. **Templates.** List the line items each of the five templates carries for
    the canonical items Phase 7 needs: revenue, net profit attributable to the
    parent, total assets, equity attributable to the parent, and shares
@@ -239,11 +242,87 @@ dropped.** The consequences:
     can afford.
 
   The fee schedule is a PDF on hsx.vn, `20240326_Bieu gia dich vu thong tin ap
-  dung tai So GDCK TPHCM.pdf`. It has not been downloaded, pending the
-  operator's permission.
+  dung tai So GDCK TPHCM.pdf`. It was read after the operator allowed the
+  download (below).
 - **Decision 2 can be finer for HOSE.** Where a record carries a time, the
   fact is known from the first session that opens after it. A day-only record
   keeps the next-session rule.
+
+**HOSE's fee schedule (read 2026-10-13).** Group D, *Thông tin công bố*,
+prices the listed companies' financial statements by year of service:
+
+| Product | PDF | Excel |
+| --- | --- | --- |
+| Quarterly statements | 60,000,000 ₫ | 80,000,000 ₫ |
+| Reviewed semi-annual | 15,000,000 ₫ | 20,000,000 ₫ |
+| Audited annual | 15,000,000 ₫ | 20,000,000 ₫ |
+| Other disclosures | 70,000,000 ₫ | — |
+
+Group C also sells a quarterly table of headline financials for every listed
+company (charter capital, equity, total assets, revenue, profit after tax
+attributable to the parent, total debt, ROE and ROA) for 60,000,000 ₫ a year.
+
+There is no individual tier, and the schedule does not say whether a package
+carries publication times. The Excel statements alone cost 120,000,000 ₫ a
+year. Buying is outside the operator's constraint, so the HOSE route, where
+one is needed, is the public listing.
+
+## Verification 2 · disclosure coverage · 2026-10-13
+
+Read on the SSC portal by searching one ticker and one calendar year at a
+time. A search with no dates shows only recent filings. With dates it returns
+the whole history.
+
+| Name (template) | Periods found on IDS, Q4 2021 – Q3 2025 | Structured values on the filing page |
+| --- | --- | --- |
+| FPT (non-financial, TT200) | **All**: separate and consolidated, every quarter, half-year and audited year. Continuous across 15 August 2024 | **Yes.** Q1 2022: 84 balance-sheet and 23 income lines non-zero, by TT200 code, exact to the đồng. Q3 2025 is the same |
+| VCB (bank) | **All** quarters and half-years. Two corrections filed as new filings. One mislabelled audited annual (below) | **Yes.** Q3 2022: balance sheet, income statement and direct cash flow on the bank template |
+| SSI (securities firm) | **None.** HCM, VND, VCI and SHS also return nothing | — |
+| BVH (insurer, seen in passing) | Present | **No.** Every line of Q1 2022 is zero. The insurer filed the PDF and left the generic form empty |
+
+Each filing's page shows:
+- its fiscal year and quarter;
+- the PDF of the signed full text, for example
+  `20222204__FPT__BCTC_hop_nhat_quy_1_2022_VN.pdf`;
+- tabs for the balance sheet, income statement and cash flow, each with code,
+  note, closing and opening (or this-period and prior-period) columns.
+
+No Excel or XBRL download was offered. The values are on the page itself.
+
+**What this changes in the decision:**
+
+- **IDS is the record of *when* for every name it carries, before and after
+  15 August 2024.** HOSE names went on filing their statements to IDS after
+  the one-point switch, so the split between IDS and HOSE in decision 1 is not
+  needed for them. HOSE's listing is needed only for issuers absent from IDS,
+  which in VN30 means the securities firm SSI.
+- **`as_filed` values exist for non-financial companies and banks**, on the
+  filing page, at no cost. The `vendor` basis is needed only where a form is
+  empty (insurers) or absent (securities firms).
+- **An all-zero form is not data.** A filing whose structured values are all
+  zero is recorded as *disclosed, values not filed*. It never becomes a row of
+  zeros.
+- **A filing's type label is not trusted alone.** VCB's 2023 listing has a
+  consolidated *audited annual 2022* dated 30/01/2023, thirty days after year
+  end and two months before the separate audited annual (31/03/2023). It is
+  almost certainly the Q4 report filed under the wrong type. Used as filed, it
+  would date the audited annual two months early. Each filing is therefore
+  matched on its form's own fiscal year and quarter, its title and its abstract,
+  and a filing whose date is implausible for its type is a finding, not a fact.
+  The audited deadline is 90 days, and nothing is audited in 30.
+- **Corrections are new filings.** VCB's *Quý IV/2023 (final)* and its Q2 2024
+  *đính chính* each sit beside the original with their own date, and the form
+  has fields for a correction letter and its reason. This answers question 7
+  for IDS: history is appended, not rewritten.
+- **The portal is an Oracle ADF application with no public API.** An adapter
+  would drive its search and detail pages. That is fragile, and it is slow by
+  design. A full VN30 history is about 30 names × 5 years × 12 filings, roughly
+  1,800 page reads, done once and then incrementally.
+
+**Still open from verification 2:** SSI's disclosures on HOSE. The listing has
+a per-ticker search, but it opens a new window that the tools here could not
+follow. Securities firms appear to report under their own regime, and where
+SSI's statements are lodged as structured data is not yet known.
 
 ## Consequences
 
