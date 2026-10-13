@@ -16,5 +16,11 @@ internal sealed class InMemoryVenueHistory : IVenueHistoryRepository
         Task.FromResult<IReadOnlyList<InstrumentVenueSpell>>(
             [.. _spells.Where(spell => instrumentIds.Contains(spell.InstrumentId))]);
 
+    public Task<IReadOnlyList<InstrumentVenueSpell>> ListForUpdateAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<InstrumentVenueSpell>>(
+            [.. _spells.Where(spell => spell.InstrumentId == instrumentId)]);
+
     public void Add(InstrumentVenueSpell spell) => _spells.Add(spell);
 }

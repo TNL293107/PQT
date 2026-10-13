@@ -14,6 +14,14 @@ public interface IVenueHistoryRepository
         IReadOnlyCollection<InstrumentId> instrumentIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Loads one instrument's spells, tracked so an open one can be closed.</summary>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The spells, in no particular order.</returns>
+    Task<IReadOnlyList<InstrumentVenueSpell>> ListForUpdateAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stages a new spell.</summary>
     /// <param name="spell">The spell.</param>
     void Add(InstrumentVenueSpell spell);

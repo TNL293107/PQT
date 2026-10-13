@@ -62,6 +62,23 @@ public sealed class VenueTimelineTests
         Assert.Single(Moved().Stretches(new DateOnly(2025, 3, 3), new DateOnly(2025, 3, 7)));
 
     [Fact]
+    public void A_stale_history_reads_on_the_current_venue()
+    {
+        // Moved in the master since the history was recorded, with nobody
+        // saying when: the open spell names a venue it has left.
+        var timeline = new VenueTimeline(Hose, [InstrumentVenueSpell.Record(Instrument, Upcom, null, null, Now)]);
+
+        Assert.Equal(Hose, timeline.On(new DateOnly(2026, 1, 5)));
+        Assert.Null(timeline.CurrentSince);
+    }
+
+    [Fact]
+    public void The_first_session_after_a_move_is_recognised_and_no_other() =>
+        Assert.Equal(
+            (true, false),
+            (Moved().IsFirstSessionAfterMove(new DateOnly(2025, 1, 20)), Moved().IsFirstSessionAfterMove(new DateOnly(2025, 1, 21))));
+
+    [Fact]
     public void A_spell_that_ends_where_it_starts_is_refused() =>
         Assert.Throws<DomainValidationException>(() => InstrumentVenueSpell.Record(
             Instrument, Hose, new DateOnly(2025, 1, 20), new DateOnly(2025, 1, 20), Now));

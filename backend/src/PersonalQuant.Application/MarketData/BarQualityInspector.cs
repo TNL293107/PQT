@@ -391,7 +391,10 @@ internal sealed class BarQualityInspector(
             // the venue's, visible on its record.
             var session = DateOnly.FromDateTime(bar.OpenedAtUtc.UtcDateTime);
 
+            // The first session after a recorded move is banded by the new
+            // venue's listing-day rule, which the ordinary band does not state.
             if (previousClose is { } reference
+                && !timeline.IsFirstSessionAfterMove(session)
                 && venues.TryGetValue(timeline.On(session), out var exchange)
                 && exchange.DailyPriceLimit is { } limit
                 && !limit.Permits(reference, bar.Close.Value, PriceLimitTolerance))

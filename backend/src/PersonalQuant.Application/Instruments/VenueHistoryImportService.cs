@@ -38,6 +38,7 @@ namespace PersonalQuant.Application.Instruments;
 /// <param name="history">The venue history record.</param>
 /// <param name="bars">The bars a breach is re-judged on.</param>
 /// <param name="issues">The findings re-judged.</param>
+/// <param name="inspector">Raises what an old venue's narrower band should have.</param>
 /// <param name="unitOfWork">Commits the run.</param>
 /// <param name="clock">Supplies the audit timestamps.</param>
 internal sealed class VenueHistoryImportService(
@@ -47,11 +48,12 @@ internal sealed class VenueHistoryImportService(
     IVenueHistoryRepository history,
     IBarRepository bars,
     IDataQualityRepository issues,
+    IBarQualityInspector inspector,
     IUnitOfWork unitOfWork,
     IClock clock) : IVenueHistoryImportService
 {
-    /// <summary>The most open findings re-judged per instrument in one run.</summary>
-    private const int MaxFindingsPerInstrument = 1_000;
+    /// <summary>The earliest instant any finding or bar is looked for from.</summary>
+    private static readonly DateTimeOffset Earliest = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <inheritdoc />
     public async Task<VenueHistoryImportReport> ImportAsync(CancellationToken cancellationToken = default)
@@ -71,8 +73,8 @@ internal sealed class VenueHistoryImportService(
             .ToDictionary(exchange => exchange.Code.Value, StringComparer.OrdinalIgnoreCase);
 
         var rejections = new List<VenueHistoryRejection>();
-        var recorded = new List<Instrument>();
-        var unchanged = 0;
+        var held = new List<Instrument>();
+        var recorded = 0;
 
         foreach (var group in rows.GroupBy(row => row.Symbol.Trim(), StringComparer.OrdinalIgnoreCase))
         {
@@ -80,39 +82,37 @@ internal sealed class VenueHistoryImportService(
                     group.Key, [.. group], provider.Code, venues, occurredAtUtc, cancellationToken)
                 .ConfigureAwait(false);
 
-            switch (outcome)
+            if (outcome.Rejection is { } rejection)
             {
-                case { Rejection: { } rejection }:
-                    rejections.Add(rejection);
-                    break;
-                case { Recorded: { } instrument }:
-                    recorded.Add(instrument);
-                    break;
-                default:
-                    unchanged++;
-                    break;
+                rejections.Add(rejection);
+                continue;
             }
+
+            held.Add(outcome.Instrument!);
+            recorded += outcome.Changed ? 1 : 0;
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // Every instrument with a history is judged again, not only those
+        // recorded now. It is idempotent — it explains what its venue's band
+        // permits and raises only what is not already raised — and it is what
+        // finishes the job when a run recorded spells and stopped before
+        // judging, which would otherwise leave them "unchanged" forever.
         var rejudged = 0;
 
-        foreach (var instrument in recorded)
+        foreach (var instrument in held)
         {
             rejudged += await RejudgeAsync(instrument, venues.Values, cancellationToken).ConfigureAwait(false);
         }
 
-        if (rejudged > 0)
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new VenueHistoryImportReport(
-            provider.Code.Value, rows.Count, recorded.Count, unchanged, rejudged, rejections);
+            provider.Code.Value, rows.Count, recorded, held.Count - recorded, rejudged, rejections);
     }
 
-    private async Task<(Instrument? Recorded, VenueHistoryRejection? Rejection)> ApplyAsync(
+    private async Task<(Instrument? Instrument, bool Changed, VenueHistoryRejection? Rejection)> ApplyAsync(
         string symbol,
         IReadOnlyList<ProviderVenueSpell> rows,
         SourceCode source,
@@ -156,26 +156,54 @@ internal sealed class VenueHistoryImportService(
             .Select(row => (venues[row.Venue.Trim()].Id, row.EffectiveFrom, row.EffectiveTo))
             .ToList();
 
-        var existing = (await history.ListAsync([instrument.Id], cancellationToken).ConfigureAwait(false))
+        var tracked = (await history.ListForUpdateAsync(instrument.Id, cancellationToken).ConfigureAwait(false))
             .OrderBy(spell => spell.EffectiveFrom ?? DateOnly.MinValue)
+            .ToList();
+
+        var existing = tracked
             .Select(spell => (spell.ExchangeId, spell.EffectiveFrom, spell.EffectiveTo))
             .ToList();
 
-        if (existing.Count > 0)
+        if (existing.Count == 0)
         {
-            return existing.SequenceEqual(stated)
-                ? (null, null)
-                : Refuse(symbol, VenueHistoryRejectionReason.ContradictsRecordedHistory,
-                    $"{instrument.Ticker} already has a recorded venue history, and this one differs. "
-                        + "History is not rewritten by an import.");
+            foreach (var (exchangeId, from, to) in stated)
+            {
+                history.Add(InstrumentVenueSpell.Record(instrument.Id, exchangeId, from, to, occurredAtUtc));
+            }
+
+            return (instrument, true, null);
         }
 
-        foreach (var (exchangeId, from, to) in stated)
+        if (existing.SequenceEqual(stated))
         {
-            history.Add(InstrumentVenueSpell.Record(instrument.Id, exchangeId, from, to, occurredAtUtc));
+            return (instrument, false, null);
         }
 
-        return (instrument, null);
+        // A later move: everything recorded is restated, except that the open
+        // spell now has an end, and new spells follow it. That is the one way
+        // an append-only history grows.
+        var k = existing.Count;
+
+        if (stated.Count > k
+            && existing.Take(k - 1).SequenceEqual(stated.Take(k - 1))
+            && existing[k - 1] is (var venue, var since, null)
+            && stated[k - 1] is (var sameVenue, var sameSince, { } ended)
+            && venue == sameVenue
+            && since == sameSince)
+        {
+            tracked[k - 1].Close(ended);
+
+            foreach (var (exchangeId, from, to) in stated.Skip(k))
+            {
+                history.Add(InstrumentVenueSpell.Record(instrument.Id, exchangeId, from, to, occurredAtUtc));
+            }
+
+            return (instrument, true, null);
+        }
+
+        return Refuse(symbol, VenueHistoryRejectionReason.ContradictsRecordedHistory,
+            $"{instrument.Ticker} already has a recorded venue history, and this one differs from it other than "
+                + "by a later move. History is not rewritten by an import.");
     }
 
     /// <summary>Says what keeps an ordered set of spells from tiling time, if anything.</summary>
@@ -234,57 +262,95 @@ internal sealed class VenueHistoryImportService(
 
         var spells = await history.ListAsync([instrument.Id], cancellationToken).ConfigureAwait(false);
         var timeline = new VenueTimeline(instrument.ExchangeId, spells);
-        var byId = venues.ToDictionary(venue => venue.Id);
 
-        var open = await issues
-            .ListOpenAsync(instrument.Id, BarInterval.OneDay, MaxFindingsPerInstrument, cancellationToken)
+        // Sessions in the current spell were always judged on the current
+        // venue, and nothing about them changes. A stale history — the master
+        // has moved the name since — answers null, and is left alone.
+        if (timeline.CurrentSince is not { } since)
+        {
+            return 0;
+        }
+
+        var byId = venues.ToDictionary(venue => venue.Id);
+        var firstOnCurrent = Midnight(since);
+
+        // Read by period, not by count: the oldest findings are the ones on the
+        // old venue, and a count would cut them off first.
+        var candidates = await issues
+            .ListAsync(instrument.Id, BarInterval.OneDay, Earliest, firstOnCurrent.AddDays(1), cancellationToken)
             .ConfigureAwait(false);
 
         var rejudged = 0;
 
-        foreach (var finding in open.Where(issue => issue.Kind == DataQualityIssueKind.PriceLimitBreach))
+        foreach (var finding in candidates.Where(issue => issue.IsOpen && issue.Kind == DataQualityIssueKind.PriceLimitBreach))
         {
             var session = DateOnly.FromDateTime(finding.SessionAtUtc.UtcDateTime);
+            var venue = byId.GetValueOrDefault(timeline.On(session));
+            string? explanation;
 
-            if (!byId.TryGetValue(timeline.On(session), out var venue) || venue.DailyPriceLimit is not { } band)
+            if (timeline.IsFirstSessionAfterMove(session))
+            {
+                // A first session after a move is priced from the old venue and
+                // banded by the new venue's listing-day rule, not its ordinary one.
+                explanation = $"The first session on {venue?.Code.Value ?? "its new venue"} after a recorded move: "
+                    + "a listing-day band applies there, not the ordinary one this finding measured against.";
+            }
+            else
+            {
+                explanation = venue is { DailyPriceLimit: { } band }
+                    && await PermitsAsync(instrument.Id, finding.SessionAtUtc, band, cancellationToken).ConfigureAwait(false)
+                        ? $"Inside {venue.Code}'s {band} band: the session traded on {venue.Code}, by the recorded venue history."
+                        : null;
+            }
+
+            if (explanation is null
+                || await issues.FindAsync(finding.Id, cancellationToken).ConfigureAwait(false) is not { IsOpen: true } tracked)
             {
                 continue;
             }
 
-            var window = await bars
-                .ListForUpdateAsync(
-                    instrument.Id,
-                    BarInterval.OneDay,
-                    finding.SessionAtUtc.AddDays(-14),
-                    finding.SessionAtUtc.AddDays(1),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            var today = window.FirstOrDefault(bar => bar.OpenedAtUtc == finding.SessionAtUtc);
-            var before = window.LastOrDefault(bar => bar.OpenedAtUtc < finding.SessionAtUtc);
-
-            if (today is null || before is null
-                || !band.Permits(before.Close.Value, today.Close.Value, BarQualityInspector.PriceLimitTolerance))
-            {
-                continue;
-            }
-
-            var tracked = await issues.FindAsync(finding.Id, cancellationToken).ConfigureAwait(false);
-
-            if (tracked is not { IsOpen: true })
-            {
-                continue;
-            }
-
-            tracked.Explain(
-                $"Inside {venue.Code}'s {band} band: the session traded on {venue.Code}, by the recorded venue history.",
-                clock.UtcNow);
-
+            tracked.Explain(explanation, clock.UtcNow);
             rejudged++;
         }
 
+        // And the other direction: a session on an old venue with a narrower
+        // band than the current one was measured too leniently. The inspector,
+        // run over the old venue's stretches, raises what it should have; its
+        // own record of what is already raised keeps it from doubling anything.
+        await inspector
+            .InspectAsync(instrument.Id, BarInterval.OneDay, Earliest, firstOnCurrent, [], cancellationToken)
+            .ConfigureAwait(false);
+
         return rejudged;
     }
+
+    /// <summary>
+    /// Says whether a session's close moved from the last close before it
+    /// within a band, however long ago that close was.
+    /// </summary>
+    private async Task<bool> PermitsAsync(
+        InstrumentId instrumentId,
+        DateTimeOffset sessionAtUtc,
+        PriceLimit band,
+        CancellationToken cancellationToken)
+    {
+        var onSession = await bars
+            .ListForUpdateAsync(instrumentId, BarInterval.OneDay, sessionAtUtc, sessionAtUtc.AddDays(1), cancellationToken)
+            .ConfigureAwait(false);
+
+        var today = onSession.Count > 0 ? onSession[0] : null;
+
+        var before = await bars
+            .FindLastBeforeAsync(instrumentId, BarInterval.OneDay, sessionAtUtc, cancellationToken)
+            .ConfigureAwait(false);
+
+        return today is not null
+            && before is not null
+            && band.Permits(before.Close.Value, today.Close.Value, BarQualityInspector.PriceLimitTolerance);
+    }
+
+    private static DateTimeOffset Midnight(DateOnly date) =>
+        new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
     /// <summary>Resolves a source's symbol the way the corporate action import does.</summary>
     private async Task<Instrument?> ResolveAsync(
@@ -305,11 +371,11 @@ internal sealed class VenueHistoryImportService(
             : await instruments.FindByIdAsync(identifier.InstrumentId, cancellationToken).ConfigureAwait(false);
     }
 
-    private static (Instrument? Recorded, VenueHistoryRejection? Rejection) Refuse(
+    private static (Instrument? Instrument, bool Changed, VenueHistoryRejection? Rejection) Refuse(
         string symbol,
         VenueHistoryRejectionReason reason,
         string detail) =>
-        (null, new VenueHistoryRejection(symbol, reason, detail));
+        (null, false, new VenueHistoryRejection(symbol, reason, detail));
 
     private static string Day(DateOnly? date) =>
         date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "none";

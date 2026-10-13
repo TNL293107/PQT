@@ -118,6 +118,32 @@ public sealed class InstrumentVenueSpell
             InstrumentVenueSpellId.New(), instrumentId, exchangeId, effectiveFrom, effectiveTo, recordedAtUtc);
     }
 
+    /// <summary>
+    /// Ends an open spell on the first session the instrument traded elsewhere.
+    /// </summary>
+    /// <remarks>
+    /// The one change an append-only history allows: a spell that was "still
+    /// there" learns when it stopped. Its start and venue never change.
+    /// </remarks>
+    /// <param name="effectiveTo">The first session on the next venue.</param>
+    /// <exception cref="DomainStateException">The spell is already closed.</exception>
+    /// <exception cref="DomainValidationException">The end is not after the start.</exception>
+    public void Close(DateOnly effectiveTo)
+    {
+        if (EffectiveTo is { } closed)
+        {
+            throw new DomainStateException($"The spell already ended on {closed:yyyy-MM-dd}.");
+        }
+
+        if (EffectiveFrom is { } from && effectiveTo <= from)
+        {
+            throw new DomainValidationException(
+                $"A venue spell must end after it starts; {effectiveTo:yyyy-MM-dd} is not after {from:yyyy-MM-dd}.");
+        }
+
+        EffectiveTo = effectiveTo;
+    }
+
     /// <summary>Gets a value indicating whether a session falls inside the spell.</summary>
     /// <param name="session">The session.</param>
     /// <returns><see langword="true"/> when it does.</returns>
@@ -159,10 +185,43 @@ public sealed class VenueTimeline
     public bool HasMoved => _spells.Select(spell => spell.ExchangeId).Distinct().Skip(1).Any();
 
     /// <summary>Gets the venue the instrument traded on in a session.</summary>
+    /// <remarks>
+    /// When the open spell names a venue other than the current one, the
+    /// instrument has moved since its history was last recorded, and nobody has
+    /// said when. Sessions in that spell are then read on the current venue —
+    /// the reading every instrument had before venue history — rather than on
+    /// a venue the record itself shows it has left.
+    /// </remarks>
     /// <param name="session">The session.</param>
     /// <returns>The venue.</returns>
     public ExchangeId On(DateOnly session) =>
-        _spells.FirstOrDefault(spell => spell.Includes(session))?.ExchangeId ?? Current;
+        _spells.FirstOrDefault(spell => spell.Includes(session)) is { } spell
+        && (spell.EffectiveTo is not null || spell.ExchangeId == Current)
+            ? spell.ExchangeId
+            : Current;
+
+    /// <summary>
+    /// Gets a value indicating whether a session is the first an instrument
+    /// traded on a venue it moved to.
+    /// </summary>
+    /// <remarks>
+    /// That session's band is the venue's listing-day band, not its ordinary
+    /// one — HOSE allowed ±20% on LPB's first session there — so the ordinary
+    /// band says nothing about it.
+    /// </remarks>
+    /// <param name="session">The session.</param>
+    /// <returns><see langword="true"/> when a recorded move took effect on it.</returns>
+    public bool IsFirstSessionAfterMove(DateOnly session) =>
+        _spells.Any(spell => spell.EffectiveFrom == session);
+
+    /// <summary>
+    /// Gets the first session of the spell the instrument is in now, or null
+    /// when it has never moved.
+    /// </summary>
+    public DateOnly? CurrentSince =>
+        _spells.Count > 0 && _spells[^1] is { EffectiveTo: null } open && open.ExchangeId == Current
+            ? open.EffectiveFrom
+            : null;
 
     /// <summary>
     /// Splits a window of sessions into the stretches spent on each venue.

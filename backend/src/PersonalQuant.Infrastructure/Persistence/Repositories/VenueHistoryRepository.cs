@@ -32,6 +32,15 @@ internal sealed class VenueHistoryRepository(PersonalQuantDbContext dbContext) :
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<InstrumentVenueSpell>> ListForUpdateAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.InstrumentVenueSpells
+            .Where(spell => spell.InstrumentId == instrumentId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public void Add(InstrumentVenueSpell spell)
     {
         ArgumentNullException.ThrowIfNull(spell);

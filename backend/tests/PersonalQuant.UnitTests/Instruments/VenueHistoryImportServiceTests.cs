@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.Currencies;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
@@ -94,6 +97,69 @@ public sealed class VenueHistoryImportServiceTests
     }
 
     [Fact]
+    public async Task A_later_move_extends_the_recorded_history_by_closing_the_open_spell()
+    {
+        var harness = new Harness();
+        harness.State(("UPCOM", null, Moved), ("HOSE", Moved, null));
+        await harness.ImportAsync();
+
+        var again = new DateOnly(2026, 11, 2);
+        harness.Transfer("HNX");
+        harness.State(("UPCOM", null, Moved), ("HOSE", Moved, again), ("HNX", again, null));
+        var report = await harness.ImportAsync();
+
+        Assert.Empty(report.Rejections);
+        Assert.Equal(1, report.InstrumentsRecorded);
+        Assert.Equal(3, harness.History.Spells.Count);
+        Assert.Equal(again, harness.History.Spells.Single(spell => spell.EffectiveFrom == Moved).EffectiveTo);
+    }
+
+    [Fact]
+    public async Task A_history_recorded_before_its_breaches_were_judged_is_judged_on_the_next_run()
+    {
+        // A run that stopped between recording and judging must not leave the
+        // breaches unjudged behind an "unchanged" history.
+        var harness = new Harness();
+        harness.Recorded(("UPCOM", null, Moved), ("HOSE", Moved, null));
+        var ordinary = harness.Breach(new DateOnly(2024, 3, 5), 100m, 88m);
+        harness.State(("UPCOM", null, Moved), ("HOSE", Moved, null));
+
+        var report = await harness.ImportAsync();
+
+        Assert.Equal((0, 1, 1), (report.InstrumentsRecorded, report.InstrumentsUnchanged, report.FindingsRejudged));
+        Assert.False(ordinary.IsOpen);
+    }
+
+    [Fact]
+    public async Task A_session_on_a_narrower_old_band_is_raised_when_the_history_is_recorded()
+    {
+        // Demoted from HOSE to UPCOM. Judged on UPCOM's ±15%, a 10% fall was
+        // never raised; on HOSE, where it traded, it is a breach.
+        var harness = new Harness(current: "UPCOM");
+        harness.Move(new DateOnly(2024, 3, 5), 100m, 90m);
+        harness.State(("HOSE", null, Moved), ("UPCOM", Moved, null));
+
+        await harness.ImportAsync();
+
+        var raised = Assert.Single(harness.Findings, finding => finding.Kind == DataQualityIssueKind.PriceLimitBreach);
+        Assert.Equal(new DateOnly(2024, 3, 5), DateOnly.FromDateTime(raised.SessionAtUtc.UtcDateTime));
+        Assert.True(raised.IsOpen);
+    }
+
+    [Fact]
+    public async Task A_breach_on_the_first_session_after_a_move_is_explained_as_the_listing_day()
+    {
+        var harness = new Harness();
+        var first = harness.Breach(Moved, 100m, 85m);
+        harness.State(("UPCOM", null, Moved), ("HOSE", Moved, null));
+
+        await harness.ImportAsync();
+
+        Assert.False(first.IsOpen);
+        Assert.Contains("listing-day band", first.Resolution, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_unknown_symbol_is_refused()
     {
         var harness = new Harness();
@@ -114,24 +180,44 @@ public sealed class VenueHistoryImportServiceTests
         private readonly FakeQualityRepository _issues = new();
         private readonly FakeBarRepository _bars = new();
         private readonly ScriptedProvider _provider = new();
+        private readonly Dictionary<string, ExchangeId> _venues = new(StringComparer.Ordinal);
+        private readonly Instrument _entity;
         private readonly InstrumentId _instrument;
 
-        public Harness()
+        public Harness(string current = "HOSE")
         {
-            var hose = _exchanges.Add("HOSE", Now, 7m);
-            _exchanges.Add("HNX", Now, 10m);
-            _exchanges.Add("UPCOM", Now, 15m);
+            _venues["HOSE"] = _exchanges.Add("HOSE", Now, 7m);
+            _venues["HNX"] = _exchanges.Add("HNX", Now, 10m);
+            _venues["UPCOM"] = _exchanges.Add("UPCOM", Now, 15m);
 
-            var instrument = Instrument.Register(
-                hose, Ticker.Create("BSR"), "Binh Son Refining", AssetType.Equity, CurrencyCode.Vnd, Now);
-            instrument.List(Now);
-            _master.Seed(instrument);
+            _entity = Instrument.Register(
+                _venues[current], Ticker.Create("BSR"), "Binh Son Refining", AssetType.Equity, CurrencyCode.Vnd, Now);
+            _entity.List(Now);
+            _master.Seed(_entity);
             _master.Seed(InstrumentIdentifier.Record(
-                instrument.Id, IdentifierValue.Create(IdentifierScheme.ProviderSymbol, "BSR.HM"), File, Now));
-            _instrument = instrument.Id;
+                _entity.Id, IdentifierValue.Create(IdentifierScheme.ProviderSymbol, "BSR.HM"), File, Now));
+            _instrument = _entity.Id;
         }
 
         public InMemoryVenueHistory History { get; } = new();
+
+        public IReadOnlyList<DataQualityIssue> Findings => _issues.All;
+
+        /// <summary>Moves the instrument in the master, as 'pqt instrument transfer' does.</summary>
+        public void Transfer(string venue) => _entity.TransferToExchange(_venues[venue], Now);
+
+        /// <summary>Records spells directly, as an earlier import would have.</summary>
+        public void Recorded(params (string Venue, DateOnly? From, DateOnly? To)[] spells)
+        {
+            foreach (var (venue, from, to) in spells)
+            {
+                History.Add(InstrumentVenueSpell.Record(_instrument, _venues[venue], from, to, Now));
+            }
+        }
+
+        /// <summary>Stores a move between two sessions without any finding for it.</summary>
+        public void Move(DateOnly session, decimal before, decimal after) =>
+            _bars.AddRange([Bar(session.AddDays(-1), before), Bar(session, after)]);
 
         public void State(params (string Venue, DateOnly? From, DateOnly? To)[] spells) =>
             _provider.Rows = [.. spells.Select((spell, index) =>
@@ -157,8 +243,18 @@ public sealed class VenueHistoryImportServiceTests
                 _provider.Rows = [.. _provider.Rows.Select(row => row with { Symbol = symbol })];
             }
 
+            var inspector = new BarQualityInspector(
+                _master,
+                _exchanges,
+                new TradingCalendar(_exchanges),
+                History,
+                _bars,
+                _issues,
+                new FakeClock(Now),
+                NullLogger<BarQualityInspector>.Instance);
+
             return new VenueHistoryImportService(
-                    [_provider], _master, _exchanges, History, _bars, _issues, new FakeUnitOfWork(), new FakeClock(Now))
+                    [_provider], _master, _exchanges, History, _bars, _issues, inspector, new FakeUnitOfWork(), new FakeClock(Now))
                 .ImportAsync(TestContext.Current.CancellationToken);
         }
 

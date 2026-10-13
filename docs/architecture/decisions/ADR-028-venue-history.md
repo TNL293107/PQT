@@ -32,11 +32,22 @@ asks "which venue?" asks it for a session.**
   instrument's history is accepted whole or not at all. The spells must tile
   time: the first open at the start, each beginning where the last ended, and
   the last open at the end on the venue the master has the instrument on now.
-  The import is append-only. A restatement is unchanged, and a contradiction
-  is refused.
-- Recording a history re-judges that instrument's open price-limit breaches on
-  the venue each session traded on. One inside that venue's band is explained,
-  saying so; one outside stays open.
+  The import is append-only. A restatement is unchanged and a contradiction is
+  refused. The one way a history grows is a later move: the recorded spells
+  are restated, the open spell gets its end, and new spells follow.
+- Every run re-judges each instrument with a history, recorded now or before,
+  over the sessions before its current spell. Re-judging is idempotent, and
+  this is how a run that stopped between recording and judging gets finished.
+  An open breach inside the old venue's band is explained, saying so. The
+  inspector then runs over the old venue's stretches and raises anything the
+  current venue's wider band let through.
+- The first session after a recorded move is not held to the ordinary band.
+  It trades under the new venue's listing-day band; HOSE allowed ±20% on
+  LPB's first session there.
+- If the master moves an instrument and nobody records when, the open spell
+  names a venue the instrument has left. Its sessions are then read on the
+  current venue, the reading from before venue history, instead of on a venue
+  the record shows it left.
 - Readers: the quality inspector (band per bar, calendar per stretch), the
   adjustment engine's discontinuity check (band on the ex-date), the quote
   service (previous session, calendar and tick of the session's venue), and
