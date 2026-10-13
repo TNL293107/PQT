@@ -35,9 +35,13 @@ HOSE, HNX and UPCOM.
 
 ## Trading calendar
 
-**Real, sourced, and complete for 2022 through 2026.** 58 closed sessions
-across the three venues, every one of them transcribed from the Ho Chi Minh
-Stock Exchange's own annual holiday notice.
+**Real, sourced, and complete for 2016 through 2026.** Every closed session is
+transcribed from the exchanges' own holiday notices: HOSE's annual notice for
+2022–2026, and for 2016–2021 both HOSE's and HNX's annual notices (HNX runs
+UPCOM), with HNX's per-holiday notices agreeing. The 2016–2021 sources, notice
+by notice, are in
+[`trading-calendar-sources-2016-2021.md`](trading-calendar-sources-2016-2021.md).
+The coverage declaration runs from 1 January 2016 for all three venues.
 
 This is the one fixture that is not synthetic, and it is not vendor data
 either: an exchange's published closure schedule is a public announcement, and
@@ -47,6 +51,12 @@ never existed.
 
 | Year | Closed sessions | Tet |
 | ---- | --------------- | --- |
+| 2016 | 10 | 8 – 12 Feb |
+| 2017 | 10 | 26 Jan – 1 Feb |
+| 2018 | 11 (HOSE 13) | 14 – 20 Feb |
+| 2019 | 11 | 4 – 8 Feb |
+| 2020 | 10 | 23 – 29 Jan |
+| 2021 | 11 | 10 – 16 Feb |
 | 2022 | 11 | 31 Jan – 4 Feb |
 | 2023 | 11 | 20 – 26 Jan |
 | 2024 | 12 | 8 – 14 Feb |
@@ -60,6 +70,23 @@ closed session separately. The first real ingest raised a `MissingSession`
 finding for that Friday, and the correction was then taken from the later
 announcement — not from the data. A calendar fitted to the observed bars cannot
 find a missing bar.
+
+**Two HOSE closures are not holidays.** HOSE's trading system failed in the
+closing auction of 22 January 2018, and the exchange did not trade at all on
+23 or 24 January; it resumed on the 25th (HOSE's press releases and incident
+notice, and HSC's client note, linked in the sources file). HNX and UPCOM
+traded normally. Both days are recorded for HOSE only, as `Trading system
+outage`, because the file records sessions that did not happen, and without
+them every HOSE series would report two missing sessions that never existed.
+Partial halts — the cancelled closing auction of 9 June 2020, the halted
+afternoon of 1 June 2021 — still had a session and are not recorded.
+
+**The 2016–2021 rows were cross-checked, not derived.** VN-Index, HNX-Index and
+UPCoM-Index daily histories from two vendors show no session on any recorded
+closure, and the only weekdays without a session the notices do not list are
+the two outage days above; every other gap in an index series is a hole in
+that one vendor's data, with the other vendor or individual stock bars showing
+trading that day.
 
 Every Tet closes five trading days. The spans an announcement gives include the
 weekends inside them; those are dropped here, because weekends are structural

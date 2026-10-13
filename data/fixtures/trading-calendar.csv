@@ -1,4 +1,195 @@
 exchange,date,name
+HOSE,2016-01-01,New Year's Day
+HNX,2016-01-01,New Year's Day
+UPCOM,2016-01-01,New Year's Day
+HOSE,2016-02-08,Tet
+HNX,2016-02-08,Tet
+UPCOM,2016-02-08,Tet
+HOSE,2016-02-09,Tet
+HNX,2016-02-09,Tet
+UPCOM,2016-02-09,Tet
+HOSE,2016-02-10,Tet
+HNX,2016-02-10,Tet
+UPCOM,2016-02-10,Tet
+HOSE,2016-02-11,Tet
+HNX,2016-02-11,Tet
+UPCOM,2016-02-11,Tet
+HOSE,2016-02-12,Tet
+HNX,2016-02-12,Tet
+UPCOM,2016-02-12,Tet
+HOSE,2016-04-18,Hung Kings Commemoration (observed)
+HNX,2016-04-18,Hung Kings Commemoration (observed)
+UPCOM,2016-04-18,Hung Kings Commemoration (observed)
+HOSE,2016-05-02,Reunification Day and Labour Day (observed)
+HNX,2016-05-02,Reunification Day and Labour Day (observed)
+UPCOM,2016-05-02,Reunification Day and Labour Day (observed)
+HOSE,2016-05-03,Reunification Day and Labour Day (observed)
+HNX,2016-05-03,Reunification Day and Labour Day (observed)
+UPCOM,2016-05-03,Reunification Day and Labour Day (observed)
+HOSE,2016-09-02,National Day
+HNX,2016-09-02,National Day
+UPCOM,2016-09-02,National Day
+HOSE,2017-01-02,New Year's Day (observed)
+HNX,2017-01-02,New Year's Day (observed)
+UPCOM,2017-01-02,New Year's Day (observed)
+HOSE,2017-01-26,Tet
+HNX,2017-01-26,Tet
+UPCOM,2017-01-26,Tet
+HOSE,2017-01-27,Tet
+HNX,2017-01-27,Tet
+UPCOM,2017-01-27,Tet
+HOSE,2017-01-30,Tet
+HNX,2017-01-30,Tet
+UPCOM,2017-01-30,Tet
+HOSE,2017-01-31,Tet
+HNX,2017-01-31,Tet
+UPCOM,2017-01-31,Tet
+HOSE,2017-02-01,Tet
+HNX,2017-02-01,Tet
+UPCOM,2017-02-01,Tet
+HOSE,2017-04-06,Hung Kings Commemoration
+HNX,2017-04-06,Hung Kings Commemoration
+UPCOM,2017-04-06,Hung Kings Commemoration
+HOSE,2017-05-01,Reunification Day and Labour Day
+HNX,2017-05-01,Reunification Day and Labour Day
+UPCOM,2017-05-01,Reunification Day and Labour Day
+HOSE,2017-05-02,Reunification Day and Labour Day (observed)
+HNX,2017-05-02,Reunification Day and Labour Day (observed)
+UPCOM,2017-05-02,Reunification Day and Labour Day (observed)
+HOSE,2017-09-04,National Day (observed)
+HNX,2017-09-04,National Day (observed)
+UPCOM,2017-09-04,National Day (observed)
+HOSE,2018-01-01,New Year's Day
+HNX,2018-01-01,New Year's Day
+UPCOM,2018-01-01,New Year's Day
+HOSE,2018-01-23,Trading system outage
+HOSE,2018-01-24,Trading system outage
+HOSE,2018-02-14,Tet
+HNX,2018-02-14,Tet
+UPCOM,2018-02-14,Tet
+HOSE,2018-02-15,Tet
+HNX,2018-02-15,Tet
+UPCOM,2018-02-15,Tet
+HOSE,2018-02-16,Tet
+HNX,2018-02-16,Tet
+UPCOM,2018-02-16,Tet
+HOSE,2018-02-19,Tet
+HNX,2018-02-19,Tet
+UPCOM,2018-02-19,Tet
+HOSE,2018-02-20,Tet
+HNX,2018-02-20,Tet
+UPCOM,2018-02-20,Tet
+HOSE,2018-04-25,Hung Kings Commemoration
+HNX,2018-04-25,Hung Kings Commemoration
+UPCOM,2018-04-25,Hung Kings Commemoration
+HOSE,2018-04-30,Reunification Day and Labour Day
+HNX,2018-04-30,Reunification Day and Labour Day
+UPCOM,2018-04-30,Reunification Day and Labour Day
+HOSE,2018-05-01,Reunification Day and Labour Day
+HNX,2018-05-01,Reunification Day and Labour Day
+UPCOM,2018-05-01,Reunification Day and Labour Day
+HOSE,2018-09-03,National Day (observed)
+HNX,2018-09-03,National Day (observed)
+UPCOM,2018-09-03,National Day (observed)
+HOSE,2018-12-31,New Year's Day
+HNX,2018-12-31,New Year's Day
+UPCOM,2018-12-31,New Year's Day
+HOSE,2019-01-01,New Year's Day
+HNX,2019-01-01,New Year's Day
+UPCOM,2019-01-01,New Year's Day
+HOSE,2019-02-04,Tet
+HNX,2019-02-04,Tet
+UPCOM,2019-02-04,Tet
+HOSE,2019-02-05,Tet
+HNX,2019-02-05,Tet
+UPCOM,2019-02-05,Tet
+HOSE,2019-02-06,Tet
+HNX,2019-02-06,Tet
+UPCOM,2019-02-06,Tet
+HOSE,2019-02-07,Tet
+HNX,2019-02-07,Tet
+UPCOM,2019-02-07,Tet
+HOSE,2019-02-08,Tet
+HNX,2019-02-08,Tet
+UPCOM,2019-02-08,Tet
+HOSE,2019-04-15,Hung Kings Commemoration (observed)
+HNX,2019-04-15,Hung Kings Commemoration (observed)
+UPCOM,2019-04-15,Hung Kings Commemoration (observed)
+HOSE,2019-04-29,Reunification Day and Labour Day
+HNX,2019-04-29,Reunification Day and Labour Day
+UPCOM,2019-04-29,Reunification Day and Labour Day
+HOSE,2019-04-30,Reunification Day and Labour Day
+HNX,2019-04-30,Reunification Day and Labour Day
+UPCOM,2019-04-30,Reunification Day and Labour Day
+HOSE,2019-05-01,Reunification Day and Labour Day
+HNX,2019-05-01,Reunification Day and Labour Day
+UPCOM,2019-05-01,Reunification Day and Labour Day
+HOSE,2019-09-02,National Day
+HNX,2019-09-02,National Day
+UPCOM,2019-09-02,National Day
+HOSE,2020-01-01,New Year's Day
+HNX,2020-01-01,New Year's Day
+UPCOM,2020-01-01,New Year's Day
+HOSE,2020-01-23,Tet
+HNX,2020-01-23,Tet
+UPCOM,2020-01-23,Tet
+HOSE,2020-01-24,Tet
+HNX,2020-01-24,Tet
+UPCOM,2020-01-24,Tet
+HOSE,2020-01-27,Tet
+HNX,2020-01-27,Tet
+UPCOM,2020-01-27,Tet
+HOSE,2020-01-28,Tet
+HNX,2020-01-28,Tet
+UPCOM,2020-01-28,Tet
+HOSE,2020-01-29,Tet
+HNX,2020-01-29,Tet
+UPCOM,2020-01-29,Tet
+HOSE,2020-04-02,Hung Kings Commemoration
+HNX,2020-04-02,Hung Kings Commemoration
+UPCOM,2020-04-02,Hung Kings Commemoration
+HOSE,2020-04-30,Reunification Day and Labour Day
+HNX,2020-04-30,Reunification Day and Labour Day
+UPCOM,2020-04-30,Reunification Day and Labour Day
+HOSE,2020-05-01,Reunification Day and Labour Day
+HNX,2020-05-01,Reunification Day and Labour Day
+UPCOM,2020-05-01,Reunification Day and Labour Day
+HOSE,2020-09-02,National Day
+HNX,2020-09-02,National Day
+UPCOM,2020-09-02,National Day
+HOSE,2021-01-01,New Year's Day
+HNX,2021-01-01,New Year's Day
+UPCOM,2021-01-01,New Year's Day
+HOSE,2021-02-10,Tet
+HNX,2021-02-10,Tet
+UPCOM,2021-02-10,Tet
+HOSE,2021-02-11,Tet
+HNX,2021-02-11,Tet
+UPCOM,2021-02-11,Tet
+HOSE,2021-02-12,Tet
+HNX,2021-02-12,Tet
+UPCOM,2021-02-12,Tet
+HOSE,2021-02-15,Tet
+HNX,2021-02-15,Tet
+UPCOM,2021-02-15,Tet
+HOSE,2021-02-16,Tet
+HNX,2021-02-16,Tet
+UPCOM,2021-02-16,Tet
+HOSE,2021-04-21,Hung Kings Commemoration
+HNX,2021-04-21,Hung Kings Commemoration
+UPCOM,2021-04-21,Hung Kings Commemoration
+HOSE,2021-04-30,Reunification Day and Labour Day
+HNX,2021-04-30,Reunification Day and Labour Day
+UPCOM,2021-04-30,Reunification Day and Labour Day
+HOSE,2021-05-03,Reunification Day and Labour Day (observed)
+HNX,2021-05-03,Reunification Day and Labour Day (observed)
+UPCOM,2021-05-03,Reunification Day and Labour Day (observed)
+HOSE,2021-09-02,National Day
+HNX,2021-09-02,National Day
+UPCOM,2021-09-02,National Day
+HOSE,2021-09-03,National Day
+HNX,2021-09-03,National Day
+UPCOM,2021-09-03,National Day
 HOSE,2022-01-03,New Year's Day (observed)
 HNX,2022-01-03,New Year's Day (observed)
 UPCOM,2022-01-03,New Year's Day (observed)
