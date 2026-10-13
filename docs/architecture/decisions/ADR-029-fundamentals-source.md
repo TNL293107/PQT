@@ -406,7 +406,20 @@ report between 14 and 25 August. Listed issuers disclose to the exchange,
 which forwards to IDS, so the IDS date can trail the moment a filing became
 public. It cannot precede it: a filing is public once IDS shows it.
 
-The IDS date is therefore an upper bound on publication. Reading values
+**IDS itself carries two dates (found during the 6.5 collection).**
+
+- The listing shows when a filing was sent, *Thời gian gửi*.
+- The search filters on another date, which for some filings is later. ACB's
+  separate FY2023 statements show 06/03/2024 and are returned only by a
+  search covering 11/03/2024.
+
+The values read today are the filing as it stands at the later date. A
+filing amended between the two dates would date its amended values early if
+the sent date were used. The collector therefore records the date the
+search files a filing under (`indexedOn`), and the importer dates the values
+by the later of the two.
+
+So dated, the IDS date is an upper bound on publication. Reading values
 from it can make a backtest learn of a report later than the market did. It
 cannot make the backtest learn of it early. That is the safe direction for
 ADR-029's binding test, and HOSE's timed listing can narrow it later. The

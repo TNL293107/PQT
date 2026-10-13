@@ -48,6 +48,17 @@ public sealed class IdsFilingFileProviderTests
     }
 
     [Fact]
+    public void The_date_the_search_files_a_filing_under_is_read_and_the_later_date_dates_it()
+    {
+        var filing = IdsFilingFileProvider.Parse(
+            Document.Replace("\"submittedAtUtc\": null,", "\"submittedAtUtc\": null, \"indexedOn\": \"2022-04-27\",", StringComparison.Ordinal),
+            "indexed.json");
+
+        Assert.Equal((new DateOnly(2022, 4, 27), new DateOnly(2022, 4, 27)), (filing.IndexedOn!.Value, filing.DisclosedOn));
+        Assert.Equal(new DateOnly(2022, 4, 22), IdsFilingFileProvider.Parse(Document, "plain.json").DisclosedOn);
+    }
+
+    [Fact]
     public void A_document_of_another_schema_is_refused_by_name()
     {
         var error = Assert.Throws<MarketDataProviderException>(

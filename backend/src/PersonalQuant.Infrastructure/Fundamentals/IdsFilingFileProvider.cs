@@ -122,7 +122,12 @@ internal sealed class IdsFilingFileProvider(string directory) : IFundamentalsPro
                 tables,
                 payload,
                 "application/json",
-                DateTimeOffset.Parse(Text(root, "fetchedAtUtc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal));
+                DateTimeOffset.Parse(Text(root, "fetchedAtUtc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal))
+                {
+                    IndexedOn = OptionalText(root, "indexedOn") is { } indexed
+                        ? DateOnly.ParseExact(indexed, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+                        : null,
+                };
         }
         catch (Exception exception) when (exception is JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
         {

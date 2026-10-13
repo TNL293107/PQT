@@ -238,8 +238,11 @@ public sealed class FundamentalsImportService(
             normalised.Template,
             classification.Period,
             filing.ReportName,
-            filing.SubmittedOn,
-            filing.SubmittedAtUtc,
+            // The later of the sent and indexed dates: the values read are the
+            // filing as it stands at the later one. A time belongs to the
+            // sent date, so it is kept only when that is the date used.
+            filing.DisclosedOn,
+            filing.DisclosedOn == filing.SubmittedOn ? filing.SubmittedAtUtc : null,
             issuer.TimeZone,
             classification.IsCorrection,
             valuesFiled,

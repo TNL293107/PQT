@@ -38,6 +38,21 @@ public sealed class FundamentalsImportServiceTests
     }
 
     [Fact]
+    public async Task A_filing_indexed_after_it_was_sent_is_dated_by_the_later_date()
+    {
+        // Sent on 22 April, found by the search only on 27 April: the values
+        // read are the filing as it stood then.
+        var harness = new Harness(Filings.Quarterly() with { IndexedOn = new DateOnly(2022, 4, 27) });
+
+        await harness.ImportAsync();
+
+        var recorded = Assert.Single(harness.Store.Reports);
+        Assert.Equal(
+            (new DateOnly(2022, 4, 27), new DateTimeOffset(2022, 4, 27, 17, 0, 0, TimeSpan.Zero)),
+            (recorded.DisclosedOn, recorded.KnownFromUtc));
+    }
+
+    [Fact]
     public async Task Reading_the_same_filing_again_records_nothing_new()
     {
         var harness = new Harness(Filings.Quarterly());

@@ -141,9 +141,48 @@ def list_filings(page: Page, ticker: str, start: date, end: date, pause: float) 
     )
 
 
+def listed_in(page: Page, listing: Listing, start: date, end: date, pause: float) -> bool:
+    """Whether a search over a range returns this filing."""
+    _, rows = search(page, listing.ticker, start, end, pause)
+    return any(row.report_name == listing.report_name and row.summary == listing.summary for row in rows)
+
+
+def indexed_on(page: Page, listing: Listing, pause: float) -> date:
+    """Finds the date the portal's search files a filing under.
+
+    The listing shows when a filing was sent, but the search filters on
+    another date, which for some filings is later: ACB's separate FY2023
+    statements show 06/03/2024 and are found only on 11/03/2024. The values
+    read now are the filing as it stands at that later date, so it is
+    recorded, and the importer dates the values by the later of the two.
+    """
+    if listed_in(page, listing, listing.submitted_on, listing.submitted_on, pause):
+        return listing.submitted_on
+
+    low = date.fromordinal(listing.submitted_on.toordinal() + 1)
+    high = min(date.fromordinal(listing.submitted_on.toordinal() + 400), date.today())
+
+    if not listed_in(page, listing, low, high, pause):
+        raise RuntimeError(f"{listing.reference}: no search within a year of {listing.submitted_on} returns it.")
+
+    while low < high:
+        middle = date.fromordinal((low.toordinal() + high.toordinal()) // 2)
+
+        if listed_in(page, listing, low, middle, pause):
+            high = middle
+        else:
+            low = date.fromordinal(middle.toordinal() + 1)
+
+    return low
+
+
 def read_filing(page: Page, listing: Listing, pause: float) -> dict:
     """Opens a filing from its search and reads its form and statement tabs."""
-    search(page, listing.ticker, listing.submitted_on, listing.submitted_on, pause)
+    indexed = indexed_on(page, listing, pause)
+
+    # Found on its sent date, the page already shows that day's results.
+    if indexed != listing.submitted_on:
+        search(page, listing.ticker, indexed, indexed, pause)
 
     opened = page.evaluate(
         """([name, summary]) => {
@@ -233,6 +272,7 @@ def read_filing(page: Page, listing: Listing, pause: float) -> dict:
         "reportName": listing.report_name,
         "summary": listing.summary,
         "submittedOn": listing.submitted_on.isoformat(),
+        "indexedOn": indexed.isoformat(),
         "submittedAtUtc": None,
         "fiscalYear": int(year.group(1)),
         "fiscalQuarter": int(quarter.group(1)) if quarter else None,

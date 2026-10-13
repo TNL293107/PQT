@@ -60,7 +60,22 @@ public sealed record ProviderFiling(
     IReadOnlyList<ProviderStatementTable> Tables,
     string RawPayload,
     string ContentType,
-    DateTimeOffset FetchedAtUtc);
+    DateTimeOffset FetchedAtUtc)
+{
+    /// <summary>
+    /// Gets the date the source's search files the filing under, when it
+    /// differs from the date it shows, or null when it does not say.
+    /// </summary>
+    /// <remarks>
+    /// IDS lists ACB's separate FY2023 statements as sent on 06/03/2024 and
+    /// finds them only on 11/03/2024. What is read now is the filing as it
+    /// stands at the later date, so the later date dates its values.
+    /// </remarks>
+    public DateOnly? IndexedOn { get; init; }
+
+    /// <summary>Gets the date the values read are dated by: the later of the two.</summary>
+    public DateOnly DisclosedOn => IndexedOn is { } indexed && indexed > SubmittedOn ? indexed : SubmittedOn;
+}
 
 /// <summary>One statement tab of a filing.</summary>
 /// <param name="Name">The tab's name, such as <c>BCDKT</c>.</param>
