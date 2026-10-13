@@ -802,9 +802,42 @@ point-in-time members (`breadth VN30`), watchlists and saved workspaces. The
 last two are the API's first writes, behind an operator key until Phase 19
 ([ADR-027](../architecture/decisions/ADR-027-operator-write-path.md)).
 
-The phase stays `IN PROGRESS`. A watchlist shows its instruments but not their
-prices; breadth covers a universe, not the whole market; there is no intraday
-view; and the terminal's real-data reach is VN30 since August 2024.
+The phase stays `IN PROGRESS`. Since sprint 4 a watchlist shows quotes from the
+same service breadth counts, and an ex-date reference is rounded to the tick as
+the exchange publishes it. Breadth still covers a universe, not the whole
+market; there is no intraday view; and the terminal's real-data reach is VN30
+since August 2024.
+
+### Phase 5 — definition of done
+
+Written at the start of sprint 4 (12 October 2026), so the sprint is measured
+against it rather than the other way round. Phase 5 is `COMPLETE` when the
+operator declares it on this evidence:
+
+1. **One application core.** Every terminal function — coverage, breadth,
+   quotes, the price chart's series, watchlists, workspaces — is an
+   application-layer query reachable from the API, the CLI and the console,
+   and none computes in a surface what the server could (ADR-026).
+2. **One quote.** Breadth and a watchlist read the same quote service, and a
+   name on a list shows the move breadth counts for it on the same session —
+   evidenced field by field in a test and on the live stack.
+3. **The exchange's reference.** A previous close restated for an action going
+   ex is rounded to the venue's tick, so a close at the published reference is
+   unchanged, not a fraction of a per cent either way.
+4. **Venue-wide breadth.** Breadth over every instrument listed on a venue on
+   the session, stating how many listed names have no data at all.
+5. **Honest coverage.** The coverage registry measures missing sessions over
+   every span PQT holds bars for, including FPT's from 2016, because the venue
+   calendar is transcribed that far; where it is not, it says *not measured*.
+   No surface renders `NotMeasured` as `NotHeld`, or no data as unchanged.
+6. **Writes stay guarded.** The browser writes only operator state, only behind
+   the operator key (ADR-027), and every write path has had a security review.
+7. **Exercised live.** Each function has been run against the live stack on
+   real data, and the unit, integration, frontend and Python suites and CI are
+   green.
+
+Not part of Phase 5, so not part of its definition of done: intraday data,
+point-in-time (`knownAsOf`) breadth, news and screening.
 
 ### Phase 7 — declarative labelled-dataset specification
 

@@ -78,6 +78,20 @@ the count is for the latest day up to today on which a member *that day* has a
 daily bar, looking back at most 31 days, and the answer says it chose. Every
 member's rows are read in three queries whatever the universe's size.
 
+*Revised in sprint 4, 2026-10-12.* The measurement moved out of breadth into a
+quote service (`IQuoteService`), the one implementation of close against
+reference on a session; breadth counts its quotes and a watchlist shows them,
+so the two cannot disagree. The reference — the previous close restated for
+actions going ex — is now **rounded to the venue's tick** for an equity, as the
+exchange publishes it: HOSE quotes in 10 / 50 / 100 ₫ by price band, HNX and
+UPCOM in 100 ₫. The rounding is to the nearest tick, taken from references HOSE
+actually set (HPG 28,933 → 28,950 and 30,333 → 30,350 exclude rounding down; VJC
+97,928 → 97,900 excludes rounding up). ETFs, indices and venues without a
+transcribed schedule keep the exact restatement. A quote board is one session
+for every instrument on it; without a named session it is the latest on which
+any of them has a bar, and an instrument without one that day is no data, not
+its older close.
+
 ### What waits
 
 The watchlist and the workspace need the first write path from a browser. That

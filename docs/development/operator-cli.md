@@ -492,6 +492,7 @@ pqt watchlist create core
 pqt watchlist add core FPT VCB HPG
 pqt watchlist remove core HPG
 pqt watchlist show core
+pqt watchlist quotes core --on 2026-09-30
 pqt watchlist rename core vn30-core
 pqt watchlist delete vn30-core
 ```
@@ -502,6 +503,15 @@ adding what is already there and removing what is not are reported, not
 refused. The CLI needs no operator key — it writes with the deployment's
 database credentials — but the browser does: set `PQT_OPERATOR_KEY` in `.env`
 for the API to accept writes at all (ADR-027).
+
+`quotes` prints each instrument's close, change and reference on one session, in
+list order — the quotes `universe breadth` counts, so a name reads the same in
+both. The reference is the previous close restated for any action going ex that
+day and rounded to the venue's tick, as the exchange publishes it; a row
+restated that way says so. Without `--on`, the session is the latest any
+instrument on the list has a bar for, and a name without one that day is
+`no data`, not its older close. A holiday, a session the calendar does not
+reach, or no recent bars at all is a refusal and exits 1.
 
 ### `workspace`
 
