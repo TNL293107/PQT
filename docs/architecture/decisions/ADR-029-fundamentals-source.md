@@ -1,11 +1,13 @@
 # ADR-029: Fundamentals source — the disclosure record says when, the filing says what
 
-**Status:** Proposed · **Date:** 2026-10-13 · **Phase:** Sprint 6, Phase 6 (point-in-time fundamentals)
+**Status:** Accepted · **Date:** 2026-10-13 · **Phase:** Sprint 6, Phase 6 (point-in-time fundamentals)
 
-> **Proposed, not accepted.** The operator approves the source and its licence
-> before any import (sprint plan, operator decisions). Until then nothing is
-> fetched beyond the public pages read to write this record, and the four
-> verifications at the end are done, in order, before the status changes.
+> **Accepted by the operator on 2026-10-13**, after verifications 1, 2 and 4.
+> Verification 3 is deferred together with the securities firms and insurers
+> it serves (see *Scope of the first import*). The decision below was written
+> as a proposal. The verification sections that follow it record what the
+> sources turned out to be, and where they differ from the proposal, the
+> verification sections govern.
 
 ## Context
 

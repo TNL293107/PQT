@@ -37,7 +37,7 @@ reasoning at the time is preserved.
 | [026](ADR-026-market-intelligence-terminal.md)               | The Market Intelligence Terminal's scope and first slices | Accepted |
 | [027](ADR-027-operator-write-path.md)                        | The first write path from a browser — an operator key | Accepted |
 | [028](ADR-028-venue-history.md)                             | Venue history — judging each session by the venue it traded on | Accepted |
-| [029](ADR-029-fundamentals-source.md)                        | Fundamentals source — the disclosure record says when, the filing says what | Proposed |
+| [029](ADR-029-fundamentals-source.md)                        | Fundamentals source — the disclosure record says when, the filing says what | Accepted |
 
 ## Format
 

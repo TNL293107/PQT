@@ -145,7 +145,7 @@ and use the new numbering throughout.
 | 4 | Corporate Actions & Adjusted Data | Eight action types, adjustment factors, adjustment-on-read | COMPLETE * |
 | — | **Research Foundation Upgrade** | **U1–U10; Gates A and B passed 2026-10-11** | **COMPLETE** |
 | 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry — scope and slices in [ADR-026](../architecture/decisions/ADR-026-market-intelligence-terminal.md) | COMPLETE |
-| 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` | PLANNED |
+| 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` — source in [ADR-029](../architecture/decisions/ADR-029-fundamentals-source.md) | IN PROGRESS |
 | 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate, declarative labelled-dataset specification | PLANNED |
 | 8 | Backtesting & Research Validation | Event-driven backtest under Vietnamese market rules, **plus research validation: walk-forward, out-of-sample, perturbation, Deflated Sharpe Ratio, PBO** | PLANNED |
 | 9 | Risk Engine | Ex-ante exposure, ex-post attribution, scenarios | PLANNED |

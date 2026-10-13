@@ -14,13 +14,14 @@ engineering project.
 Phase 0–4                     COMPLETE
 Research Foundation Upgrade   COMPLETE      ← Gates A and B passed 2026-10-11
 Phase 5                       COMPLETE      ← Market Intelligence Terminal, declared 2026-10-13
-Phase 6–20                    PLANNED       ← next: sprint 5, data reach
+Phase 6                       IN PROGRESS   ← point-in-time fundamentals, source in ADR-029
+Phase 7–20                    PLANNED
 ```
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
 | **Complete** | Phases 0–5, and the Research Foundation Upgrade (U1–U10)      |
-| **Current**  | Sprint 5 — widening real data before Phases 6–8 ([sprint plan](docs/roadmap/sprint-plan.md)) |
+| **Current**  | Sprint 6 — Phase 6, point-in-time fundamentals ([sprint plan](docs/roadmap/sprint-plan.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
 | **Tests**    | 1,098 unit, 198 integration, 299 React (2026-10-13); 262 Python + 91 Qlib and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
