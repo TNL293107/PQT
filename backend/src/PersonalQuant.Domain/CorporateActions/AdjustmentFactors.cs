@@ -203,10 +203,14 @@ public static class AdjustmentFactors
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Multiplying standalone factors is exact for cash dividends and share
-    /// distributions together — <c>(P − D)/P × 1/(1+s) = (P − D)/((1+s)P)</c>,
-    /// which is FPT on 27 May 2016. It is not exact once a rights issue shares
-    /// the session. A holder of one share before MBB's 11 August 2026 session
+    /// Multiplying standalone factors is exact for cash dividends and one share
+    /// distribution together — <c>(P − D)/P × 1/(1+s) = (P − D)/((1+s)P)</c>,
+    /// which is FPT on 27 May 2016. It is not exact for two share distributions
+    /// on one session: HDB on 9 October 2026 paid a 25% stock dividend and 5%
+    /// bonus shares, both on the holding at the record date, so 100 shares
+    /// became 130 — and standalone factors divide by <c>1.25 × 1.05 = 1.3125</c>,
+    /// a reference of 21,350 where HOSE's was 21,550. Nor is it exact once a
+    /// rights issue shares the session. A holder of one share before MBB's 11 August 2026 session
     /// received 0.15 new shares and the right to buy 0.1 more at 10,000₫, all
     /// counted on the shares held at the record date, and so ends with 1.25
     /// shares worth <c>P + 0.1S</c>. Standalone factors divide by
@@ -217,7 +221,8 @@ public static class AdjustmentFactors
     /// The session factor is <c>(P − ΣD + Σ rᵢSᵢ) / ((1 + Σs + Σ rᵢ) P)</c>,
     /// times any split, on the Vietnamese convention that every ratio refers to
     /// the holding at the record date. The first rights issue absorbs the
-    /// difference from the standalone product. Every other action keeps the
+    /// difference from the standalone product, or, without one, the first share
+    /// distribution when there are two or more. Every other action keeps the
     /// factor it has alone, so a stored row still reads as its own action, and
     /// the product of the stored rows is what the series is read through.
     /// </para>
@@ -246,11 +251,22 @@ public static class AdjustmentFactors
         factors = composed;
         problem = null;
 
+        // A rights issue absorbs the difference when there is one. Without one,
+        // two share distributions on a session still do not multiply: both are
+        // counted on the holding at the record date, so a holder ends with
+        // 1 + s₁ + s₂ shares, not (1 + s₁)(1 + s₂).
+        var distributions = standalone
+            .Where(pair => IsShareDistribution(pair.Action.Type))
+            .OrderBy(pair => pair.Action.Id.Value)
+            .Select(pair => pair.Action)
+            .ToList();
+
         var absorber = standalone
             .Where(pair => pair.Action.Type == CorporateActionType.RightsIssue)
             .OrderBy(pair => pair.Action.Id.Value)
             .Select(pair => pair.Action)
-            .FirstOrDefault();
+            .FirstOrDefault()
+            ?? (distributions.Count >= 2 ? distributions[0] : null);
 
         if (absorber is null || standalone.Count == 1)
         {
@@ -326,6 +342,17 @@ public static class AdjustmentFactors
         composed[absorber.Id] = absorbed;
         return true;
     }
+
+    /// <summary>
+    /// Whether an action hands out new shares in proportion to the holding:
+    /// every price-affecting action that is not cash, a rights issue or a split.
+    /// </summary>
+    private static bool IsShareDistribution(CorporateActionType type) =>
+        type.AffectsPrice()
+        && type is not (CorporateActionType.CashDividend
+            or CorporateActionType.RightsIssue
+            or CorporateActionType.StockSplit
+            or CorporateActionType.ReverseSplit);
 
     private static string Format(decimal value) => value.ToString(CultureInfo.InvariantCulture);
 }

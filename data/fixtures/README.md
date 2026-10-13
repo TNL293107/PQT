@@ -322,6 +322,17 @@ six decimal places, refusing a longer one rather than rounding it silently. It
 is transcribed as 0.446366. The factor then differs by about 1×10⁻⁷, a
 fraction of a đồng on a 35,000 price, well under one tick.
 
+**VPB 2026-09-24 and HDB 2026-10-09 are from the issuers' announcements.**
+Found the same way as the rest — two downward breaches (VPB −20.50%, HDB −20.00%)
+raised by the October 2026 backfill — but sourced from the issuers' published
+notices as reported on the day, not from a VSD notice: VPB's stock dividend of
+10,000,000 : 2,604,104, ex 24 September, record 25 September (tinnhanhchungkhoan.vn,
+21 September 2026), transcribed as 0.26041 for the six-place limit; HDB's 2025
+dividend of 100 : 25 in shares and 100 : 5 bonus shares, ex 9 October, record 12
+October (Vietnamplus, 1 October 2026; Mekong Asean for the ex-date). Restated,
+both closes sit inside the band: VPB +0.2%, HDB +3.9%. Replace the source with
+the VSD notice when it is transcribed.
+
 **BSR moved from UPCOM to HOSE.** The symbol list and the development seed had
 it on UPCOM, which made CafeF — which does not serve UPCOM — refuse it and
 judged its prices against the wrong band. Both now say HOSE. A database seeded

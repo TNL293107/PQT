@@ -267,6 +267,25 @@ public sealed class AdjustmentFactorsTests
     }
 
     [Fact]
+    public void Two_share_distributions_on_a_session_add_rather_than_compound()
+    {
+        // HDB, 9 October 2026: 100 : 25 in shares and 100 : 5 bonus shares, both
+        // on the holding at the record date. 100 shares became 130, so 28,000
+        // restates to 21,538.46 — HOSE's 21,550 at the tick — not the 21,333.33
+        // that 1.25 × 1.05 gives.
+        var dividend = Action(CorporateActionType.StockDividend, ratio: 0.25m);
+        var bonus = Action(CorporateActionType.BonusShares, ratio: 0.05m);
+
+        var session = Compose(28_000m, dividend, bonus);
+
+        Assert.Equal(1m / 1.30m, PriceProduct(session), 9);
+        Assert.Equal(1.30m, SharesProduct(session), 9);
+
+        // One absorbs the difference; the other still reads as its own action.
+        Assert.Single([dividend, bonus], action => session[action.Id] == Standalone(action, 28_000m));
+    }
+
+    [Fact]
     public void A_rights_issue_alone_keeps_its_standalone_factor()
     {
         var rights = Action(CorporateActionType.RightsIssue, ratio: 0.1m, cashAmount: 10_000m);
