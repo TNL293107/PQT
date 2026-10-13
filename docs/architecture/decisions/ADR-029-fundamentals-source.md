@@ -59,11 +59,12 @@ record comes from the regulator or the exchange, never from a deadline and
 never from a vendor's say-so. The numbers come from the filing's own structured
 form where it can be read, and otherwise from an aggregator, labelled as such.**
 
-1. **`reported_at` comes from a disclosure record.** For filings before 15
-   August 2024, and for HNX and UPCOM issuers, the record is IDS
-   (`congbothongtin.ssc.gov.vn`). For HOSE issuers after that date, it is
-   HOSE's disclosure system. A statement with no disclosure record is not
-   stored as a fact. It is a finding: *period ended, no disclosure found*.
+1. **`reported_at` comes from a disclosure record.** The record is IDS
+   (`congbothongtin.ssc.gov.vn`) for every issuer that files there, which
+   includes HOSE issuers after 15 August 2024 (verification 2). HOSE's listing
+   is the record only for issuers absent from IDS, such as securities firms. A
+   statement with no disclosure record is not stored as a fact. It is a
+   finding: *period ended, no disclosure found*.
 2. **Day granularity is read conservatively.** A filing dated D with no time
    is known from the start of the next session after D. The record cannot say
    whether it arrived before or after the close. A record that carries a time,
@@ -87,8 +88,10 @@ form where it can be read, and otherwise from an aggregator, labelled as such.**
    templates are TT200 non-financial, TT99 non-financial, bank, securities
    firm and insurer. Each canonical item that a ratio needs is mapped from each
    template. An unmapped item is absent, not zero.
-6. **The first import is narrow.** VN30 names, quarterly, from 2022, per
-   sprint plan item 6.5. Widening is a separate decision.
+6. **The first import is narrow.** It covers VN30 names, quarterly, half-yearly
+   and annual, from fiscal 2022, per sprint plan item 6.5, on the bank and
+   Circular 200 templates only. That is 33 names, without securities firms or
+   insurers. See *Scope of the first import*. Widening is a separate decision.
 
 ## The seven questions, per candidate
 
@@ -184,11 +187,15 @@ look like a working backtest while measuring the future.
    are the IDS form's values, not the PDF. Record how many differ and why.
    This decides whether `vendor` values are first-filed in practice, or
    whether the leak in the trade-offs is real. It now matters only for the
-   names IDS cannot serve: insurers and securities firms.
+   names IDS cannot serve: insurers and securities firms. **Deferred
+   2026-10-13** with them. It also matters for non-financial periods from
+   fiscal 2026 (verification 4).
 4. **Templates.** List the line items each of the five templates carries for
    the canonical items Phase 7 needs: revenue, net profit attributable to the
    parent, total assets, equity attributable to the parent, and shares
-   outstanding. Record the mapping.
+   outstanding. Record the mapping. **Done 2026-10-13** for the bank and
+   Circular 200 templates, below. Circular 99 cannot be read from IDS, and
+   securities firms and insurers are out of scope.
 
 ## Verification 1 · terms · 2026-10-13
 
@@ -323,6 +330,71 @@ No Excel or XBRL download was offered. The values are on the page itself.
 a per-ticker search, but it opens a new window that the tools here could not
 follow. Securities firms appear to report under their own regime, and where
 SSI's statements are lodged as structured data is not yet known.
+
+## Scope of the first import · operator decision · 2026-10-13
+
+**Securities firms and insurers are left out of the first import.** IDS does
+not serve them: securities firms are absent and the insurer's form is empty.
+Serving them would need the HOSE listing and the `vendor` basis, which is what
+verification 3 tests. **Verification 3 is therefore deferred** until they are
+brought in.
+
+The first import covers every equity that was a VN30 member at any time since
+the universe's recorded history begins (5 August 2024), so that research over
+that window is point-in-time. That is 36 names, less three:
+
+| Template | Names | Count |
+| --- | --- | --- |
+| Bank | ACB, BID, CTG, HDB, LPB, MBB, SHB, SSB, STB, TCB, TPB, VCB, VIB, VPB | 14 |
+| Non-financial | BCM, BSR, DGC, FPT, GAS, GVR, HPG, MCH, MSN, MWG, PLX, POW, SAB, VHM, VIC, VJC, VNM, VPL, VRE | 19 |
+| Left out | SSI, TCX (securities firms), BVH (insurer, a member until August 2025) | 3 |
+
+## Verification 4 · templates · 2026-10-13
+
+Read from the forms on IDS: FPT and HPG for non-financial, VCB for bank. The
+line items are the form's own codes (*mã số*).
+
+**The non-financial form is empty from fiscal 2026.** FPT's Q1 2026 and HPG's
+Q2 2026 consolidated filings carry all-zero forms on every tab. FPT's Q4 2025,
+filed in January 2026, is complete. The IDS form is still laid out on Circular
+200, and the statements of 2026 are drawn up under Circular 99, so issuers
+file the PDF and leave the form. Banks are not under Circular 99, and VCB's Q1
+and Q2 2026 forms are complete.
+
+So `as_filed` values exist for banks throughout, and for non-financial
+companies up to fiscal 2025. **Non-financial periods from fiscal 2026 have a
+disclosure record and no values.** They are stored as *disclosed, values not
+filed* until a source for Circular 99 statements is chosen, and they become a
+gap the coverage registry shows. They never become zeros.
+
+**Canonical items, per template:**
+
+| Canonical item | Non-financial, Circular 200 (consolidated) | Bank |
+| --- | --- | --- |
+| Revenue | Income statement 10, net revenue | **Not mapped.** A bank has no revenue line. Net interest income (03) is stored as its own item |
+| Net profit attributable to the parent | Income statement 61. A separate (parent-only) statement has 60 only | Income statement 21 minus 22 (profit after tax less minority interest). The sign of 22 is to be confirmed on a filed PDF |
+| Total assets | Balance sheet 270 | Balance sheet 300 |
+| Equity attributable to the parent | Balance sheet 400 minus 429 (non-controlling interest inside 410) | Balance sheet 500. Minority interest is outside it, at 700, and 800 = 400 + 500 + 700 |
+| Basic EPS, as reported | Income statement 70 | Income statement 23 |
+| Shares outstanding | **Not a statement line** | **Not a statement line** |
+
+Notes on the table:
+- **Shares outstanding** cannot be derived from either form. Charter capital
+  (411a and 411) divided by the ₫10,000 par counts treasury shares, and
+  treasury shares (415 and 414) are carried at cost, not as a count. Sprint 7's
+  per-share ratios need a share count from somewhere else: listed shares, net
+  of treasury shares, adjusted by PQT's corporate actions. That source is
+  outside this ADR.
+- **Income statement columns.** Each form holds this quarter, the same quarter
+  last year, year-to-date this year and year-to-date last year. Only *this
+  period* and *year-to-date this year* are facts of the filing. The prior-year
+  columns restate earlier periods as this filing presents them. They are
+  stored as observations of those periods, which is how a restatement becomes
+  visible.
+- **Balance sheet columns.** These are the period's closing balances and the
+  opening balances of the year (*số đầu kỳ*). The opening column is the
+  previous year end as presented now, and is treated as an observation of that
+  period in the same way.
 
 ## Consequences
 
