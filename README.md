@@ -22,7 +22,7 @@ Phase 6–20                    PLANNED
 | **Complete** | Phases 0–4, and the Research Foundation Upgrade (U1–U10)      |
 | **Current**  | Phase 5 — Market Intelligence Terminal ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 1,058 unit, 194 integration, 289 React, 262 Python + 91 Qlib (2026-10-11); C++ green in CI |
+| **Tests**    | 1,098 unit, 196 integration, 299 React (2026-10-13); 262 Python + 91 Qlib and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
@@ -98,14 +98,18 @@ Sprint 4 closes it against a written definition of done; the schedule is in
 the [sprint plan](docs/roadmap/sprint-plan.md), the scope in the
 [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
 
-| # | Item |
-| --- | --- |
-| 4.1 | Phase 5 definition of done, in the roadmap |
-| 4.2 | Quotes in watchlists, from one `QuoteService` shared with breadth |
-| 4.3 | Tick-rounded reference prices for stock dividends |
-| 4.4 | Venue-wide breadth (`breadth --venue HOSE`) |
-| 4.5 | HOSE calendar 2016–2021 |
-| 4.6 | Small debt |
+| # | Item | State |
+| --- | --- | --- |
+| 4.1 | Phase 5 definition of done, in the roadmap | ✅ |
+| 4.2 | Quotes in watchlists, from one `QuoteService` shared with breadth | ✅ identical to breadth, live |
+| 4.3 | Tick-rounded reference prices for stock dividends | ✅ |
+| 4.4 | Venue-wide breadth (`breadth --venue HOSE`) | ✅ |
+| 4.5 | Exchange calendar 2016–2021 (HOSE, HNX, UPCOM) | ✅ sourced, coverage from 2016 |
+| 4.6 | Small debt | ✅ |
+
+Every criterion of Phase 5's definition of done is evidenced in the
+[roadmap](docs/roadmap/pqt-roadmap-v2.md#phase-5--where-it-stands); declaring
+the phase complete is the operator's call.
 
 **Research Foundation Upgrade — complete.** Ten workstreams between Phase 4 and
 Phase 5 made the Phase 0–4 data architecture empirically valid and laid the

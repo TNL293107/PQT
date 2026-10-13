@@ -802,11 +802,24 @@ point-in-time members (`breadth VN30`), watchlists and saved workspaces. The
 last two are the API's first writes, behind an operator key until Phase 19
 ([ADR-027](../architecture/decisions/ADR-027-operator-write-path.md)).
 
-The phase stays `IN PROGRESS`. Since sprint 4 a watchlist shows quotes from the
-same service breadth counts, and an ex-date reference is rounded to the tick as
-the exchange publishes it. Breadth still covers a universe, not the whole
-market; there is no intraday view; and the terminal's real-data reach is VN30
-since August 2024.
+The phase stays `IN PROGRESS` until the operator declares it. Sprint 4 built
+what the definition of done below asks for and exercised it on the live stack
+on 13 October 2026, after re-ingesting the VN30 history on a new machine:
+
+| # | Criterion | Evidence |
+| --- | --- | --- |
+| 1 | One application core | Quotes, venue breadth and watchlist quotes are application queries behind `GET /watchlists/{name}/quotes`, `GET /venues/{code}/breadth`, `pqt watchlist quotes`, `pqt universe breadth --venue` and the console's `wl show` / `breadth --venue` |
+| 2 | One quote | An integration test asserts a watchlist's quotes equal the breadth rows field by field; live on 2026-09-17, five VN30 names were identical on all six fields |
+| 3 | The exchange's reference | Live: TCX closed at 31,800 on 2026-09-17, its restated reference rounded to the tick, and is now unchanged rather than a fractional advance; HDB's 2026-10-09 reference reads 21,550, as HOSE set it |
+| 4 | Venue-wide breadth | Live: HOSE on 2026-09-17, 36 equities, with how many lack a listing date (36) and which were never ingested (none) |
+| 5 | Honest coverage | The venue calendar is transcribed from 2016 (63 closed sessions for 2016–2021, plus two HOSE outage days); `pqt coverage FPT` now counts missing sessions over its 2016 bars instead of answering *not measured* |
+| 6 | Writes stay guarded | Sprint 4 added only reads; the write path is ADR-027's, reviewed in sprint 3 |
+| 7 | Exercised live, suites green | 1,098 unit and 196 integration tests on this machine, 299 frontend; Python runs in CI only here (no interpreter on the new machine) |
+
+The live run found one real defect, fixed in sprint 4: two share
+distributions on one session compounded instead of adding (HDB, 9 October
+2026; `DataRules.AdjustmentVersion` 3). The terminal's real-data reach is still
+VN30 since August 2024, and there is no intraday view.
 
 ### Phase 5 — definition of done
 
