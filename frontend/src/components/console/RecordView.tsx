@@ -83,7 +83,13 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
       return <WatchlistsView listing={record.listing} />;
 
     case "watchlist":
-      return <WatchlistView watchlist={record.watchlist} />;
+      return (
+        <WatchlistView
+          watchlist={record.watchlist}
+          quotes={record.quotes}
+          quoteProblem={record.quoteProblem}
+        />
+      );
 
     case "workspaces":
       return <WorkspacesView listing={record.listing} />;

@@ -9,7 +9,7 @@ import type { SystemHealth } from "../../types/health";
 import type { ChartStyle } from "../chart/series";
 import type { Breadth, UniverseList } from "../../types/universe";
 import type { InstrumentCoverage } from "../../types/coverage";
-import type { Watchlist, WatchlistList } from "../../types/watchlist";
+import type { Watchlist, WatchlistList, WatchlistQuotes } from "../../types/watchlist";
 import type { Workspace, WorkspaceList } from "../../types/workspace";
 
 /**
@@ -61,7 +61,14 @@ export type ConsoleRecord =
       readonly coverage: InstrumentCoverage;
     }
   | { readonly kind: "watchlists"; readonly listing: WatchlistList }
-  | { readonly kind: "watchlist"; readonly watchlist: Watchlist }
+  | {
+      readonly kind: "watchlist";
+      readonly watchlist: Watchlist;
+      /** The list's quotes, when they were asked for and given. */
+      readonly quotes?: WatchlistQuotes;
+      /** Why there are no quotes, in the server's words, when they were refused. */
+      readonly quoteProblem?: string;
+    }
   | { readonly kind: "workspaces"; readonly listing: WorkspaceList }
   | { readonly kind: "workspace"; readonly workspace: Workspace };
 

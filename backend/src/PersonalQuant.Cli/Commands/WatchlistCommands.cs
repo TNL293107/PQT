@@ -1,5 +1,6 @@
 using System.Globalization;
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Terminal;
 using PersonalQuant.Cli.CommandLine;
 
@@ -37,7 +38,7 @@ internal sealed class WatchlistCommands(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!command.Validate([], out var problem))
+        if (!command.Validate(command.Verb == "quotes" ? ["on"] : [], out var problem))
         {
             output.Problem(problem);
             return Task.FromResult(ExitCode.Usage);
@@ -47,6 +48,7 @@ internal sealed class WatchlistCommands(
         {
             ("list", []) => ListAsync(cancellationToken),
             ("show", [var name]) => ShowAsync(name, cancellationToken),
+            ("quotes", [var name]) => QuotesAsync(name, command, cancellationToken),
             ("create", [var name]) => ReportAsync(watchlists.Value.CreateAsync(name, cancellationToken), "created"),
             ("rename", [var name, var newName]) =>
                 ReportAsync(watchlists.Value.RenameAsync(name, newName, cancellationToken), "renamed"),
@@ -97,6 +99,92 @@ internal sealed class WatchlistCommands(
 
         return ExitCode.Ok;
     }
+
+    /// <summary>Prints a list's quotes on one session, in list order.</summary>
+    /// <remarks>
+    /// The quotes <c>pqt universe breadth</c> counts, printed the same way: an
+    /// arrow carries the direction in text, and a reference restated for an
+    /// action going ex says so on its row.
+    /// </remarks>
+    private async Task<int> QuotesAsync(string name, CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.TryDate("on", out var session, out var badDate))
+        {
+            output.Problem(badDate);
+            return ExitCode.Usage;
+        }
+
+        var quoted = await watchlists.Value.QuoteAsync(name, session, cancellationToken).ConfigureAwait(false);
+
+        if (quoted is null)
+        {
+            output.Problem($"There is no watchlist named '{name}'.");
+            return ExitCode.Refused;
+        }
+
+        if (quoted.Board.Outcome != QuoteOutcome.Quoted)
+        {
+            output.Problem(quoted.Board.Detail);
+            return ExitCode.Refused;
+        }
+
+        if (quoted.Board.Session is not { } day)
+        {
+            output.Line($"'{name}' holds no instruments to quote.");
+            return ExitCode.Ok;
+        }
+
+        output.Line($"{name} {Day(day)}  against "
+            + string.Join(", ", quoted.Board.Venues.Select(venue => $"{venue.Code} {Day(venue.PreviousSession)}")));
+
+        if (quoted.Board.SessionWasDefaulted)
+        {
+            output.Line("(the latest session any of them has a bar for; name another with --on yyyy-MM-dd)");
+        }
+
+        output.Blank();
+        output.Table(
+            ["", "TICKER", "CLOSE", "CHANGE", "REF", "VOLUME", "NOTE"],
+            [
+                .. quoted.Quotes.Select(quote => (IReadOnlyList<string>)
+                [
+                    Arrow(quote.Move),
+                    quote.Ticker.Value,
+                    Price(quote.Close),
+                    quote.Change is { } change
+                        ? (change * 100m).ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + "%"
+                        : "no data",
+                    Price(quote.Reference ?? quote.RawPreviousClose),
+                    quote.Volume?.ToString("#,##0", CultureInfo.InvariantCulture) ?? Output.Unknown,
+                    Note(quote),
+                ]),
+            ]);
+
+        return ExitCode.Ok;
+    }
+
+    private static string Note(Quote quote) =>
+        quote switch
+        {
+            { AdjustedForAction: true } => $"ex-date: previous close {Price(quote.RawPreviousClose)} restated",
+            { Move: not PriceMove.NoData } => string.Empty,
+            { Close: null } => "no bar on the session",
+            _ => $"no bar on {Day(quote.PreviousSession)}",
+        };
+
+    private static string Arrow(PriceMove move) => move switch
+    {
+        PriceMove.Advancing => "▲",
+        PriceMove.Declining => "▼",
+        PriceMove.Unchanged => "=",
+        _ => "·",
+    };
+
+    private static string Price(decimal? value) =>
+        value?.ToString("#,##0.####", CultureInfo.InvariantCulture) ?? Output.Unknown;
+
+    private static string Day(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private async Task<int> DeleteAsync(string name, CancellationToken cancellationToken)
     {
@@ -217,10 +305,11 @@ internal sealed class WatchlistCommands(
         output.Problem(verb switch
         {
             "show" or "create" or "delete" => $"pqt watchlist {verb} <NAME>",
+            "quotes" => "pqt watchlist quotes <NAME> [--on yyyy-MM-dd]",
             "rename" => "pqt watchlist rename <NAME> <NEW-NAME>",
             "add" or "remove" => $"pqt watchlist {verb} <NAME> <TICKER> [<TICKER>...]",
             "list" => "pqt watchlist list",
-            _ => $"'watchlist {verb}' is not a command. Try list, show, create, rename, delete, add or remove.",
+            _ => $"'watchlist {verb}' is not a command. Try list, show, quotes, create, rename, delete, add or remove.",
         });
 
         return ExitCode.Usage;

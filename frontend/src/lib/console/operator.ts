@@ -5,6 +5,7 @@ import {
   createWatchlist,
   deleteWatchlist,
   fetchWatchlist,
+  fetchWatchlistQuotes,
   fetchWatchlists,
   removeFromWatchlist,
 } from "../api/watchlists";
@@ -27,6 +28,7 @@ export interface OperatorServices {
   readonly watchlists: {
     readonly list: typeof fetchWatchlists;
     readonly get: typeof fetchWatchlist;
+    readonly quotes: typeof fetchWatchlistQuotes;
     readonly create: typeof createWatchlist;
     readonly add: typeof addToWatchlist;
     readonly remove: typeof removeFromWatchlist;
@@ -46,6 +48,7 @@ export const liveOperatorServices: OperatorServices = {
   watchlists: {
     list: fetchWatchlists,
     get: fetchWatchlist,
+    quotes: fetchWatchlistQuotes,
     create: createWatchlist,
     add: addToWatchlist,
     remove: removeFromWatchlist,
@@ -154,9 +157,7 @@ export async function runWatchlist(
         return { kind: "watchlists", listing: await services.watchlists.list(signal) };
 
       case "show":
-        return name === ""
-          ? usage()
-          : { kind: "watchlist", watchlist: await services.watchlists.get(name, signal) };
+        return name === "" ? usage() : await show(name, tickers);
 
       case "create":
         return name === ""
@@ -208,9 +209,42 @@ export async function runWatchlist(
     }
   });
 
+  /**
+   * The list and its quotes on one session — the quotes breadth counts.
+   *
+   * A list whose quotes are refused (no recent bars, a holiday named) is still
+   * shown, with the server's reason beside it: the list exists either way.
+   */
+  async function show(listName: string, rest: readonly string[]): Promise<ConsoleRecord> {
+    let on: string | undefined;
+
+    if (rest.length > 0) {
+      const [flag = "", day = ""] = rest;
+
+      if (flag.toLowerCase() !== "--on" || !/^\d{4}-\d{2}-\d{2}$/u.test(day) || rest.length > 2) {
+        return failure("wl show <name> [--on yyyy-MM-dd]");
+      }
+
+      on = day;
+    }
+
+    const watchlist = await services.watchlists.get(listName, signal);
+
+    try {
+      const quotes = await services.watchlists.quotes(listName, on, signal);
+      return { kind: "watchlist", watchlist, quotes };
+    } catch (error) {
+      if (error instanceof WatchlistApiError && error.status === 422) {
+        return { kind: "watchlist", watchlist, quoteProblem: error.message };
+      }
+
+      throw error;
+    }
+  }
+
   function usage(): ConsoleRecord {
     return failure(
-      "wl list · wl show <name> · wl create <name> · wl add <name> <ticker>… · wl rm <name> <ticker>… · wl delete <name>",
+      "wl list · wl show <name> [--on yyyy-MM-dd] · wl create <name> · wl add <name> <ticker>… · wl rm <name> <ticker>… · wl delete <name>",
     );
   }
 }

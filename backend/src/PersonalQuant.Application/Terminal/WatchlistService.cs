@@ -1,4 +1,5 @@
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Domain.Common;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.Terminal;
@@ -85,6 +86,24 @@ public sealed record WatchlistItem(
     int Position,
     DateTimeOffset AddedAtUtc);
 
+/// <summary>A watchlist's instruments quoted on one session.</summary>
+/// <remarks>
+/// The quotes are <see cref="IQuoteService"/>'s, the same ones market breadth
+/// counts, so a name on a list and the same name in <c>breadth</c> show the
+/// same move on the same session.
+/// </remarks>
+/// <param name="Watchlist">The list.</param>
+/// <param name="Board">The quotes, or why there are none.</param>
+public sealed record WatchlistQuotes(WatchlistView Watchlist, QuoteBoard Board)
+{
+    /// <summary>Gets the quotes in list order rather than by ticker.</summary>
+    public IReadOnlyList<Quote> Quotes =>
+    [
+        .. Board.Quotes.OrderBy(quote =>
+            Watchlist.Items.FirstOrDefault(item => item.InstrumentId == quote.InstrumentId)?.Position ?? int.MaxValue),
+    ];
+}
+
 /// <summary>How a watchlist change ended.</summary>
 public enum WatchlistOutcome
 {
@@ -133,6 +152,15 @@ public interface IWatchlistService
     /// <returns>The list, or <see langword="null"/> when there is none by that name.</returns>
     Task<WatchlistView?> FindAsync(string name, CancellationToken cancellationToken = default);
 
+    /// <summary>Quotes one watchlist's instruments on a session.</summary>
+    /// <param name="name">The list's name.</param>
+    /// <param name="session">
+    /// The session, or null for the latest one any of its instruments has a bar for.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The quotes, or <see langword="null"/> when there is no list by that name.</returns>
+    Task<WatchlistQuotes?> QuoteAsync(string name, DateOnly? session, CancellationToken cancellationToken = default);
+
     /// <summary>Creates an empty watchlist.</summary>
     /// <param name="name">Its name.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -177,6 +205,7 @@ public interface IWatchlistService
 internal sealed class WatchlistService(
     IWatchlistRepository watchlists,
     IUnitOfWork unitOfWork,
+    IQuoteService quotes,
     IClock clock) : IWatchlistService
 {
     /// <summary>The most watchlists a deployment may hold.</summary>
@@ -192,6 +221,26 @@ internal sealed class WatchlistService(
         Watchlist.IsValidName(name)
             ? watchlists.FindViewAsync(name, cancellationToken)
             : Task.FromResult<WatchlistView?>(null);
+
+    /// <inheritdoc />
+    public async Task<WatchlistQuotes?> QuoteAsync(
+        string name,
+        DateOnly? session,
+        CancellationToken cancellationToken = default)
+    {
+        var view = await FindAsync(name, cancellationToken).ConfigureAwait(false);
+
+        if (view is null)
+        {
+            return null;
+        }
+
+        var board = await quotes
+            .QuoteAsync([.. view.Items.Select(item => item.InstrumentId)], session, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new WatchlistQuotes(view, board);
+    }
 
     /// <inheritdoc />
     public async Task<WatchlistChange> CreateAsync(string name, CancellationToken cancellationToken = default)

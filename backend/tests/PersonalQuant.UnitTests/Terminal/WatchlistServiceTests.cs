@@ -1,4 +1,6 @@
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Terminal;
+using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.Terminal;
 using PersonalQuant.UnitTests.MarketData.Fakes;
@@ -11,6 +13,39 @@ public sealed class WatchlistServiceTests
 
     private readonly InMemoryWatchlists _store = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
+    private readonly ScriptedQuotes _quotes = new();
+
+    [Fact]
+    public async Task Quoting_a_list_quotes_every_instrument_on_it_in_list_order()
+    {
+        var service = Service();
+        var token = TestContext.Current.CancellationToken;
+        var second = _store.KnownInstrument();
+        var first = _store.KnownInstrument();
+        await service.CreateAsync("banks", token);
+        await service.AddAsync("banks", first, token);
+        await service.AddAsync("banks", second, token);
+
+        // The board answers by ticker, the way breadth lists members; the list
+        // keeps the order the operator gave it.
+        _quotes.Answer(Quote(second, "AAA"), Quote(first, "ZZZ"));
+
+        var quoted = await service.QuoteAsync("banks", Session, token);
+
+        Assert.NotNull(quoted);
+        Assert.Equal([first, second], _quotes.Asked);
+        Assert.Equal(Session, _quotes.Session);
+        Assert.Equal(["ZZZ", "AAA"], quoted.Quotes.Select(quote => quote.Ticker.Value));
+    }
+
+    [Fact]
+    public async Task Quoting_a_missing_list_is_null_and_quotes_nothing()
+    {
+        var quoted = await Service().QuoteAsync("ghost", null, TestContext.Current.CancellationToken);
+
+        Assert.Null(quoted);
+        Assert.Null(_quotes.Asked);
+    }
 
     [Fact]
     public async Task Creating_a_list_saves_it_and_answers_with_it()
@@ -110,7 +145,7 @@ public sealed class WatchlistServiceTests
     {
         // The existence check passed; the database's unique index refused the
         // commit because another request got there first.
-        var service = new WatchlistService(_store, new RacingUnitOfWork(), new FakeClock(Now));
+        var service = new WatchlistService(_store, new RacingUnitOfWork(), _quotes, new FakeClock(Now));
 
         var change = await service.CreateAsync("banks", TestContext.Current.CancellationToken);
 
@@ -123,7 +158,34 @@ public sealed class WatchlistServiceTests
             throw new PersonalQuant.Application.Abstractions.UniqueConstraintException("lost the race");
     }
 
-    private WatchlistService Service() => new(_store, _unitOfWork, new FakeClock(Now));
+    private WatchlistService Service() => new(_store, _unitOfWork, _quotes, new FakeClock(Now));
+
+    private static readonly DateOnly Session = new(2026, 10, 9);
+
+    private static Quote Quote(InstrumentId id, string ticker) =>
+        new(id, Ticker.Create(ticker), ExchangeCode.Create("HOSE"), Session.AddDays(-1), 100m, 100m, 101m, 0.01m, 10, PriceMove.Advancing);
+
+    /// <summary>Answers with the quotes a test scripted, remembering what it was asked.</summary>
+    private sealed class ScriptedQuotes : IQuoteService
+    {
+        private IReadOnlyList<Quote> _answer = [];
+
+        public IReadOnlyList<InstrumentId>? Asked { get; private set; }
+
+        public DateOnly? Session { get; private set; }
+
+        public void Answer(params Quote[] quotes) => _answer = quotes;
+
+        public Task<QuoteBoard> QuoteAsync(
+            IReadOnlyCollection<InstrumentId> instruments,
+            DateOnly? session,
+            CancellationToken cancellationToken = default)
+        {
+            Asked = [.. instruments];
+            Session = session;
+            return Task.FromResult(QuoteBoard.Quoted(session, defaulted: false, [], _answer));
+        }
+    }
 
     /// <summary>Holds lists in memory; instruments exist when the test declared them.</summary>
     private sealed class InMemoryWatchlists : IWatchlistRepository

@@ -1,4 +1,4 @@
-import type { Watchlist, WatchlistList } from "../../types/watchlist";
+import type { Watchlist, WatchlistList, WatchlistQuotes } from "../../types/watchlist";
 import { apiUrl } from "./config";
 
 /** Milliseconds before a watchlist request is abandoned. */
@@ -29,6 +29,21 @@ export function fetchWatchlists(signal?: AbortSignal): Promise<WatchlistList> {
 /** Reads one watchlist with its instruments. */
 export function fetchWatchlist(name: string, signal?: AbortSignal): Promise<Watchlist> {
   return send<Watchlist>("GET", `/watchlists/${encodeURIComponent(name)}`, null, signal);
+}
+
+/**
+ * Quotes a watchlist's instruments on one session — the quotes breadth counts.
+ *
+ * @param on The session as yyyy-MM-dd, or undefined for the latest one any
+ *   instrument on the list has a bar for.
+ */
+export function fetchWatchlistQuotes(
+  name: string,
+  on?: string,
+  signal?: AbortSignal,
+): Promise<WatchlistQuotes> {
+  const query = on === undefined ? "" : `?on=${encodeURIComponent(on)}`;
+  return send<WatchlistQuotes>("GET", `/watchlists/${encodeURIComponent(name)}/quotes${query}`, null, signal);
 }
 
 /** Creates an empty watchlist. Needs the operator key. */

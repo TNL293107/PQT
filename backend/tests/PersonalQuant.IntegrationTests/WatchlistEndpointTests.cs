@@ -196,6 +196,23 @@ public sealed class WatchlistEndpointTests(DependencyContainerFixture containers
     }
 
     [Fact]
+    public async Task Quotes_answer_a_missing_list_and_a_malformed_date_without_a_key()
+    {
+        // A read, open like every other: no key, and refusals by status.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync(Key);
+        var token = TestContext.Current.CancellationToken;
+
+        var missing = await host.Client.GetAsync(new Uri("/watchlists/no-such-list/quotes", UriKind.Relative), token);
+        var malformed = await host.Client.GetAsync(
+            new Uri("/watchlists/no-such-list/quotes?on=30/09/2026", UriKind.Relative), token);
+
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+    }
+
+    [Fact]
     public async Task A_workspace_is_saved_replaced_read_and_deleted()
     {
         Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);

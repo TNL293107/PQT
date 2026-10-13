@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { WatchlistApiError } from "../api/watchlists";
 import type { Instrument } from "../../types/instrument";
-import type { Watchlist } from "../../types/watchlist";
+import type { Watchlist, WatchlistQuotes } from "../../types/watchlist";
 import { isReplayable, maskEntry, runKey, runWatchlist, runWorkspace, type OperatorServices } from "./operator";
 
 const KEY = "k".repeat(40);
@@ -12,6 +12,16 @@ const core: Watchlist = {
   updatedAtUtc: "2026-10-11T09:00:00Z",
   count: 0,
   items: [],
+};
+
+const coreQuotes: WatchlistQuotes = {
+  name: "core",
+  session: "2026-09-30",
+  sessionWasDefaulted: false,
+  knownAsOf: null,
+  announcementPolicy: "permissive",
+  venues: [{ code: "HOSE", previousSession: "2026-09-29" }],
+  quotes: [],
 };
 
 function instrument(ticker: string): Instrument {
@@ -34,6 +44,7 @@ function services(held: string | null = KEY) {
     watchlists: {
       list: vi.fn(),
       get: vi.fn(() => Promise.resolve(core)),
+      quotes: vi.fn(() => Promise.resolve(coreQuotes)),
       create: vi.fn(() => Promise.resolve(core)),
       add: vi.fn(() => Promise.resolve(core)),
       remove: vi.fn(() => Promise.resolve(core)),
@@ -103,6 +114,42 @@ describe("watchlist lines", () => {
 
     expect(record.kind).toBe("error");
     expect(fake.watchlists.add).not.toHaveBeenCalled();
+  });
+
+  it("show a list with the quotes breadth counts, on a named session when asked", async () => {
+    const fake = services();
+
+    const latest = await runWatchlist("show core", fake, resolveKnown as never);
+    const named = await runWatchlist("show core --on 2026-09-30", fake, resolveKnown as never);
+
+    expect(latest).toMatchObject({ kind: "watchlist", watchlist: core, quotes: coreQuotes });
+    expect(named).toMatchObject({ kind: "watchlist", quotes: coreQuotes });
+    expect(fake.watchlists.quotes).toHaveBeenNthCalledWith(1, "core", undefined, undefined);
+    expect(fake.watchlists.quotes).toHaveBeenNthCalledWith(2, "core", "2026-09-30", undefined);
+  });
+
+  it("still show a list whose quotes are refused, with the server's reason", async () => {
+    const fake = services();
+    fake.watchlists.quotes.mockRejectedValueOnce(
+      new WatchlistApiError("2026-10-03 is not a trading day on HOSE.", 422),
+    );
+
+    const record = await runWatchlist("show core --on 2026-10-03", fake, resolveKnown as never);
+
+    expect(record).toMatchObject({
+      kind: "watchlist",
+      watchlist: core,
+      quoteProblem: "2026-10-03 is not a trading day on HOSE.",
+    });
+  });
+
+  it("refuse a malformed session without asking the server", async () => {
+    const fake = services();
+
+    const record = await runWatchlist("show core --on 30/09/2026", fake, resolveKnown as never);
+
+    expect(record.kind).toBe("error");
+    expect(fake.watchlists.get).not.toHaveBeenCalled();
   });
 
   it("turn a missing key into the instruction that fixes it", async () => {

@@ -1,7 +1,9 @@
 using PersonalQuant.Application.Instruments;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Terminal;
 using PersonalQuant.Cli.CommandLine;
 using PersonalQuant.Cli.Commands;
+using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.UnitTests.Cli.Fakes;
 
@@ -85,6 +87,52 @@ public sealed class WatchlistCommandsTests
         Assert.Contains("Suspended", harness.Result, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Quotes_print_in_list_order_and_say_when_an_ex_date_restated_the_reference()
+    {
+        var harness = new Harness();
+        var session = new DateOnly(2026, 9, 30);
+        var vcb = InstrumentId.New();
+        var fpt = InstrumentId.New();
+        harness.Watchlists.Hold(new WatchlistView("core", Now, Now,
+        [
+            new WatchlistItem(vcb, "VCB", "Vietcombank", "HOSE", InstrumentStatus.Listed, 0, Now),
+            new WatchlistItem(fpt, "FPT", "FPT Corporation", "HOSE", InstrumentStatus.Listed, 1, Now),
+        ]));
+        harness.Watchlists.Board = QuoteBoard.Quoted(
+            session,
+            defaulted: false,
+            [new QuoteVenue(ExchangeCode.Create("HOSE"), session.AddDays(-1))],
+            [
+                new Quote(fpt, Ticker.Create("FPT"), ExchangeCode.Create("HOSE"), session.AddDays(-1),
+                    47_500m, 40_450m, 40_450m, 0m, 1_000, PriceMove.Unchanged),
+                new Quote(vcb, Ticker.Create("VCB"), ExchangeCode.Create("HOSE"), session.AddDays(-1),
+                    60_000m, 60_000m, 61_200m, 0.02m, 2_000, PriceMove.Advancing),
+            ]);
+
+        var code = await harness.RunAsync("watchlist", "quotes", "core", "--on", "2026-09-30");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Equal(session, harness.Watchlists.AskedSession);
+        Assert.True(
+            harness.Result.IndexOf("VCB", StringComparison.Ordinal) < harness.Result.IndexOf("FPT", StringComparison.Ordinal));
+        Assert.Contains("+2.00%", harness.Result, StringComparison.Ordinal);
+        Assert.Contains("previous close 47,500 restated", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_refused_quote_is_reported_with_a_non_zero_exit()
+    {
+        var harness = new Harness();
+        harness.Watchlists.Board = QuoteBoard.Refused(
+            QuoteOutcome.NotATradingDay, new DateOnly(2026, 10, 3), "2026-10-03 is not a trading day on HOSE.");
+
+        var code = await harness.RunAsync("watchlist", "quotes", "core", "--on", "2026-10-03");
+
+        Assert.Equal(ExitCode.Refused, code);
+        Assert.Contains("not a trading day", harness.Problems, StringComparison.Ordinal);
+    }
+
     private sealed class Harness
     {
         private readonly WatchlistCommands _commands;
@@ -119,6 +167,10 @@ public sealed class WatchlistCommandsTests
 
         public List<InstrumentId> Added { get; } = [];
 
+        public QuoteBoard Board { get; set; } = QuoteBoard.Quoted(null, defaulted: false, [], []);
+
+        public DateOnly? AskedSession { get; private set; }
+
         public void Hold(WatchlistView view) => _held = view;
 
         public void Refuse(WatchlistOutcome outcome, string message) =>
@@ -129,6 +181,13 @@ public sealed class WatchlistCommandsTests
 
         public Task<WatchlistView?> FindAsync(string name, CancellationToken cancellationToken = default) =>
             Task.FromResult<WatchlistView?>(name == _held.Name ? _held : null);
+
+        public Task<WatchlistQuotes?> QuoteAsync(string name, DateOnly? session, CancellationToken cancellationToken = default)
+        {
+            AskedSession = session;
+
+            return Task.FromResult<WatchlistQuotes?>(name == _held.Name ? new WatchlistQuotes(_held, Board) : null);
+        }
 
         public Task<WatchlistChange> CreateAsync(string name, CancellationToken cancellationToken = default) =>
             Task.FromResult(_refusal ?? Changed());

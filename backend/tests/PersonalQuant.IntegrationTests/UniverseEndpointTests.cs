@@ -10,6 +10,7 @@ using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
+using PersonalQuant.Application.Terminal;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Currencies;
@@ -129,6 +130,51 @@ public sealed class UniverseEndpointTests(DependencyContainerFixture containers)
         Assert.NotNull(breadth);
         Assert.Equal(Wednesday, breadth.Session);
         Assert.True(breadth.SessionWasDefaulted);
+    }
+
+    [Fact]
+    public async Task A_watchlist_quotes_its_names_exactly_as_breadth_measures_them()
+    {
+        // Sprint 4's exit: a watchlist and breadth cannot disagree about a name
+        // on the same session, because both read one quote service.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync();
+        var arranged = await ArrangeAsync(host);
+        var token = TestContext.Current.CancellationToken;
+
+        var breadth = await host.Client.GetFromJsonAsync<BreadthResponse>(
+            new Uri($"/universes/{arranged.Code}/breadth?on=2026-09-30", UriKind.Relative), Json, token);
+        Assert.NotNull(breadth);
+
+        var name = $"agree-{arranged.Code[3..].ToLowerInvariant()}";
+
+        await using (var scope = host.Factory.Services.CreateAsyncScope())
+        {
+            var watchlists = scope.ServiceProvider.GetRequiredService<IWatchlistService>();
+            await watchlists.CreateAsync(name, token);
+
+            foreach (var member in breadth.Members)
+            {
+                await watchlists.AddAsync(name, new InstrumentId(member.InstrumentId), token);
+            }
+        }
+
+        var quoted = await host.Client.GetFromJsonAsync<WatchlistQuotesResponse>(
+            new Uri($"/watchlists/{name}/quotes?on=2026-09-30", UriKind.Relative), Json, token);
+
+        Assert.NotNull(quoted);
+        Assert.Equal(Wednesday, quoted.Session);
+        Assert.Equal(breadth.Members.Select(member => member.InstrumentId), quoted.Quotes.Select(quote => quote.InstrumentId));
+
+        foreach (var member in breadth.Members)
+        {
+            var quote = Assert.Single(quoted.Quotes, quote => quote.InstrumentId == member.InstrumentId);
+
+            Assert.Equal(
+                (member.Category, member.PreviousClose, member.Close, member.Change, member.Volume, member.AdjustedForAction),
+                (quote.Move, quote.Reference, quote.Close, quote.Change, quote.Volume, quote.AdjustedForAction));
+        }
     }
 
     [Fact]

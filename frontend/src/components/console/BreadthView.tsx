@@ -1,4 +1,5 @@
 import type { Breadth, BreadthCategory, BreadthMember, UniverseList } from "../../types/universe";
+import { change, price } from "../../lib/console/quoteFormat";
 
 /** How many names each mover table shows. */
 const MOVERS = 5;
@@ -271,18 +272,6 @@ function sortByChange(members: readonly BreadthMember[]): readonly BreadthMember
       (b.change ?? 0) - (a.change ?? 0) ||
       a.ticker.localeCompare(b.ticker),
   );
-}
-
-function change(value: number | null): string {
-  if (value === null) return "no data";
-  const percent = value * 100;
-  return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
-}
-
-function price(value: number | null): string {
-  return value === null
-    ? "—"
-    : value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
 function number(value: number): string {

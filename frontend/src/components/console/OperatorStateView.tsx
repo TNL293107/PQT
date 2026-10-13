@@ -1,5 +1,6 @@
-import type { Watchlist, WatchlistList } from "../../types/watchlist";
+import type { PriceMove, Watchlist, WatchlistList, WatchlistQuotes } from "../../types/watchlist";
 import type { Workspace, WorkspaceList } from "../../types/workspace";
+import { change, price } from "../../lib/console/quoteFormat";
 
 /**
  * The operator's own state — watchlists and workspaces — as the console draws
@@ -43,15 +44,114 @@ export function WatchlistsView({ listing }: { readonly listing: WatchlistList })
   );
 }
 
-/** One watchlist and its instruments, in the operator's order. */
-export function WatchlistView({ watchlist }: { readonly watchlist: Watchlist }) {
+/**
+ * The glyph and tone for each move. Direction is written, never only
+ * coloured — the same rule breadth follows.
+ */
+const MOVE: Readonly<Record<PriceMove, { glyph: string; tone: string }>> = {
+  Advancing: { glyph: "▲", tone: "is-up" },
+  Declining: { glyph: "▼", tone: "is-down" },
+  Unchanged: { glyph: "=", tone: "is-flat" },
+  NoData: { glyph: "·", tone: "is-unmeasured" },
+};
+
+/**
+ * One watchlist and its instruments, in the operator's order.
+ *
+ * With quotes, each row carries the server's close, change and reference —
+ * the quotes breadth counts, so the two cannot disagree on a session. Nothing
+ * here recomputes a change.
+ */
+export function WatchlistView({
+  watchlist,
+  quotes,
+  quoteProblem,
+}: {
+  readonly watchlist: Watchlist;
+  readonly quotes?: WatchlistQuotes | undefined;
+  readonly quoteProblem?: string | undefined;
+}) {
+  const byInstrument = new Map((quotes?.quotes ?? []).map((quote) => [quote.instrumentId, quote]));
+  const restated = (quotes?.quotes ?? []).filter((quote) => quote.adjustedForAction);
+
   return (
     <div className="out">
       <p className="out__line">
         <strong>{watchlist.name}</strong> — {watchlist.count} instrument{watchlist.count === 1 ? "" : "s"}
+        {quotes?.session ? (
+          <span className="out__line--dim">
+            {" · "}
+            {quotes.session}
+            {quotes.sessionWasDefaulted ? " (the latest session any of them has a bar for)" : ""}
+            {" against "}
+            {quotes.venues.map((venue) => `${venue.code} ${venue.previousSession}`).join(", ")}
+          </span>
+        ) : null}
       </p>
+      {quoteProblem ? <p className="out__line out__line--warn">No quotes: {quoteProblem}</p> : null}
       {watchlist.items.length === 0 ? (
         <p className="out__hint">Empty. wl add {watchlist.name} &lt;ticker&gt;…</p>
+      ) : quotes ? (
+        <>
+          <table className="grid">
+            <thead>
+              <tr>
+                <th scope="col">Ticker</th>
+                <th scope="col" className="grid__num">
+                  Close
+                </th>
+                <th scope="col" className="grid__num">
+                  Change
+                </th>
+                <th scope="col" className="grid__num">
+                  Ref
+                </th>
+                <th scope="col" className="grid__num">
+                  Volume
+                </th>
+                <th scope="col">Venue</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {watchlist.items.map((item) => {
+                const quote = byInstrument.get(item.instrumentId);
+                const move = MOVE[quote?.move ?? "NoData"];
+
+                return (
+                  <tr key={item.instrumentId}>
+                    <td className="grid__key">{item.ticker}</td>
+                    <td className="grid__num">{price(quote?.close ?? null)}</td>
+                    <td className={`grid__num ${move.tone}`}>
+                      {move.glyph} {change(quote?.change ?? null)}
+                    </td>
+                    <td className="grid__num">
+                      {price(quote?.reference ?? quote?.rawPreviousClose ?? null)}
+                      {quote?.adjustedForAction ? " *" : ""}
+                    </td>
+                    <td className="grid__num">
+                      {quote?.volume == null ? "—" : quote.volume.toLocaleString("en-US")}
+                    </td>
+                    <td>{item.exchangeCode}</td>
+                    <td className={item.status === "Listed" ? undefined : "grid__note"}>{item.status}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {restated.length > 0 ? (
+            <p className="out__line out__line--warn">
+              *{" "}
+              {restated
+                .map(
+                  (quote) =>
+                    `${quote.ticker} went ex: its previous close ${price(quote.rawPreviousClose)} is restated to ${price(quote.reference)}`,
+                )
+                .join("; ")}
+              , the exchange&apos;s reference rounded to the tick.
+            </p>
+          ) : null}
+        </>
       ) : (
         <table className="grid">
           <thead>

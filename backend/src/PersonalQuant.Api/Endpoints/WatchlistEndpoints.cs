@@ -1,8 +1,10 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using PersonalQuant.Api.Contracts;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Terminal;
 using PersonalQuant.Domain.Instruments;
 
@@ -20,6 +22,7 @@ internal static class WatchlistEndpoints
 {
     private const string RouteGroup = "/watchlists";
     private const string OpenApiTag = "Watchlists";
+    private const string DateFormat = "yyyy-MM-dd";
 
     /// <summary>Maps the watchlist endpoints.</summary>
     /// <param name="endpoints">The endpoint route builder.</param>
@@ -37,6 +40,10 @@ internal static class WatchlistEndpoints
         reads.MapGet("/{name}", GetAsync)
             .WithName("GetWatchlist")
             .WithSummary("Reads one watchlist and its instruments.");
+
+        reads.MapGet("/{name}/quotes", GetQuotesAsync)
+            .WithName("GetWatchlistQuotes")
+            .WithSummary("Quotes a watchlist's instruments on one session, as breadth measures them.");
 
         var writes = endpoints.MapGroup(RouteGroup).WithTags(OpenApiTag).RequireOperatorKey();
 
@@ -85,6 +92,69 @@ internal static class WatchlistEndpoints
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Watchlist not found.")
             : TypedResults.Ok(WatchlistResponse.From(view));
+    }
+
+    /// <summary>
+    /// <c>GET /watchlists/{name}/quotes?on=yyyy-MM-dd</c>.
+    /// </summary>
+    /// <remarks>
+    /// Without <c>on</c>, the latest session up to today on which any
+    /// instrument on the list has a daily bar, and the response says it chose.
+    /// The day is parsed exactly, as breadth parses it.
+    /// </remarks>
+    private static async Task<Results<Ok<WatchlistQuotesResponse>, ProblemHttpResult>> GetQuotesAsync(
+        string name,
+        string? on,
+        IWatchlistService watchlists,
+        CancellationToken cancellationToken)
+    {
+        DateOnly? session = null;
+
+        if (on is not null)
+        {
+            if (!DateOnly.TryParseExact(on, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+            {
+                return TypedResults.Problem(
+                    detail: $"'{on}' is not a date. Write it as {DateFormat}, for example 2026-09-30.",
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "The quote request is not valid.");
+            }
+
+            session = day;
+        }
+
+        var quoted = await watchlists.QuoteAsync(name, session, cancellationToken).ConfigureAwait(false);
+
+        if (quoted is null)
+        {
+            return TypedResults.Problem(
+                detail: $"There is no watchlist named '{name}'.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Watchlist not found.");
+        }
+
+        if (quoted.Board.Outcome == QuoteOutcome.Quoted)
+        {
+            return TypedResults.Ok(WatchlistQuotesResponse.From(quoted));
+        }
+
+        var title = quoted.Board.Outcome switch
+        {
+            QuoteOutcome.CalendarNotCovered => "The venue calendar does not cover that session.",
+            QuoteOutcome.NotATradingDay => "That session is not a trading day.",
+            _ => "There is no data to quote.",
+        };
+
+        return TypedResults.Problem(
+            detail: quoted.Board.Detail,
+            statusCode: StatusCodes.Status422UnprocessableEntity,
+            title: title,
+            extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["outcome"] = quoted.Board.Outcome.ToString(),
+                ["watchlist"] = quoted.Watchlist.Name,
+                ["session"] = quoted.Board.Session?.ToString(DateFormat, CultureInfo.InvariantCulture),
+            });
     }
 
     /// <remarks>

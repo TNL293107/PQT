@@ -53,6 +53,7 @@ internal static class Usage
         output.WriteLine();
         output.WriteLine("  pqt watchlist list");
         output.WriteLine("  pqt watchlist show|create|delete <NAME>");
+        output.WriteLine("  pqt watchlist quotes <NAME> [--on yyyy-MM-dd]");
         output.WriteLine("  pqt watchlist rename <NAME> <NEW-NAME>");
         output.WriteLine("  pqt watchlist add|remove <NAME> <TICKER> [<TICKER>...]");
         output.WriteLine("  pqt workspace list");

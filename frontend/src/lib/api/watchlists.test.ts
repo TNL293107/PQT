@@ -5,6 +5,7 @@ import {
   createWatchlist,
   deleteWatchlist,
   fetchWatchlist,
+  fetchWatchlistQuotes,
 } from "./watchlists";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -68,6 +69,19 @@ describe("watchlist client", () => {
     expect(error).toBeInstanceOf(WatchlistApiError);
     expect((error as WatchlistApiError).status).toBe(403);
     expect((error as WatchlistApiError).message).toBe("Set PQT_OPERATOR_KEY.");
+  });
+
+  it("asks for quotes on a named session, or on none", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse({ name: "core", quotes: [] })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchWatchlistQuotes("core", "2026-09-30");
+    await fetchWatchlistQuotes("core");
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0]![0]).toMatch(/\/watchlists\/core\/quotes\?on=2026-09-30$/);
+    expect(calls[1]![0]).toMatch(/\/watchlists\/core\/quotes$/);
+    expect((calls[0]![1].headers as Record<string, string>)["Authorization"]).toBeUndefined();
   });
 
   it("treats a delete's empty answer as done", async () => {
