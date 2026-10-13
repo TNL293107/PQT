@@ -64,10 +64,11 @@ form where it can be read, and otherwise from an aggregator, labelled as such.**
    (`congbothongtin.ssc.gov.vn`). For HOSE issuers after that date, it is
    HOSE's disclosure system. A statement with no disclosure record is not
    stored as a fact. It is a finding: *period ended, no disclosure found*.
-2. **Day granularity is read conservatively.** A filing dated D is known from
-   the start of the next session after D. The record cannot say whether it
-   arrived before or after the close. A source that carries a time of day may
-   later narrow this, and that change will be recorded.
+2. **Day granularity is read conservatively.** A filing dated D with no time
+   is known from the start of the next session after D. The record cannot say
+   whether it arrived before or after the close. A record that carries a time,
+   as HOSE's do (verification 1), is known from the first session that opens
+   after that time.
 3. **The numbers have a declared basis.**
    - `as_filed` means read from the filing's structured IDS form (Excel or
      XBRL), which is the issuer's own submission.
@@ -99,8 +100,8 @@ here, before the status moves to Accepted.
 | 1 | Availability | Public web portal, no account. Filings filterable by venue, ticker, report type, year, quarter | Public web pages on hsx.vn. **VERIFY** the listing and its fields | Undocumented endpoints behind Vietcap's web front end, as in ADR-015. **VERIFY** which statements and fields exist |
 | 2 | Underlying source | The issuer's own filing, received by the regulator | The issuer's own filing, received by the exchange | The issuer's filing, re-keyed or re-processed by the broker |
 | 3 | Data ownership | The issuer's content, disclosed under statute, published by SSC | As IDS, published by HOSE | The issuer's content. The broker's presentation |
-| 4 | Licence / terms | No published terms found. Footer reads "Copyright © 2019 - SSC". A consent dialog appears, and its text was not captured. **VERIFY** | No terms found yet. HOSE's index factsheets reserve its index marks, which is not this. **VERIFY** | No published grant (ADR-015 §4) |
-| 5 | Storage rights | Not granted in writing. These are statutory public disclosures, the strongest footing available for retaining a copy for personal research | As IDS | Not granted in writing. Same absence as ADR-015 |
+| 4 | Licence / terms | No terms published (verification 1). Footer reads "Copyright © 2019 - SSC". No `robots.txt` | No terms page. `robots.txt` disallows nothing. **HOSE sells its disclosures as a paid information product** (verification 1) | **Written terms exist.** Personal download and printing are permitted. Copying, distributing, trading and publishing are not (verification 1) |
+| 5 | Storage rights | Not granted in writing. These are statutory public disclosures, the strongest footing available for retaining a copy for personal research | Not granted for the public pages. A feed of the same content is licensed for a fee | Granted for personal use, in writing. Nothing wider |
 | 6 | Redistribution | Not granted, not exercised | Not granted, not exercised | Not granted, not exercised |
 | 7 | Revision behaviour | A corrected filing is a new filing with its own date: history is appended, not rewritten. **VERIFY** on one known re-filing | As IDS. **VERIFY** | **Unknown, assumed silent rewrite.** That is why the basis is declared and the disclosure record is required |
 
@@ -155,11 +156,12 @@ look like a working backtest while measuring the future.
   `as_filed`.
 - **Day granularity costs up to one session of timeliness.** A filing made at
   09:00 is treated as known only from the next session.
-- **Storage again rests on an absence of terms, not a grant.** For IDS and HOSE
-  the content is statutory public disclosure, which is firmer ground than a
-  broker's chart feed, but it is still not a written permission. The bounds of
-  ADR-015 apply: personal research, local, never redistributed, and if PQT ever
-  earns revenue, this reopens first.
+- **Storage rests partly on an absence of terms.** Vietcap grants personal use
+  in writing. IDS and HOSE publish statutory disclosures with no terms either
+  way, which is firmer ground than a broker's chart feed but is still not a
+  written permission. HOSE also sells the same stream (verification 1). The
+  bounds of ADR-015 apply: personal research, local, never redistributed, and
+  if PQT ever earns revenue, this reopens first.
 - **The 2024 switch splits each HOSE name's history across two systems,**
   which means two adapters. If either changes or disappears, the dates for
   that stretch become unobtainable.
@@ -169,7 +171,8 @@ look like a working backtest while measuring the future.
 1. **Terms.** Capture the IDS portal's consent dialog, any hsx.vn terms page and
    Vietcap's site terms. Record each in this ADR under a dated heading. If any
    forbids retention, that candidate is dropped and this ADR is rewritten
-   before going further.
+   before going further. **Done 2026-10-13**, below. HOSE's fee schedule is
+   still to be read.
 2. **Disclosure coverage.** For one non-financial name, one bank and one
    securities firm in VN30, and for each quarter from Q1 2022 on, confirm a
    disclosure record and its date. Use IDS before 15 August 2024 and HOSE
@@ -183,6 +186,64 @@ look like a working backtest while measuring the future.
    the canonical items Phase 7 needs: revenue, net profit attributable to the
    parent, total assets, equity attributable to the parent, and shares
    outstanding. Record the mapping.
+
+## Verification 1 · terms · 2026-10-13
+
+Done by reading each site's own pages in a browser. No data endpoint was
+called and no file was downloaded.
+
+**SSC disclosure portal (`congbothongtin.ssc.gov.vn`).** The portal publishes
+no terms of use and links to none. The only legal text is the footer,
+"Copyright © 2019 - SSC - Version 1.7". The two *Đồng ý* buttons noted in the
+draft are the empty message and utility dialogs of the Oracle ADF framework
+the portal is built on. They have no body text and are not a consent to terms.
+`/robots.txt` returns 404, so the portal declares no crawling restriction. The
+SSC's main portal (`ssc.gov.vn`) could not be read with the tools available
+here, so whether it publishes a site-wide notice is still open.
+
+**HOSE (`hsx.vn`).** The site links to no terms of use. `/robots.txt` reads
+`User-agent: * / Disallow:` (nothing disallowed). However, HOSE runs a paid
+*Dịch vụ cung cấp thông tin* (information service, page dated 26/03/2024
+16:43:00, with a fee schedule attached). It sells, among other packages,
+*Thông tin công bố*: the statutory disclosures of listed companies. It is
+offered to organisations and individuals, by leased line, internet, agents,
+email or FTP. HOSE therefore treats a *feed* of its disclosures as a product it
+licenses. The public pages carry no terms forbidding personal reading, but a
+systematic copy of the disclosure stream is closer to that product than to
+reading a page.
+
+The disclosure listing (*Tin tổ chức niêm yết*) carries a creation date and a
+time to the second for each item, for example `13/10/2026 17:31:15`. After 15
+August 2024, HOSE dates are therefore finer than IDS dates.
+
+**Vietcap (`vietcap.com.vn`).** Unlike what ADR-015 §4 recorded, Vietcap
+publishes terms (*Điều khoản sử dụng*). Under *Quyền sở hữu trí tuệ*, Vietcap
+reserves all rights in the site's information. It permits downloading and
+printing for personal use, and otherwise forbids copying, linking,
+distributing, trading or publishing the content in any form. The terms name
+the trading site `trading.vietcap.com.vn`, which is the host of the endpoints
+ADR-015's adapter calls.
+
+**Result: no candidate forbids retention for personal research, so none is
+dropped.** The consequences:
+
+- **Vietcap's position is firmer than ADR-015 recorded, and narrower.** Personal
+  use is granted in writing. Copying beyond it, publication and any commercial
+  use are refused in writing, not merely ungranted. PQT's existing bounds
+  (local, personal, never redistributed) already sit inside the grant. ADR-015
+  is not edited. This record is the pointer.
+- **HOSE needs one decision before an adapter is built.** Choose either:
+  - read the public listing at a personal-research rate, for VN30 names only,
+    keeping the title, the timestamp and the link but not the documents; or
+  - buy the disclosure package if the fee schedule has a tier an individual
+    can afford.
+
+  The fee schedule is a PDF on hsx.vn, `20240326_Bieu gia dich vu thong tin ap
+  dung tai So GDCK TPHCM.pdf`. It has not been downloaded, pending the
+  operator's permission.
+- **Decision 2 can be finer for HOSE.** Where a record carries a time, the
+  fact is known from the first session that opens after it. A day-only record
+  keeps the next-session rule.
 
 ## Consequences
 
@@ -215,5 +276,8 @@ look like a working backtest while measuring the future.
 - Late filings and extensions:
   <https://daidoanket.vn/vinh-hoan-bi-hose-nhac-nho-vi-cham-nop-bao-cao-tai-chinh-quy-i-2024-10278996.html>,
   <https://baovanhoa.vn/kinh-te/dau-tu-thuong-mai-smc-bi-nhac-nho-cham-cong-bo-bctc-kiem-toan-nam-2024-127511.html>
+- HOSE information service: <https://www.hsx.vn/vi/dich-vu/cung-cap-thong-tin>.
+  Disclosure listing: <https://www.hsx.vn/vi/tin-tuc/tin-to-chuc-niem-yet>
+- Vietcap terms of use: <https://www.vietcap.com.vn/dieu-khoan-su-dung-chinh-sach-bao-mat>
 - Circular 99/2025/TT-BTC in force from 1 January 2026:
   <https://thuvienphapluat.vn/phap-luat-nha-dat/thoi-han-nop-bao-cao-tai-chinh-tu-112026-theo-thong-tu-992025ttbtc-10792.html>
