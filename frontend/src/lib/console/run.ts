@@ -354,6 +354,7 @@ function readDay(
 /** What to try next, for each reason the server gives for not counting. */
 const BREADTH_HINTS: Readonly<Record<string, string>> = {
   UnknownUniverse: "Type 'universes' for the universes this deployment defines.",
+  UnknownVenue: "Venues are HOSE, HNX and UPCOM — breadth --venue HOSE.",
   MembershipUnknown:
     "The universe's declared coverage does not reach that session — 'universes' shows each one's.",
   CalendarNotCovered:
@@ -363,7 +364,7 @@ const BREADTH_HINTS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Asks the server for a universe's breadth.
+ * Asks the server for a universe's breadth, or a venue's with `--venue`.
  *
  * The console counts nothing: advancing, declining and the ex-date rule are
  * the server's (ADR-026). A refusal is shown in the server's own words with
@@ -376,17 +377,26 @@ async function breadth(
   services: ConsoleServices,
   signal?: AbortSignal,
 ): Promise<ConsoleRecord> {
-  const code = query.trim();
+  const venue = options["venue"];
+  const scope = venue === undefined ? "Universe" : "Venue";
+  const code = (venue ?? query).trim();
+
+  if (scope === "Venue" && query.trim() !== "") {
+    return failure("'breadth --venue' counts a venue, not a universe as well.", "breadth --venue HOSE");
+  }
 
   if (code === "") {
     return failure(
-      "'breadth' needs a universe.",
-      "breadth VN30 --on 2026-09-30 — 'universes' lists them.",
+      "'breadth' needs a universe or --venue.",
+      "breadth VN30 --on 2026-09-30, or breadth --venue HOSE — 'universes' lists them.",
     );
   }
 
   if (!/^[A-Za-z0-9_]+$/u.test(code)) {
-    return failure(`'${code}' is not a universe code.`, "breadth VN30 --on 2026-09-30");
+    return failure(
+      `'${code}' is not a ${scope === "Venue" ? "venue" : "universe"} code.`,
+      "breadth VN30 --on 2026-09-30, or breadth --venue HOSE",
+    );
   }
 
   const on = readDay(options, "on");
@@ -396,7 +406,7 @@ async function breadth(
   }
 
   try {
-    const counted = await services.breadth(code.toUpperCase(), on.day ?? undefined, signal);
+    const counted = await services.breadth(code.toUpperCase(), on.day ?? undefined, signal, scope);
 
     return { kind: "breadth", breadth: counted };
   } catch (error) {

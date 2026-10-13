@@ -2,6 +2,7 @@ using System.Globalization;
 using PersonalQuant.Application.Breadth;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Cli.CommandLine;
+using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Cli.Commands;
@@ -92,21 +93,9 @@ internal sealed class UniverseCommands(
 
     private async Task<int> BreadthAsync(CommandArguments command, CancellationToken cancellationToken)
     {
-        if (!command.Validate(["on"], out var problem))
+        if (!command.Validate(["on", "venue"], out var problem))
         {
             output.Problem(problem);
-            return ExitCode.Usage;
-        }
-
-        if (command.Operands.Count != 1)
-        {
-            output.Problem("'universe breadth' needs exactly one universe code, such as VN30.");
-            return ExitCode.Usage;
-        }
-
-        if (!UniverseCode.TryCreate(command.Operands[0], out var code))
-        {
-            output.Problem($"'{command.Operands[0]}' is not a universe code.");
             return ExitCode.Usage;
         }
 
@@ -116,7 +105,36 @@ internal sealed class UniverseCommands(
             return ExitCode.Usage;
         }
 
-        var result = await breadth.Value.ComputeAsync(code, session, cancellationToken).ConfigureAwait(false);
+        Task<BreadthResult> pending;
+
+        if (command.HasFlag("venue"))
+        {
+            if (command.Operands.Count != 0 || !ExchangeCode.TryCreate(command.Value("venue"), out var venue))
+            {
+                output.Problem("'universe breadth --venue' takes one venue code, such as HOSE, and no universe.");
+                return ExitCode.Usage;
+            }
+
+            pending = breadth.Value.ComputeForVenueAsync(venue, session, cancellationToken);
+        }
+        else
+        {
+            if (command.Operands.Count != 1)
+            {
+                output.Problem("'universe breadth' needs exactly one universe code, such as VN30, or --venue HOSE.");
+                return ExitCode.Usage;
+            }
+
+            if (!UniverseCode.TryCreate(command.Operands[0], out var code))
+            {
+                output.Problem($"'{command.Operands[0]}' is not a universe code.");
+                return ExitCode.Usage;
+            }
+
+            pending = breadth.Value.ComputeAsync(code, session, cancellationToken);
+        }
+
+        var result = await pending.ConfigureAwait(false);
 
         if (result.Breadth is not { } counted)
         {
@@ -131,12 +149,25 @@ internal sealed class UniverseCommands(
     private void Render(MarketBreadth counted)
     {
         output.Line(
-            $"{counted.Code} {Day(counted.Session)}  {Up} {counted.Advancing}  {Down} {counted.Declining}  "
+            $"{counted.Scope} {Day(counted.Session)}  {Up} {counted.Advancing}  {Down} {counted.Declining}  "
                 + $"{Flat} {counted.Unchanged}  no data {counted.NoData}");
+
+        if (counted.Listing is { } listing)
+        {
+            // Said before the rows: a venue count is over the names this
+            // deployment holds, and its gaps belong next to the totals.
+            output.Line(
+                $"{counted.Members.Count} {(counted.Members.Count == 1 ? "equity" : "equities")} listed in the instrument master; "
+                    + $"{listing.NeverIngested.Count} never ingested"
+                    + (listing.NeverIngested.Count == 0
+                        ? string.Empty
+                        : $" ({string.Join(", ", listing.NeverIngested.Select(ticker => ticker.Value))})")
+                    + $"; {listing.WithoutListingDate} without a recorded listing date, counted as listed.");
+        }
 
         if (counted.Members.Count == 0)
         {
-            output.Line($"{counted.Code} had no members on {Day(counted.Session)}.");
+            output.Line($"{counted.Scope} had no members on {Day(counted.Session)}.");
             return;
         }
 

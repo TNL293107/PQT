@@ -128,7 +128,8 @@ public sealed record BreadthMemberResponse(
 /// system knows (ADR-022); they are on the wire so a reader does not have to
 /// know that.
 /// </remarks>
-/// <param name="Universe">The universe's code.</param>
+/// <param name="Scope"><c>Universe</c> or <c>Venue</c>: what was counted.</param>
+/// <param name="Code">The universe's or the venue's code.</param>
 /// <param name="Session">The session counted.</param>
 /// <param name="SessionWasDefaulted">
 /// Whether no session was asked for and this is the latest one any member has
@@ -146,8 +147,13 @@ public sealed record BreadthMemberResponse(
 /// <param name="UnchangedVolume">The unchanged members' session volume.</param>
 /// <param name="Venues">The venues the members trade on.</param>
 /// <param name="Members">Every member, by ticker.</param>
+/// <param name="Listing">
+/// For a venue, how many members had no recorded listing date and which have
+/// never had a bar ingested; null for a universe.
+/// </param>
 public sealed record BreadthResponse(
-    string Universe,
+    string Scope,
+    string Code,
     DateOnly Session,
     bool SessionWasDefaulted,
     DateTimeOffset? KnownAsOf,
@@ -161,7 +167,8 @@ public sealed record BreadthResponse(
     long DecliningVolume,
     long UnchangedVolume,
     IReadOnlyList<BreadthVenueResponse> Venues,
-    IReadOnlyList<BreadthMemberResponse> Members)
+    IReadOnlyList<BreadthMemberResponse> Members,
+    VenueListingResponse? Listing)
 {
     /// <summary>Projects a breadth count onto the wire contract.</summary>
     /// <param name="breadth">The count.</param>
@@ -171,7 +178,8 @@ public sealed record BreadthResponse(
         ArgumentNullException.ThrowIfNull(breadth);
 
         return new BreadthResponse(
-            breadth.Code.Value,
+            breadth.Scope.Kind.ToString(),
+            breadth.Scope.Value,
             breadth.Session,
             breadth.SessionWasDefaulted,
             KnownAsOf: null,
@@ -185,6 +193,23 @@ public sealed record BreadthResponse(
             breadth.DecliningVolume,
             breadth.UnchangedVolume,
             [.. breadth.Venues.Select(venue => new BreadthVenueResponse(venue.Code.Value, venue.PreviousSession))],
-            [.. breadth.Members.Select(BreadthMemberResponse.From)]);
+            [.. breadth.Members.Select(BreadthMemberResponse.From)],
+            breadth.Listing is { } listing
+                ? new VenueListingResponse(
+                    listing.WithoutListingDate,
+                    listing.NeverIngested.Count,
+                    [.. listing.NeverIngested.Select(ticker => ticker.Value)])
+                : null);
     }
 }
+
+/// <summary>
+/// What a venue-wide count leaves out of its own member set.
+/// </summary>
+/// <param name="WithoutListingDate">Members whose listing date is not recorded, counted as listed.</param>
+/// <param name="NeverIngestedCount">Members with no daily bar on any session.</param>
+/// <param name="NeverIngested">Their tickers.</param>
+public sealed record VenueListingResponse(
+    int WithoutListingDate,
+    int NeverIngestedCount,
+    IReadOnlyList<string> NeverIngested);

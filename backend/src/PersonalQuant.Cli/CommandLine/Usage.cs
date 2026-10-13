@@ -62,6 +62,7 @@ internal static class Usage
         output.WriteLine();
         output.WriteLine("  pqt universe list");
         output.WriteLine("  pqt universe breadth <CODE> [--on yyyy-MM-dd]");
+        output.WriteLine("  pqt universe breadth --venue <VENUE> [--on yyyy-MM-dd]");
         output.WriteLine("                     (latest session with member bars when --on is omitted)");
         output.WriteLine();
         output.WriteLine("  pqt schema status");

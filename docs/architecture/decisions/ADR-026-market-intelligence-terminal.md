@@ -92,6 +92,15 @@ for every instrument on it; without a named session it is the latest on which
 any of them has a bar, and an instrument without one that day is no data, not
 its older close.
 
+*Venue-wide breadth, sprint 4.* `GET /venues/{code}/breadth`, `pqt universe
+breadth --venue`, console `breadth --venue` count the same quotes over every
+equity the instrument master holds on the venue and whose record says it was
+listed on the session (not pending; on or after its listing date when one is
+recorded; on or before its last trading day when delisted). The answer carries
+what the member set cannot vouch for: how many members have no recorded listing
+date, and which have never had a daily bar ingested. The venue is the current
+one; venue history is not recorded yet.
+
 ### What waits
 
 The watchlist and the workspace need the first write path from a browser. That

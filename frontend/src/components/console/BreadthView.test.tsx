@@ -4,6 +4,20 @@ import { BREADTH, member } from "../../lib/console/breadth.fixture";
 import { RecordView } from "./RecordView";
 
 describe("BreadthView", () => {
+  it("says beside a venue's totals which names hold no data at all", () => {
+    const venue = {
+      ...BREADTH,
+      scope: "Venue" as const,
+      code: "HOSE",
+      listing: { withoutListingDate: 3, neverIngestedCount: 1, neverIngested: ["NIL"] },
+    };
+
+    render(<RecordView record={{ kind: "breadth", breadth: venue }} />);
+
+    expect(screen.getByText(/1 never ingested \(NIL\)/u)).toBeInTheDocument();
+    expect(screen.getByText(/3 without a recorded listing date/u)).toBeInTheDocument();
+  });
+
   it("states the counts in words and glyphs, not colour alone", () => {
     render(<RecordView record={{ kind: "breadth", breadth: BREADTH }} />);
 

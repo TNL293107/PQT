@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalQuant.Application.Quotes;
+using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 
@@ -110,6 +111,49 @@ internal sealed class QuoteReader(PersonalQuantDbContext dbContext) : IQuoteRead
             .. adjustments.Select(adjustment =>
                 new ExDateFactor(adjustment.InstrumentId, adjustment.ExDate, adjustment.Factor)),
         ];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ListedEquity>> ListVenueEquitiesAsync(
+        ExchangeId exchangeId,
+        CancellationToken cancellationToken = default)
+    {
+        var instruments = await dbContext.Instruments
+            .AsNoTracking()
+            .Where(instrument => instrument.ExchangeId == exchangeId && instrument.AssetType == AssetType.Equity)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. instruments.Select(instrument => new ListedEquity(
+                new QuoteInstrument(instrument.Id, instrument.Ticker, instrument.ExchangeId, instrument.AssetType),
+                instrument.Status,
+                instrument.ListedOn,
+                instrument.DelistedOn)),
+        ];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<InstrumentId>> ListWithDailyBarsAsync(
+        IReadOnlyCollection<InstrumentId> instrumentIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(instrumentIds);
+
+        var ids = instrumentIds.Distinct().ToList();
+
+        // DISTINCT over the leading key column: an index scan that stops at the
+        // first bar of each instrument rather than reading every bar it holds.
+        var held = await dbContext.Bars
+            .AsNoTracking()
+            .Where(bar => ids.Contains(bar.InstrumentId) && bar.Interval == BarInterval.OneDay)
+            .Select(bar => bar.InstrumentId)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return held.ToHashSet();
     }
 
     private static DateTimeOffset Midnight(DateOnly date) =>

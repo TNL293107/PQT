@@ -22,7 +22,9 @@ export function member(overrides: Partial<BreadthMember> & Pick<BreadthMember, "
  * went ex and did not move, and a name with no bar.
  */
 export const BREADTH: Breadth = {
-  universe: "VN30",
+  scope: "Universe",
+  code: "VN30",
+  listing: null,
   session: "2026-09-30",
   sessionWasDefaulted: false,
   knownAsOf: null,

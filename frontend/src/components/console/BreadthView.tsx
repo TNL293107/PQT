@@ -29,7 +29,7 @@ export function BreadthView({ breadth }: { readonly breadth: Breadth }) {
     return (
       <div className="out">
         <p className="out__line">
-          {breadth.universe} had no members on {breadth.session}. That is what its recorded
+          {breadth.code} had no members on {breadth.session}. That is what its recorded
           membership says for a day it claims to know — not a gap in the data.
         </p>
       </div>
@@ -51,7 +51,7 @@ export function BreadthView({ breadth }: { readonly breadth: Breadth }) {
   return (
     <div className="out breadth">
       <div className="quote">
-        <span className="quote__last">{breadth.universe}</span>
+        <span className="quote__last">{breadth.code}</span>
         <span className="quote__meta">
           {breadth.session}
           {breadth.sessionWasDefaulted ? " · the latest session any member has a bar for" : ""}
@@ -60,6 +60,17 @@ export function BreadthView({ breadth }: { readonly breadth: Breadth }) {
 
       <Counts breadth={breadth} />
       <AdvanceDeclineBar breadth={breadth} />
+
+      {breadth.listing ? (
+        // A venue count is over the equities this deployment's master holds,
+        // so what it leaves out is said beside the totals, not under a fold.
+        <p className="out__line out__line--warn">
+          {breadth.memberCount} equit{breadth.memberCount === 1 ? "y" : "ies"} listed on {breadth.code} in
+          the instrument master. {breadth.listing.neverIngestedCount} never ingested
+          {breadth.listing.neverIngested.length > 0 ? ` (${breadth.listing.neverIngested.join(", ")})` : ""};{" "}
+          {breadth.listing.withoutListingDate} without a recorded listing date, counted as listed.
+        </p>
+      ) : null}
 
       <p className="out__line out__line--dim">
         Volume ▲ {number(breadth.advancingVolume)} · ▼ {number(breadth.decliningVolume)} · ={" "}

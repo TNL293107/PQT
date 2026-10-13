@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using PersonalQuant.Api.Contracts;
 using PersonalQuant.Application.Breadth;
 using PersonalQuant.Application.Universes;
+using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Api.Endpoints;
@@ -52,7 +53,60 @@ internal static class UniverseEndpoints
             .WithName("GetUniverseBreadth")
             .WithSummary("Counts advancing, declining, unchanged and no-data members on a session.");
 
+        // A venue is not a universe, but its breadth is the same count over a
+        // different member set, refused and rendered the same way.
+        endpoints.MapGroup("/venues").WithTags("Venues")
+            .MapGet("/{code}/breadth", GetVenueBreadthAsync)
+            .WithName("GetVenueBreadth")
+            .WithSummary("Counts every equity listed on a venue on a session, and says which hold no data.");
+
         return endpoints;
+    }
+
+    /// <summary>
+    /// <c>GET /venues/{code}/breadth?on=yyyy-MM-dd</c>.
+    /// </summary>
+    private static async Task<Results<Ok<BreadthResponse>, ProblemHttpResult>> GetVenueBreadthAsync(
+        string code,
+        string? on,
+        IMarketBreadthService breadth,
+        CancellationToken cancellationToken)
+    {
+        if (!ExchangeCode.TryCreate(code, out var venue))
+        {
+            return Invalid($"'{code}' is not a venue code, such as HOSE.");
+        }
+
+        if (!TryReadSession(on, out var session, out var problem))
+        {
+            return problem;
+        }
+
+        var result = await breadth.ComputeForVenueAsync(venue, session, cancellationToken).ConfigureAwait(false);
+
+        return result.Breadth is { } counted
+            ? TypedResults.Ok(BreadthResponse.From(counted))
+            : Refused(result);
+    }
+
+    private static bool TryReadSession(string? on, out DateOnly? session, out ProblemHttpResult problem)
+    {
+        session = null;
+        problem = null!;
+
+        if (on is null)
+        {
+            return true;
+        }
+
+        if (!DateOnly.TryParseExact(on, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+        {
+            problem = Invalid($"'{on}' is not a date. Write it as {DateFormat}, for example 2026-09-30.");
+            return false;
+        }
+
+        session = day;
+        return true;
     }
 
     /// <summary>
@@ -101,16 +155,9 @@ internal static class UniverseEndpoints
                     + "letters, digits or underscores.");
         }
 
-        DateOnly? session = null;
-
-        if (on is not null)
+        if (!TryReadSession(on, out var session, out var problem))
         {
-            if (!DateOnly.TryParseExact(on, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
-            {
-                return Invalid($"'{on}' is not a date. Write it as {DateFormat}, for example 2026-09-30.");
-            }
-
-            session = day;
+            return problem;
         }
 
         var result = await breadth.ComputeAsync(universe, session, cancellationToken).ConfigureAwait(false);
@@ -125,6 +172,7 @@ internal static class UniverseEndpoints
         var (status, title) = result.Outcome switch
         {
             BreadthOutcome.UnknownUniverse => (StatusCodes.Status404NotFound, "Universe not found."),
+            BreadthOutcome.UnknownVenue => (StatusCodes.Status404NotFound, "Venue not found."),
             BreadthOutcome.MembershipUnknown => (
                 StatusCodes.Status422UnprocessableEntity, "The universe's membership on that session is not known."),
             BreadthOutcome.CalendarNotCovered => (
@@ -141,7 +189,8 @@ internal static class UniverseEndpoints
             extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["outcome"] = result.Outcome.ToString(),
-                ["universe"] = result.Code.Value,
+                ["scope"] = result.Scope.Kind.ToString(),
+                ["code"] = result.Scope.Value,
                 ["session"] = result.Session?.ToString(DateFormat, CultureInfo.InvariantCulture),
             });
     }

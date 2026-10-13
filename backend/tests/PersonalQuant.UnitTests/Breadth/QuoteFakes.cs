@@ -97,6 +97,27 @@ internal sealed class FakeQuoteReader : IQuoteReader
 
     public void Add(ExDateFactor factor) => _factors.Add(factor);
 
+    /// <summary>Equities the venue reads return, with their lifecycle.</summary>
+    public List<ListedEquity> Equities { get; } = [];
+
+    public Task<IReadOnlyList<ListedEquity>> ListVenueEquitiesAsync(
+        ExchangeId exchangeId,
+        CancellationToken cancellationToken = default)
+    {
+        Reads++;
+        return Task.FromResult<IReadOnlyList<ListedEquity>>(
+            [.. Equities.Where(equity => equity.Instrument.ExchangeId == exchangeId)]);
+    }
+
+    public Task<IReadOnlySet<InstrumentId>> ListWithDailyBarsAsync(
+        IReadOnlyCollection<InstrumentId> instrumentIds,
+        CancellationToken cancellationToken = default)
+    {
+        Reads++;
+        return Task.FromResult<IReadOnlySet<InstrumentId>>(
+            _closes.Select(close => close.InstrumentId).Where(instrumentIds.Contains).ToHashSet());
+    }
+
     public Task<IReadOnlyList<QuoteInstrument>> ListInstrumentsAsync(
         IReadOnlyCollection<InstrumentId> instrumentIds,
         CancellationToken cancellationToken = default)

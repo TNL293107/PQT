@@ -2,8 +2,11 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Diagnostics;
+using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Universes;
+using PersonalQuant.Domain.Exchanges;
+using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Application.Breadth;
@@ -31,6 +34,27 @@ public interface IMarketBreadthService
         UniverseCode code,
         DateOnly? session,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts every equity listed on a venue that session, by the same quotes.
+    /// </summary>
+    /// <remarks>
+    /// The members are the equities the instrument master holds on the venue
+    /// now and whose record says they were listed that day; the answer states
+    /// how many had no recorded listing date and which have never had a bar
+    /// ingested (<see cref="VenueListing"/>).
+    /// </remarks>
+    /// <param name="venue">The venue.</param>
+    /// <param name="session">
+    /// The session to count, or null for the latest session up to today on
+    /// which any equity listed that day has a daily bar.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The count, or the reason it was refused.</returns>
+    Task<BreadthResult> ComputeForVenueAsync(
+        ExchangeCode venue,
+        DateOnly? session,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -52,13 +76,15 @@ public interface IMarketBreadthService
 /// </remarks>
 /// <param name="universes">The universe store, for the coverage claim.</param>
 /// <param name="catalog">Answers who belonged, refusing what is not known.</param>
+/// <param name="exchanges">Resolves a venue code.</param>
 /// <param name="quotes">Quotes the members.</param>
-/// <param name="reader">Bulk reads of closes, for choosing a default session.</param>
+/// <param name="reader">Bulk reads of closes, listings and holdings.</param>
 /// <param name="clock">Today, when no session is named.</param>
 /// <param name="logger">The log.</param>
 internal sealed class MarketBreadthService(
     IUniverseRepository universes,
     IUniverseCatalog catalog,
+    IExchangeRepository exchanges,
     IQuoteService quotes,
     IQuoteReader reader,
     IClock clock,
@@ -124,23 +150,144 @@ internal sealed class MarketBreadthService(
         {
             // A covered day on which the universe held nothing is a fact, and
             // it is answered as one: no venues, no rows, every count zero.
-            return BreadthResult.Computed(new MarketBreadth(code, session, defaulted, [], []));
+            return BreadthResult.Computed(new MarketBreadth(BreadthScope.Of(code), session, defaulted, [], []));
         }
 
+        return await CountAsync(BreadthScope.Of(code), members, session, defaulted, listing: null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<BreadthResult> ComputeForVenueAsync(
+        ExchangeCode venue,
+        DateOnly? session,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(venue);
+
+        var result = await ComputeForVenueCoreAsync(venue, session, cancellationToken).ConfigureAwait(false);
+
+        Log(result);
+        return result;
+    }
+
+    private async Task<BreadthResult> ComputeForVenueCoreAsync(
+        ExchangeCode venue,
+        DateOnly? session,
+        CancellationToken cancellationToken)
+    {
+        var scope = BreadthScope.Of(venue);
+        var exchange = await exchanges.FindByCodeAsync(venue, cancellationToken).ConfigureAwait(false);
+
+        if (exchange is null)
+        {
+            return BreadthResult.Refused(
+                BreadthOutcome.UnknownVenue, scope, session, $"No venue is registered under the code {venue}.");
+        }
+
+        var equities = await reader.ListVenueEquitiesAsync(exchange.Id, cancellationToken).ConfigureAwait(false);
+
+        DateOnly day;
+
+        if (session is { } named)
+        {
+            day = named;
+        }
+        else
+        {
+            var chosen = await LatestVenueSessionAsync(venue, equities, cancellationToken).ConfigureAwait(false);
+
+            if (chosen.Refusal is { } refusal)
+            {
+                return refusal;
+            }
+
+            day = chosen.Session;
+        }
+
+        var members = equities.Where(equity => equity.ListedOnSession(day)).ToList();
+        var ids = members.Select(member => member.Instrument.InstrumentId).ToList();
+
+        IReadOnlySet<InstrumentId> held = ids.Count == 0
+            ? new HashSet<InstrumentId>()
+            : await reader.ListWithDailyBarsAsync(ids, cancellationToken).ConfigureAwait(false);
+
+        var listing = new VenueListing(
+            members.Count(member => member.ListedOn is null),
+            [
+                .. members
+                    .Where(member => !held.Contains(member.Instrument.InstrumentId))
+                    .Select(member => member.Instrument.Ticker)
+                    .OrderBy(ticker => ticker.Value, StringComparer.Ordinal),
+            ]);
+
+        if (ids.Count == 0)
+        {
+            // As for a universe: a venue that held no equity that day is a fact
+            // about the master, answered as an empty count.
+            return BreadthResult.Computed(new MarketBreadth(scope, day, session is null, [], [], listing));
+        }
+
+        return await CountAsync(scope, ids, day, defaulted: session is null, listing, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Finds the latest session up to today on which an equity listed on the
+    /// venue that day has a daily bar.
+    /// </summary>
+    private async Task<SessionChoice> LatestVenueSessionAsync(
+        ExchangeCode venue,
+        IReadOnlyList<ListedEquity> equities,
+        CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        var from = today.AddDays(-DefaultSessionLookbackDays);
+        var byId = equities.ToDictionary(equity => equity.Instrument.InstrumentId);
+
+        var closes = byId.Count == 0
+            ? []
+            : await reader.ListDailyClosesAsync([.. byId.Keys], from, today, cancellationToken).ConfigureAwait(false);
+
+        var latest = closes
+            .Where(close => byId[close.InstrumentId].ListedOnSession(close.Session))
+            .Select(close => (DateOnly?)close.Session)
+            .Max();
+
+        return latest is { } session
+            ? new SessionChoice(session, Refusal: null)
+            : SessionChoice.Refused(BreadthResult.Refused(
+                BreadthOutcome.NoData,
+                BreadthScope.Of(venue),
+                null,
+                $"No equity listed on {venue} has a daily bar between {Day(from)} and {Day(today)}. "
+                    + "Name a session to count an older one."));
+    }
+
+    /// <summary>Quotes a member set on a session and counts the quotes.</summary>
+    private async Task<BreadthResult> CountAsync(
+        BreadthScope scope,
+        IReadOnlyCollection<InstrumentId> members,
+        DateOnly session,
+        bool defaulted,
+        VenueListing? listing,
+        CancellationToken cancellationToken)
+    {
         var board = await quotes.QuoteAsync(members, session, cancellationToken).ConfigureAwait(false);
 
         return board.Outcome switch
         {
             QuoteOutcome.Quoted => BreadthResult.Computed(new MarketBreadth(
-                code,
+                scope,
                 session,
                 defaulted,
                 [.. board.Venues.Select(venue => new BreadthVenue(venue.Code, venue.PreviousSession))],
-                [.. board.Quotes.Select(Member)])),
+                [.. board.Quotes.Select(Member)],
+                listing)),
             QuoteOutcome.CalendarNotCovered => BreadthResult.Refused(
-                BreadthOutcome.CalendarNotCovered, code, session, board.Detail),
+                BreadthOutcome.CalendarNotCovered, scope, session, board.Detail),
             QuoteOutcome.NotATradingDay => BreadthResult.Refused(
-                BreadthOutcome.NotATradingDay, code, session, board.Detail),
+                BreadthOutcome.NotATradingDay, scope, session, board.Detail),
             _ => throw new InvalidOperationException(
                 $"A named session was answered with {board.Outcome}, which only a defaulted one can be."),
         };
@@ -222,7 +369,7 @@ internal sealed class MarketBreadthService(
             ? new SessionChoice(session, Refusal: null)
             : SessionChoice.Refused(BreadthResult.Refused(
                 BreadthOutcome.NoData,
-                code,
+                BreadthScope.Of(code),
                 null,
                 $"No member of {code} has a daily bar between {Day(from)} and {Day(cutoff)}. "
                     + "Name a session to count an older one."));
@@ -238,16 +385,16 @@ internal sealed class MarketBreadthService(
         return reason switch
         {
             UniverseUnknownReason.NoSuchUniverse => BreadthResult.Refused(
-                BreadthOutcome.UnknownUniverse, code, session, $"No universe is defined under the code {code}."),
+                BreadthOutcome.UnknownUniverse, BreadthScope.Of(code), session, $"No universe is defined under the code {code}."),
             UniverseUnknownReason.NoCoverageDeclared => BreadthResult.Refused(
                 BreadthOutcome.MembershipUnknown,
-                code,
+                BreadthScope.Of(code),
                 session,
                 $"{code} has no declared membership coverage, so who belonged to it{when} is not known. "
                     + "An unknown membership is not an empty one."),
             _ => BreadthResult.Refused(
                 BreadthOutcome.MembershipUnknown,
-                code,
+                BreadthScope.Of(code),
                 session,
                 $"{code} does not claim to know its membership{when}; the date is outside its declared "
                     + "coverage. An unknown membership is not an empty one."),
@@ -268,7 +415,7 @@ internal sealed class MarketBreadthService(
 
             ApplicationLog.BreadthComputed(
                 logger,
-                breadth.Code.Value,
+                breadth.Scope.Value,
                 session,
                 breadth.Advancing,
                 breadth.Declining,
@@ -278,7 +425,7 @@ internal sealed class MarketBreadthService(
             return;
         }
 
-        ApplicationLog.BreadthRefused(logger, result.Code.Value, result.Outcome);
+        ApplicationLog.BreadthRefused(logger, result.Scope.Value, result.Outcome);
     }
 
     private static string Day(DateOnly date) =>

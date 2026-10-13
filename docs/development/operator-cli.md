@@ -427,6 +427,7 @@ Lists the universes a deployment defines, and counts how one moved on a session
 ```bash
 pqt universe list
 pqt universe breadth <CODE> [--on yyyy-MM-dd]
+pqt universe breadth --venue <VENUE> [--on yyyy-MM-dd]
 ```
 
 `list` shows each universe's kind, the coverage it declares, and how many
@@ -466,10 +467,11 @@ What it counts, and what it refuses:
   trades on; a weekend or recorded closure is refused, and so is a session — or
   a previous session — the calendar was not transcribed for.
 - **The change** is measured on prices adjusted for actions going ex on the
-  session: the previous close is multiplied by their factor, which is the
-  exchange's own reference-price rule. An ex-dividend gap is therefore not a
-  decline, and the row says the previous close was restated. This differs from
-  a broker's board on an ex-date, deliberately.
+  session: the previous close is multiplied by their factor and, for an equity,
+  rounded to the venue's tick, which is the exchange's own reference-price rule.
+  An ex-dividend gap is therefore not a decline, and the row says the previous
+  close was restated. This differs from a broker's board on an ex-date,
+  deliberately.
 - **No data** is a member without a bar on the session or on the previous one.
   It is never counted as unchanged.
 - Without `--on`, the session is the latest one up to today on which some
@@ -479,6 +481,18 @@ What it counts, and what it refuses:
 
 A refusal exits 1 with its reason on standard error; an unknown universe code is
 a refusal too, since whether one exists is the deployment's answer.
+
+`--venue HOSE` counts the same quotes over every equity listed on the venue that
+session instead of a universe's members (also `GET /venues/{code}/breadth` and
+the console's `breadth --venue HOSE`). The members are the equities **this
+deployment's instrument master** holds on the venue, which is not every name the
+exchange lists, and whose record says they were listed that day: a pending
+record is out, a delisted one is out after its last trading day, and one with no
+recorded listing date is counted. A line under the totals says how many were
+counted without a listing date and names those with no daily bar ever ingested
+— they can only be no data. The venue is the one each instrument is on now; a
+name that moved here is read as having always been here, until venue history is
+recorded.
 
 ### `watchlist`
 

@@ -73,6 +73,62 @@ public interface IQuoteReader
         DateOnly fromDate,
         DateOnly toDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads every equity the instrument master holds on a venue, with its
+    /// listing lifecycle, whatever its status.
+    /// </summary>
+    /// <remarks>
+    /// The venue an instrument is on <em>now</em>: no venue history is recorded,
+    /// so a name that moved here is read as having always been here.
+    /// </remarks>
+    /// <param name="exchangeId">The venue.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The equities, in no particular order.</returns>
+    Task<IReadOnlyList<ListedEquity>> ListVenueEquitiesAsync(
+        ExchangeId exchangeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Says which of the instruments named hold at least one daily bar.
+    /// </summary>
+    /// <param name="instrumentIds">The instruments.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The instruments with a daily bar on some session.</returns>
+    Task<IReadOnlySet<InstrumentId>> ListWithDailyBarsAsync(
+        IReadOnlyCollection<InstrumentId> instrumentIds,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// An equity on a venue and the dates its listing began and ended, when recorded.
+/// </summary>
+/// <param name="Instrument">The instrument as a quote names it.</param>
+/// <param name="Status">Its listing state now.</param>
+/// <param name="ListedOn">Its first trading day, or null when nobody recorded it.</param>
+/// <param name="DelistedOn">Its last trading day, or null while it trades.</param>
+public sealed record ListedEquity(
+    QuoteInstrument Instrument,
+    InstrumentStatus Status,
+    DateOnly? ListedOn,
+    DateOnly? DelistedOn)
+{
+    /// <summary>
+    /// Gets a value indicating whether it was listed on a session, as far as
+    /// its record says.
+    /// </summary>
+    /// <remarks>
+    /// A pending record never traded. A missing listing date is read as
+    /// "listed" — the record says it is — and counted apart by the caller, so
+    /// the assumption is visible. The delisting date is the last day it
+    /// traded, so a session after it is outside.
+    /// </remarks>
+    /// <param name="session">The session.</param>
+    /// <returns><see langword="true"/> when it belongs to the venue that day.</returns>
+    public bool ListedOnSession(DateOnly session) =>
+        Status != InstrumentStatus.Pending
+        && (ListedOn is not { } from || from <= session)
+        && (DelistedOn is not { } last || session <= last);
 }
 
 /// <summary>

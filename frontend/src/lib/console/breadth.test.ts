@@ -46,8 +46,25 @@ describe("runEntry — BREADTH", () => {
     const record = (await runEntry("breadth vn30 --on 2026-09-30", services)).record;
 
     expect(record).toEqual({ kind: "breadth", breadth: BREADTH });
-    expect(services.breadth).toHaveBeenCalledWith("VN30", "2026-09-30", undefined);
+    expect(services.breadth).toHaveBeenCalledWith("VN30", "2026-09-30", undefined, "Universe");
     expect(services.resolve).not.toHaveBeenCalled();
+  });
+
+  it("asks for a venue's breadth with --venue", async () => {
+    const services = stubServices();
+
+    await runEntry("breadth --venue hose --on 2026-09-30", services);
+
+    expect(services.breadth).toHaveBeenCalledWith("HOSE", "2026-09-30", undefined, "Venue");
+  });
+
+  it("refuses a universe and a venue on one line", async () => {
+    const services = stubServices();
+
+    const record = (await runEntry("breadth VN30 --venue HOSE", services)).record;
+
+    expect(record.kind).toBe("error");
+    expect(services.breadth).not.toHaveBeenCalled();
   });
 
   it("leaves the session to the server when none is named", async () => {
@@ -55,7 +72,7 @@ describe("runEntry — BREADTH", () => {
 
     await runEntry("BREADTH VN30", services);
 
-    expect(services.breadth).toHaveBeenCalledWith("VN30", undefined, undefined);
+    expect(services.breadth).toHaveBeenCalledWith("VN30", undefined, undefined, "Universe");
   });
 
   it("refuses without a universe, and without asking", async () => {

@@ -62,15 +62,29 @@ export interface BreadthVenue {
   readonly previousSession: string;
 }
 
+/** What a venue-wide count leaves out of its own member set. */
+export interface VenueListing {
+  /** Members whose listing date is not recorded, counted as listed. */
+  readonly withoutListingDate: number;
+  readonly neverIngestedCount: number;
+
+  /** Members with no daily bar on any session. */
+  readonly neverIngested: readonly string[];
+}
+
 /**
- * Market breadth for one universe on one session, counted by the server.
+ * Market breadth for one universe or venue on one session, counted by the server.
  *
  * The counts arrive computed. The console draws them and does not recount
  * them from the rows: ADR-026 keeps one definition of "advancing", and it is
  * the server's.
  */
 export interface Breadth {
-  readonly universe: string;
+  /** What was counted: a universe's members or a venue's listed equities. */
+  readonly scope: "Universe" | "Venue";
+
+  /** The universe's or the venue's code. */
+  readonly code: string;
   readonly session: string;
 
   /** Whether no session was asked for and the server chose the latest. */
@@ -87,4 +101,7 @@ export interface Breadth {
   readonly unchangedVolume: number;
   readonly venues: readonly BreadthVenue[];
   readonly members: readonly BreadthMember[];
+
+  /** Set for a venue only. */
+  readonly listing: VenueListing | null;
 }

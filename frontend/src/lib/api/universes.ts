@@ -47,8 +47,10 @@ export async function fetchBreadth(
   code: string,
   on?: string,
   signal?: AbortSignal,
+  scope: "Universe" | "Venue" = "Universe",
 ): Promise<Breadth> {
-  const base = `/universes/${encodeURIComponent(code)}/breadth`;
+  const collection = scope === "Venue" ? "venues" : "universes";
+  const base = `/${collection}/${encodeURIComponent(code)}/breadth`;
   const path = on ? `${base}?on=${encodeURIComponent(on)}` : base;
 
   return getJson<Breadth>(apiUrl(path), signal);

@@ -359,6 +359,79 @@ public sealed class MarketBreadthServiceTests
         Assert.Equal(1, harness.Universes.MemberReads);
     }
 
+    [Fact]
+    public async Task A_venue_counts_every_equity_listed_that_session_and_says_what_it_cannot_measure()
+    {
+        // The master's record decides who is on the venue that day. A name
+        // listed later, one delisted earlier and one still pending are not; a
+        // name with no listing date is, and is counted as an assumption; a
+        // name with no bar ever is no data and is named.
+        var harness = new Harness();
+        var up = harness.Equity("AAA");
+        var down = harness.Equity("BBB", listedOn: new DateOnly(2026, 1, 2));
+        var later = harness.Equity("NEW", listedOn: new DateOnly(2026, 10, 1));
+        var gone = harness.Equity("OLD", listedOn: new DateOnly(2020, 1, 2), delistedOn: new DateOnly(2026, 9, 25));
+        harness.Equity("NIL");
+        harness.Equity("PEN", status: InstrumentStatus.Pending);
+        var lastDay = harness.Equity("END", listedOn: new DateOnly(2020, 1, 2), delistedOn: Wednesday);
+
+        harness.Closes(up, (Tuesday, 100m, 10), (Wednesday, 103m, 10));
+        harness.Closes(down, (Tuesday, 50m, 10), (Wednesday, 49m, 10));
+        harness.Closes(later, (new DateOnly(2026, 10, 1), 10m, 10));
+        harness.Closes(gone, (new DateOnly(2026, 9, 24), 10m, 10));
+        harness.Closes(lastDay, (Tuesday, 20m, 10), (Wednesday, 20m, 10));
+
+        var result = await harness.VenueAsync("HOSE", Wednesday);
+
+        Assert.Equal(BreadthOutcome.Computed, result.Outcome);
+        var breadth = result.Breadth!;
+        Assert.Equal(new BreadthScope(BreadthScopeKind.Venue, "HOSE"), breadth.Scope);
+        Assert.Equal(["AAA", "BBB", "END", "NIL"], breadth.Members.Select(member => member.Ticker.Value));
+        Assert.Equal((1, 1, 1, 1), (breadth.Advancing, breadth.Declining, breadth.Unchanged, breadth.NoData));
+
+        var listing = Assert.IsType<VenueListing>(breadth.Listing);
+        Assert.Equal(2, listing.WithoutListingDate);
+        Assert.Equal(["NIL"], listing.NeverIngested.Select(ticker => ticker.Value));
+    }
+
+    [Fact]
+    public async Task A_venue_and_a_universe_count_a_shared_name_the_same_way()
+    {
+        var harness = new Harness();
+        var member = harness.Member("DIV");
+        harness.Reader.Equities.Add(new ListedEquity(
+            Instrument("DIV", harness.Hose) with { InstrumentId = member }, InstrumentStatus.Listed, null, null));
+        harness.Closes(member, (Tuesday, 25_000m, 10), (Wednesday, 24_000m, 10));
+        harness.Reader.Add(Factor(member, Wednesday, 0.96m));
+
+        var universe = await harness.ComputedAsync(Wednesday);
+        var venue = (await harness.VenueAsync("HOSE", Wednesday)).Breadth!;
+
+        Assert.Equal(Assert.Single(universe.Members), Assert.Single(venue.Members));
+    }
+
+    [Fact]
+    public async Task Without_a_session_a_venue_counts_its_latest_session_with_a_listed_bar()
+    {
+        var harness = new Harness();
+        var name = harness.Equity("AAA");
+        harness.Closes(name, (Tuesday, 100m, 10), (Wednesday, 101m, 10));
+
+        var result = await harness.VenueAsync("HOSE", null);
+
+        Assert.Equal(Wednesday, result.Breadth?.Session);
+        Assert.True(result.Breadth?.SessionWasDefaulted);
+    }
+
+    [Fact]
+    public async Task An_unknown_venue_is_refused()
+    {
+        var result = await new Harness().VenueAsync("XSES", Wednesday);
+
+        Assert.Equal(BreadthOutcome.UnknownVenue, result.Outcome);
+        Assert.Equal(BreadthScopeKind.Venue, result.Scope.Kind);
+    }
+
     /// <summary>One venue, one index, and the service over real calendar logic.</summary>
     private sealed class Harness
     {
@@ -398,6 +471,7 @@ public sealed class MarketBreadthServiceTests
             Service = new MarketBreadthService(
                 Universes,
                 new UniverseCatalog(Universes),
+                _exchanges,
                 new QuoteService(new TradingCalendar(_exchanges), Reader, registry, clock),
                 Reader,
                 clock,
@@ -418,6 +492,22 @@ public sealed class MarketBreadthServiceTests
             _exchanges.DeclareCoverage(id, CoverageStart, new DateOnly(2027, 1, 1));
             return id;
         }
+
+        /// <summary>An equity on a venue, with the lifecycle its record states.</summary>
+        public InstrumentId Equity(
+            string ticker,
+            DateOnly? listedOn = null,
+            DateOnly? delistedOn = null,
+            InstrumentStatus status = InstrumentStatus.Listed)
+        {
+            var instrument = Instrument(ticker, Hose);
+            Reader.Add(instrument);
+            Reader.Equities.Add(new ListedEquity(instrument, status, listedOn, delistedOn));
+            return instrument.InstrumentId;
+        }
+
+        public Task<BreadthResult> VenueAsync(string code, DateOnly? session) =>
+            Service.ComputeForVenueAsync(ExchangeCode.Create(code), session, TestContext.Current.CancellationToken);
 
         public void Closure(ExchangeId venue, DateOnly date) =>
             _exchanges.AddHoliday(TradingHoliday.Record(venue, date, "Closure", Recorded));

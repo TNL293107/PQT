@@ -23,7 +23,7 @@ public sealed class UniverseCommandsTests
     {
         var harness = new Harness();
         harness.Breadth.Answer = BreadthResult.Computed(new MarketBreadth(
-            UniverseCode.Create("VN30"),
+            BreadthScope.Of(UniverseCode.Create("VN30")),
             Session,
             SessionWasDefaulted: false,
             [new BreadthVenue(ExchangeCode.Create("HOSE"), Previous)],
@@ -60,7 +60,7 @@ public sealed class UniverseCommandsTests
     {
         var harness = new Harness();
         harness.Breadth.Answer = BreadthResult.Computed(new MarketBreadth(
-            UniverseCode.Create("VN30"),
+            BreadthScope.Of(UniverseCode.Create("VN30")),
             Session,
             SessionWasDefaulted: true,
             [new BreadthVenue(ExchangeCode.Create("HOSE"), Previous)],
@@ -82,7 +82,7 @@ public sealed class UniverseCommandsTests
     {
         var harness = new Harness();
         harness.Breadth.Answer = BreadthResult.Refused(
-            BreadthOutcome.NotATradingDay, UniverseCode.Create("VN30"), Session, "2026-09-30 is not a trading day on HOSE.");
+            BreadthOutcome.NotATradingDay, BreadthScope.Of(UniverseCode.Create("VN30")), Session, "2026-09-30 is not a trading day on HOSE.");
 
         var code = await harness.RunAsync("universe", "breadth", "VN30", "--on", "2026-09-30");
 
@@ -167,9 +167,11 @@ public sealed class UniverseCommandsTests
     private sealed class FakeBreadth : IMarketBreadthService
     {
         public BreadthResult Answer { get; set; } = BreadthResult.Refused(
-            BreadthOutcome.UnknownUniverse, UniverseCode.Create("NONE"), null, "No such universe.");
+            BreadthOutcome.UnknownUniverse, BreadthScope.Of(UniverseCode.Create("NONE")), null, "No such universe.");
 
         public (UniverseCode? Code, DateOnly? Session) Asked { get; private set; }
+
+        public (ExchangeCode? Venue, DateOnly? Session) AskedVenue { get; private set; }
 
         public Task<BreadthResult> ComputeAsync(
             UniverseCode code,
@@ -177,6 +179,15 @@ public sealed class UniverseCommandsTests
             CancellationToken cancellationToken = default)
         {
             Asked = (code, session);
+            return Task.FromResult(Answer);
+        }
+
+        public Task<BreadthResult> ComputeForVenueAsync(
+            ExchangeCode venue,
+            DateOnly? session,
+            CancellationToken cancellationToken = default)
+        {
+            AskedVenue = (venue, session);
             return Task.FromResult(Answer);
         }
     }

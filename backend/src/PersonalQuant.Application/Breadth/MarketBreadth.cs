@@ -84,14 +84,67 @@ public sealed record BreadthMember(
 /// <param name="PreviousSession">Its trading day before the session.</param>
 public sealed record BreadthVenue(ExchangeCode Code, DateOnly PreviousSession);
 
+/// <summary>What a breadth count is over.</summary>
+public enum BreadthScopeKind
+{
+    /// <summary>A universe's point-in-time members.</summary>
+    Universe = 1,
+
+    /// <summary>Every equity listed on a venue that session.</summary>
+    Venue = 2,
+}
+
 /// <summary>
-/// Advancers, decliners and the rest, for one universe on one session.
+/// The set a breadth count is over: a universe or a venue, by code.
+/// </summary>
+/// <param name="Kind">Universe or venue.</param>
+/// <param name="Value">The universe's or the venue's code.</param>
+public sealed record BreadthScope(BreadthScopeKind Kind, string Value)
+{
+    /// <summary>A universe's members.</summary>
+    /// <param name="code">The universe.</param>
+    /// <returns>The scope.</returns>
+    public static BreadthScope Of(UniverseCode code)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+        return new BreadthScope(BreadthScopeKind.Universe, code.Value);
+    }
+
+    /// <summary>A venue's listed equities.</summary>
+    /// <param name="code">The venue.</param>
+    /// <returns>The scope.</returns>
+    public static BreadthScope Of(ExchangeCode code)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+        return new BreadthScope(BreadthScopeKind.Venue, code.Value);
+    }
+
+    /// <inheritdoc />
+    public override string ToString() => Value;
+}
+
+/// <summary>
+/// What a venue-wide count can and cannot say about its own member set.
+/// </summary>
+/// <remarks>
+/// A universe's members are sourced; a venue's are the equities this system's
+/// instrument master holds on it, which is not every name the exchange lists.
+/// Two gaps are stated rather than hidden: names whose listing date nobody
+/// recorded, counted as listed because their record says they are, and names
+/// with no daily bar on any session, which can only ever be no data.
+/// </remarks>
+/// <param name="WithoutListingDate">Members whose listing date is not recorded.</param>
+/// <param name="NeverIngested">Members with no daily bar on any session, by ticker.</param>
+public sealed record VenueListing(int WithoutListingDate, IReadOnlyList<Ticker> NeverIngested);
+
+/// <summary>
+/// Advancers, decliners and the rest, for one universe or venue on one session.
 /// </summary>
 /// <remarks>
 /// The counts are derived from <see cref="Members"/> rather than stored beside
 /// them, so a summary line and the rows under it cannot disagree.
 /// </remarks>
-/// <param name="Code">The universe.</param>
+/// <param name="Scope">The universe or venue counted.</param>
 /// <param name="Session">The session counted.</param>
 /// <param name="SessionWasDefaulted">
 /// Whether the caller named no session and this is the latest one any member
@@ -100,12 +153,14 @@ public sealed record BreadthVenue(ExchangeCode Code, DateOnly PreviousSession);
 /// </param>
 /// <param name="Venues">The venues the members trade on, by code.</param>
 /// <param name="Members">Every member that day, by ticker.</param>
+/// <param name="Listing">For a venue, what its member set leaves out; null for a universe.</param>
 public sealed record MarketBreadth(
-    UniverseCode Code,
+    BreadthScope Scope,
     DateOnly Session,
     bool SessionWasDefaulted,
     IReadOnlyList<BreadthVenue> Venues,
-    IReadOnlyList<BreadthMember> Members)
+    IReadOnlyList<BreadthMember> Members,
+    VenueListing? Listing = null)
 {
     /// <summary>Gets how many members advanced.</summary>
     public int Advancing => Count(BreadthCategory.Advancing);
@@ -166,6 +221,9 @@ public enum BreadthOutcome
     /// No session was named, and no member has a recent bar to default to.
     /// </summary>
     NoData = 6,
+
+    /// <summary>No venue is registered under that code.</summary>
+    UnknownVenue = 7,
 }
 
 /// <summary>
@@ -181,13 +239,13 @@ public sealed record BreadthResult
 {
     private BreadthResult(
         BreadthOutcome outcome,
-        UniverseCode code,
+        BreadthScope scope,
         DateOnly? session,
         MarketBreadth? breadth,
         string detail)
     {
         Outcome = outcome;
-        Code = code;
+        Scope = scope;
         Session = session;
         Breadth = breadth;
         Detail = detail;
@@ -196,8 +254,8 @@ public sealed record BreadthResult
     /// <summary>Gets how the request ended.</summary>
     public BreadthOutcome Outcome { get; }
 
-    /// <summary>Gets the universe asked about.</summary>
-    public UniverseCode Code { get; }
+    /// <summary>Gets the universe or venue asked about.</summary>
+    public BreadthScope Scope { get; }
 
     /// <summary>Gets the session asked about or chosen, when there is one.</summary>
     public DateOnly? Session { get; }
@@ -217,25 +275,25 @@ public sealed record BreadthResult
 
         return new BreadthResult(
             BreadthOutcome.Computed,
-            breadth.Code,
+            breadth.Scope,
             breadth.Session,
             breadth,
-            $"{breadth.Code} on {breadth.Session:yyyy-MM-dd}.");
+            $"{breadth.Scope} on {breadth.Session:yyyy-MM-dd}.");
     }
 
     /// <summary>Records a refusal.</summary>
     /// <param name="outcome">Why. Must not be <see cref="BreadthOutcome.Computed"/>.</param>
-    /// <param name="code">The universe asked about.</param>
+    /// <param name="scope">The universe or venue asked about.</param>
     /// <param name="session">The session, when one was named or chosen.</param>
     /// <param name="detail">What to tell the operator.</param>
     /// <returns>The result.</returns>
     public static BreadthResult Refused(
         BreadthOutcome outcome,
-        UniverseCode code,
+        BreadthScope scope,
         DateOnly? session,
         string detail)
     {
-        ArgumentNullException.ThrowIfNull(code);
+        ArgumentNullException.ThrowIfNull(scope);
         ArgumentException.ThrowIfNullOrWhiteSpace(detail);
 
         if (outcome == BreadthOutcome.Computed)
@@ -244,6 +302,6 @@ public sealed record BreadthResult
                 nameof(outcome), "A refusal needs a reason other than success.");
         }
 
-        return new BreadthResult(outcome, code, session, breadth: null, detail);
+        return new BreadthResult(outcome, scope, session, breadth: null, detail);
     }
 }

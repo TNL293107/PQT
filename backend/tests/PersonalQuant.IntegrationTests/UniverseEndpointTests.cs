@@ -178,6 +178,45 @@ public sealed class UniverseEndpointTests(DependencyContainerFixture containers)
     }
 
     [Fact]
+    public async Task A_venue_counts_every_equity_listed_on_it_and_says_none_lacks_a_bar()
+    {
+        // The leaver left the index, not the venue: it is counted here.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync();
+        var arranged = await ArrangeAsync(host);
+
+        var breadth = await host.Client.GetFromJsonAsync<BreadthResponse>(
+            new Uri($"/venues/{arranged.Venue}/breadth?on=2026-09-30", UriKind.Relative),
+            Json,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(breadth);
+        Assert.Equal(("Venue", arranged.Venue), (breadth.Scope, breadth.Code));
+        Assert.Equal(4, breadth.MemberCount);
+        Assert.Equal((1, 1, 1, 1), (breadth.Advancing, breadth.Declining, breadth.Unchanged, breadth.NoData));
+
+        var listing = Assert.IsType<VenueListingResponse>(breadth.Listing);
+        Assert.Equal(4, listing.WithoutListingDate);
+        Assert.Equal(0, listing.NeverIngestedCount);
+    }
+
+    [Fact]
+    public async Task An_unknown_venue_is_not_found()
+    {
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await CreateHostAsync();
+
+        var response = await host.Client.GetAsync(
+            new Uri("/venues/NOWHERE/breadth?on=2026-09-30", UriKind.Relative),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("UnknownVenue", await OutcomeAsync(response));
+    }
+
+    [Fact]
     public async Task An_unknown_universe_is_not_found()
     {
         Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
