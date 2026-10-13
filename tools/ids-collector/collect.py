@@ -290,7 +290,12 @@ def main() -> int:
                         print(f"FAILED {listing.reference}: {error}", file=sys.stderr)
                         continue
 
-                    target.write_text(json.dumps(filing, ensure_ascii=False, indent=2), encoding="utf-8")
+                    # Written beside the target and renamed, so a run stopped
+                    # mid-write never leaves a truncated document for the
+                    # importer, or one the next run would skip as held.
+                    partial = target.with_suffix(".json.partial")
+                    partial.write_text(json.dumps(filing, ensure_ascii=False, indent=2), encoding="utf-8")
+                    partial.replace(target)
                     written += 1
                     print(f"wrote {target.name} ({len(filing['tables'])} tab(s))")
 
