@@ -91,7 +91,23 @@ watchlists and workspaces, behind an operator key
 data still changes only through the CLI and the host's scheduled ingestion,
 until authentication arrives in Phase 19.
 
-## Current work — sprint 5, data reach
+## Current work — sprint 6, point-in-time fundamentals
+
+**Phase 6 — in progress.** Its source is settled in
+[ADR-029](docs/architecture/decisions/ADR-029-fundamentals-source.md). The
+SSC's disclosure system (IDS) dates every filing and carries the issuer's own
+values for banks and, up to fiscal 2025, for non-financial companies. The
+first import is 33 VN30 names; securities firms and insurers wait.
+
+| # | Item | State |
+| --- | --- | --- |
+| 6.1 | ADR-029: fundamentals source and licence | ✅ accepted 2026-10-13, after checking terms, coverage and templates |
+| 6.2 | Domain model: reports with `known_from_utc`, statement lines with an append-only reading history | ✅ `financial_reports`, `statement_lines` |
+| 6.3 | Provider and import pipeline | next |
+| 6.4 | As-of read | |
+| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | |
+
+**Sprint 5 — data reach, complete.**
 
 **Phase 5 — complete**, declared by the operator on 13 October 2026 against
 its written definition of done, every criterion evidenced on the live stack

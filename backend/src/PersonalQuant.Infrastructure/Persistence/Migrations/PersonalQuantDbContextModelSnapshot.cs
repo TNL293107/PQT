@@ -327,6 +327,188 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                     b.ToTable("trading_holidays", "quant");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.FinancialReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("DisclosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("disclosed_at_utc");
+
+                    b.Property<DateOnly>("DisclosedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("disclosed_on");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<bool>("IsCorrection")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_correction");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset>("KnownFromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("known_from_utc");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("SourceReference")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("source_reference");
+
+                    b.Property<int>("Template")
+                        .HasColumnType("integer")
+                        .HasColumnName("template");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("title");
+
+                    b.Property<bool>("ValuesFiled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("values_filed");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Period", "PersonalQuant.Domain.Fundamentals.FinancialReport.Period#FiscalQuarter", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<int>("Quarter")
+                                .HasColumnType("integer")
+                                .HasColumnName("fiscal_quarter");
+
+                            b1.Property<int>("Year")
+                                .HasColumnType("integer")
+                                .HasColumnName("fiscal_year");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_financial_reports");
+
+                    b.HasIndex("InstrumentId", "KnownFromUtc")
+                        .HasDatabaseName("ix_financial_reports_instrument_known_from");
+
+                    b.HasIndex("Source", "SourceReference")
+                        .IsUnique()
+                        .HasDatabaseName("ux_financial_reports_source_reference");
+
+                    b.ToTable("financial_reports", "quant", t =>
+                        {
+                            t.HasCheckConstraint("ck_financial_reports_kind_quarter", "(kind <> 2 OR fiscal_quarter = 2) AND (kind <> 3 OR fiscal_quarter = 4)");
+
+                            t.HasCheckConstraint("ck_financial_reports_quarter", "fiscal_quarter BETWEEN 1 AND 4");
+                        });
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.StatementLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Basis")
+                        .HasColumnType("integer")
+                        .HasColumnName("basis");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<string>("LineCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("line_code");
+
+                    b.Property<DateTimeOffset>("ObservedFromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_from_utc");
+
+                    b.Property<DateTimeOffset?>("ObservedToUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_to_utc");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("report_id");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<int>("Span")
+                        .HasColumnType("integer")
+                        .HasColumnName("span");
+
+                    b.Property<int>("Statement")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)")
+                        .HasColumnName("value");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Period", "PersonalQuant.Domain.Fundamentals.StatementLine.Period#FiscalQuarter", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<int>("Quarter")
+                                .HasColumnType("integer")
+                                .HasColumnName("fiscal_quarter");
+
+                            b1.Property<int>("Year")
+                                .HasColumnType("integer")
+                                .HasColumnName("fiscal_year");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_statement_lines");
+
+                    b.HasIndex("InstrumentId")
+                        .HasDatabaseName("ix_statement_lines_instrument");
+
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_statement_lines_report");
+
+                    b.ToTable("statement_lines", "quant", t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_lines_observation", "observed_to_utc IS NULL OR observed_to_utc > observed_from_utc");
+
+                            t.HasCheckConstraint("ck_statement_lines_quarter", "fiscal_quarter BETWEEN 1 AND 4");
+
+                            t.HasCheckConstraint("ck_statement_lines_span", "(statement = 1 AND span = 1) OR (statement <> 1 AND span IN (2, 3))");
+                        });
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Instruments.Instrument", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1550,6 +1732,33 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_trading_holidays_exchange");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.FinancialReport", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Instruments.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_financial_reports_instrument");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.StatementLine", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Instruments.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_statement_lines_instrument");
+
+                    b.HasOne("PersonalQuant.Domain.Fundamentals.FinancialReport", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_statement_lines_report");
                 });
 
             modelBuilder.Entity("PersonalQuant.Domain.Instruments.Instrument", b =>

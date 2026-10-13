@@ -52,8 +52,8 @@ restoring a backup.
 | --- | --- | --- | --- | --- |
 | 1 | **Event time** | When did the period occur? | `bars.opened_at_utc` | exists |
 | 2 | **Effective time** | When did the fact become true in the world? | `corporate_actions.ex_date` | exists |
-| 3 | **Announcement time** | When did it become public? | `corporate_actions.announced_on` | exists, read by the as-of filter (U4) |
-| 4 | **Observation time** | When did PQT learn it? | `bar_revisions.observed_from_utc` / `observed_to_utc` | exists, prices only |
+| 3 | **Announcement time** | When did it become public? | `corporate_actions.announced_on`, `financial_reports.known_from_utc` | exists, read by the as-of filter (U4); fundamentals from Phase 6 |
+| 4 | **Observation time** | When did PQT learn it? | `bar_revisions.observed_from_utc` / `observed_to_utc`, and the same pair on `statement_lines` | exists |
 | 5 | **Revision** | Which statement of the fact is this? | `bars.revision`, `corporate_actions.version` | exists |
 
 Collapsing any pair produces a specific, named defect:
@@ -283,6 +283,44 @@ table records what it said before.
 
 ---
 
+## Fundamentals (Phase 6)
+
+**Status: model and tables exist (sprint 6, item 6.2). No import yet.** The
+source and its rules are in [ADR-029](decisions/ADR-029-fundamentals-source.md).
+
+```
+quant.financial_reports      one row per disclosure, append-only
+  source, source_reference   the filing, unique per source (IDS first)
+  kind, scope, template      quarterly / half-year / annual; separate / consolidated; the form
+  fiscal_year, fiscal_quarter the quarter the report closes on
+  disclosed_on, disclosed_at_utc  the record's date, and its time when the source has one
+  known_from_utc             first instant the values may be used
+  values_filed               false when the form was left empty: disclosed, no values
+
+quant.statement_lines        every reading of every value a report states
+  report_id, statement, line_code   the form's mã số, meaningful with the report's template
+  fiscal_year, fiscal_quarter, span the period: an instant, a quarter, or the year to date
+  value, basis, source       as_filed (the issuer's form) or vendor (an aggregator)
+  revision, observed_from_utc, observed_to_utc   as bar_revisions
+```
+
+Two times, kept apart as for prices:
+
+- **When the market could know a value** is its report's `known_from_utc`.
+  With a time of day it is that instant. With a date alone it is the next
+  local midnight, because the record cannot say whether the filing came
+  before the close. A later report that restates a period, in its comparative
+  columns or as a correction, states it as a line of *its own* report. So an
+  as-of read takes, per line and period, the latest report known by then.
+- **When PQT held it** is the line's observation window. Reading the same
+  report again with a changed value (a vendor rewriting history) supersedes
+  the reading. It does not overwrite it.
+
+A report with `values_filed = false` has no lines. The period shows as
+disclosed without values, and never as zeros.
+
+---
+
 ## Lineage
 
 Every canonical bar already carries, and continues to carry:
@@ -401,7 +439,7 @@ is what keeps Redis in the readiness gate — see the 2026-10-11 amendment to
 | --- | --- | --- |
 | Look-ahead on prices | As-of reads over observation time | U1 |
 | Look-ahead on actions | `announced_on <= knownAsOf`, strict mode for research | U4 |
-| Look-ahead on fundamentals | Same mechanism, inherited via `reported_at` | Phase 6 |
+| Look-ahead on fundamentals | A value is read only once its report's `known_from_utc` has passed, and a report exists only with a disclosure record ([ADR-029](decisions/ADR-029-fundamentals-source.md)) | Phase 6 |
 | Survivorship | Recorded historical membership, and a coverage claim that keeps unsourced apart from empty | U2 |
 | Revision and restatement | Append-only observation history | U1 |
 | Silent input change | Manifest hash verified on load | U5 |

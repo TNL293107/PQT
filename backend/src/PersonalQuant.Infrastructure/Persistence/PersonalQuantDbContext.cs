@@ -4,6 +4,7 @@ using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Domain.Classification;
 using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Exchanges;
+using PersonalQuant.Domain.Fundamentals;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Domain.Research;
@@ -91,6 +92,12 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
 
     /// <summary>Gets the venues each security traded on, and when.</summary>
     public DbSet<InstrumentVenueSpell> InstrumentVenueSpells => Set<InstrumentVenueSpell>();
+
+    /// <summary>Gets the financial reports as they were disclosed (ADR-029).</summary>
+    public DbSet<FinancialReport> FinancialReports => Set<FinancialReport>();
+
+    /// <summary>Gets every reading of every value those reports state.</summary>
+    public DbSet<StatementLine> StatementLines => Set<StatementLine>();
 
     /// <summary>Gets the gaps recorded in those membership histories.</summary>
     public DbSet<UniverseCoverageFinding> UniverseCoverageFindings =>
