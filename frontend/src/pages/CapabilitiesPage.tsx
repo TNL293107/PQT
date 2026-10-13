@@ -76,7 +76,7 @@ const MILESTONES: readonly Milestone[] = [
       {
         name: "Market intelligence terminal",
         phase: "Phase 5",
-        status: "IN PROGRESS",
+        status: "COMPLETE",
       },
       { name: "Fundamental & financial data", phase: "Phase 6" },
       { name: "Factor research & features", phase: "Phase 7" },

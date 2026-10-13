@@ -15,8 +15,7 @@ delivered.
 
 | | |
 | --- | --- |
-| Complete | Phases 0–4; Research Foundation Upgrade (Gates A and B, 2026-10-11) |
-| In progress | Phase 5 — every named capability has a first slice (ADR-026, ADR-027) |
+| Complete | Phases 0–5; Research Foundation Upgrade (Gates A and B, 2026-10-11); Phase 5 declared 2026-10-13 after sprint 4 |
 | Next on the critical path | Phase 6 → 7 → 8, the chain everything after Phase 8 inherits |
 
 **Real-data reach is the binding constraint, not code.** PQT holds daily CafeF

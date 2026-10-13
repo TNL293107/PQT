@@ -27,7 +27,7 @@ RESEARCH FOUNDATION UPGRADE      STATUS: COMPLETE
 Gate A (U1–U5 + real-data validation) passed 2026-10-11.
 Gate B (U6–U10) passed 2026-10-11.
 --------------------------------------------------
-PHASE 5 — Market Intelligence    STATUS: IN PROGRESS
+PHASE 5 — Market Intelligence    STATUS: COMPLETE (2026-10-13)
 PHASE 6+                         STATUS: PLANNED
 --------------------------------------------------
 ADVANCED QUANT RESEARCH
@@ -144,7 +144,7 @@ and use the new numbering throughout.
 | 3 | Data Normalization & Quality | Trading calendar, price bands, gaps, staleness, recorded findings | COMPLETE * |
 | 4 | Corporate Actions & Adjusted Data | Eight action types, adjustment factors, adjustment-on-read | COMPLETE * |
 | — | **Research Foundation Upgrade** | **U1–U10; Gates A and B passed 2026-10-11** | **COMPLETE** |
-| 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry — scope and slices in [ADR-026](../architecture/decisions/ADR-026-market-intelligence-terminal.md) | IN PROGRESS |
+| 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry — scope and slices in [ADR-026](../architecture/decisions/ADR-026-market-intelligence-terminal.md) | COMPLETE |
 | 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` | PLANNED |
 | 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate, declarative labelled-dataset specification | PLANNED |
 | 8 | Backtesting & Research Validation | Event-driven backtest under Vietnamese market rules, **plus research validation: walk-forward, out-of-sample, perturbation, Deflated Sharpe Ratio, PBO** | PLANNED |
@@ -802,7 +802,8 @@ point-in-time members (`breadth VN30`), watchlists and saved workspaces. The
 last two are the API's first writes, behind an operator key until Phase 19
 ([ADR-027](../architecture/decisions/ADR-027-operator-write-path.md)).
 
-The phase stays `IN PROGRESS` until the operator declares it. Sprint 4 built
+**Phase 5 is `COMPLETE`, declared by the operator on 13 October 2026** on the
+evidence below. Sprint 4 built
 what the definition of done below asks for and exercised it on the live stack
 on 13 October 2026, after re-ingesting the VN30 history on a new machine:
 

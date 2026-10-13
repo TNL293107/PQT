@@ -68,21 +68,21 @@ describe("App shell", () => {
   });
 
   it("marks the delivered foundation as complete", () => {
-    // Phases 1–4 and the Research Foundation Upgrade ship. A badge may only
+    // Phases 1–5 and the Research Foundation Upgrade ship. A badge may only
     // claim it because the behaviour genuinely exists.
     renderAt("/capabilities");
 
-    expect(screen.getAllByText("COMPLETE")).toHaveLength(5);
+    expect(screen.getAllByText("COMPLETE")).toHaveLength(6);
   });
 
-  it("marks only the phase being built as under way", () => {
+  it("marks no phase under way while sprint 5 widens data between phases", () => {
     // The in-progress badge is reserved for a phase actually being built, so
     // it moves with the work rather than staying on the last one finished.
+    // Phase 5 is complete and Phase 6 has not started.
     renderAt("/capabilities");
 
-    const underWay = screen.getAllByText("IN PROGRESS");
-    expect(underWay).toHaveLength(1);
-    expect(underWay[0]!.closest("li")).toHaveTextContent("Phase 5");
+    expect(screen.queryAllByText("IN PROGRESS")).toHaveLength(0);
+    expect(screen.getByText("Market intelligence terminal").closest("li")).toHaveTextContent("COMPLETE");
   });
 
   it("shows a not-found view for an unknown route", () => {

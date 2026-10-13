@@ -13,14 +13,14 @@ engineering project.
 ```
 Phase 0–4                     COMPLETE
 Research Foundation Upgrade   COMPLETE      ← Gates A and B passed 2026-10-11
-Phase 5                       IN PROGRESS   ← Market Intelligence Terminal, ADR-026
-Phase 6–20                    PLANNED
+Phase 5                       COMPLETE      ← Market Intelligence Terminal, declared 2026-10-13
+Phase 6–20                    PLANNED       ← next: sprint 5, data reach
 ```
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Complete** | Phases 0–4, and the Research Foundation Upgrade (U1–U10)      |
-| **Current**  | Phase 5 — Market Intelligence Terminal ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)) |
+| **Complete** | Phases 0–5, and the Research Foundation Upgrade (U1–U10)      |
+| **Current**  | Sprint 5 — widening real data before Phases 6–8 ([sprint plan](docs/roadmap/sprint-plan.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
 | **Tests**    | 1,098 unit, 198 integration, 299 React (2026-10-13); 262 Python + 91 Qlib and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
@@ -90,26 +90,18 @@ watchlists and workspaces, behind an operator key
 data still changes only through the CLI and the host's scheduled ingestion,
 until authentication arrives in Phase 19.
 
-## Current work — Phase 5, sprint 4
+## Current work — sprint 5, data reach
 
-Phase 5 (Market Intelligence Terminal) has a first slice of every named
-capability ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)).
-Sprint 4 closes it against a written definition of done; the schedule is in
-the [sprint plan](docs/roadmap/sprint-plan.md), the scope in the
-[canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
+**Phase 5 — complete**, declared by the operator on 13 October 2026 against
+its written definition of done, every criterion evidenced on the live stack
+([roadmap](docs/roadmap/pqt-roadmap-v2.md#phase-5--where-it-stands)). Sprint 4
+closed it: one quote service shared by breadth and watchlists, tick-rounded
+ex-date references, venue-wide breadth, and the exchange calendar back to 2016.
 
-| # | Item | State |
-| --- | --- | --- |
-| 4.1 | Phase 5 definition of done, in the roadmap | ✅ |
-| 4.2 | Quotes in watchlists, from one `QuoteService` shared with breadth | ✅ identical to breadth, live |
-| 4.3 | Tick-rounded reference prices for stock dividends | ✅ |
-| 4.4 | Venue-wide breadth (`breadth --venue HOSE`) | ✅ |
-| 4.5 | Exchange calendar 2016–2021 (HOSE, HNX, UPCOM) | ✅ sourced, coverage from 2016 |
-| 4.6 | Small debt | ✅ |
-
-Every criterion of Phase 5's definition of done is evidenced in the
-[roadmap](docs/roadmap/pqt-roadmap-v2.md#phase-5--where-it-stands); declaring
-the phase complete is the operator's call.
+Next, by the [sprint plan](docs/roadmap/sprint-plan.md): widen real data before
+Phases 6–8 build on it. Raw CafeF history for VN30 from July 2023, every
+entitlement in that span sourced, a re-export the momentum slice can score in
+full, and venue history so a name that moved stays one instrument.
 
 **Research Foundation Upgrade — complete.** Ten workstreams between Phase 4 and
 Phase 5 made the Phase 0–4 data architecture empirically valid and laid the
@@ -433,15 +425,15 @@ integration.
 ## Roadmap
 
 Twenty-one phases, numbered 0–20. **Phase numbering is canonical and frozen** —
-no phase is ever renumbered, inserted or merged. Phases 0 through 4 are
-complete, the Research Foundation Upgrade is under way, and everything else is
+no phase is ever renumbered, inserted or merged. Phases 0 through 5 are
+complete, the Research Foundation Upgrade is complete, and everything else is
 planned.
 
 | Stage | Becomes | Phases | Status |
 | --- | --- | --- | --- |
 | 1 | Data foundation | 0–4 | COMPLETE * |
-| — | **Research foundation** | **U1–U10** | **IN PROGRESS** |
-| 2 | Quant platform | 5–12 | PLANNED |
+| — | **Research foundation** | **U1–U10** | **COMPLETE** |
+| 2 | Quant platform | 5–12 | IN PROGRESS — Phase 5 complete |
 | 3 | Trading system | 13–16 | PLANNED |
 | 4 | Engineered system | 17–20 | PLANNED |
 
