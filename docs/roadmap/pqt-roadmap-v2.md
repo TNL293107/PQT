@@ -814,7 +814,7 @@ on 13 October 2026, after re-ingesting the VN30 history on a new machine:
 | 4 | Venue-wide breadth | Live: HOSE on 2026-09-17, 36 equities, with how many lack a listing date (36) and which were never ingested (none) |
 | 5 | Honest coverage | The venue calendar is transcribed from 2016 (63 closed sessions for 2016–2021, plus two HOSE outage days); `pqt coverage FPT` now counts missing sessions over its 2016 bars instead of answering *not measured* |
 | 6 | Writes stay guarded | Sprint 4 added only reads; the write path is ADR-027's, reviewed in sprint 3 |
-| 7 | Exercised live, suites green | 1,098 unit and 196 integration tests on this machine, 299 frontend; Python runs in CI only here (no interpreter on the new machine) |
+| 7 | Exercised live, suites green | 1,098 unit and 198 integration tests on this machine, 299 frontend; Python runs in CI only here (no interpreter on the new machine) |
 
 The live run found one real defect, fixed in sprint 4: two share
 distributions on one session compounded instead of adding (HDB, 9 October

@@ -22,7 +22,7 @@ Phase 6–20                    PLANNED
 | **Complete** | Phases 0–4, and the Research Foundation Upgrade (U1–U10)      |
 | **Current**  | Phase 5 — Market Intelligence Terminal ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 1,098 unit, 196 integration, 299 React (2026-10-13); 262 Python + 91 Qlib and C++ green in CI |
+| **Tests**    | 1,098 unit, 198 integration, 299 React (2026-10-13); 262 Python + 91 Qlib and C++ green in CI |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
