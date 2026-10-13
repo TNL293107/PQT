@@ -2,13 +2,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PersonalQuant.Application.Breadth;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.MarketData;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.Universes;
 using PersonalQuant.UnitTests.Instruments.Fakes;
 using PersonalQuant.UnitTests.MarketData.Fakes;
-using static PersonalQuant.UnitTests.Breadth.BreadthValues;
+using static PersonalQuant.UnitTests.Breadth.QuoteValues;
 
 namespace PersonalQuant.UnitTests.Breadth;
 
@@ -392,13 +393,14 @@ public sealed class MarketBreadthServiceTests
                     ])
                 : new MarketDataProviderRegistry([]);
 
+            var clock = new FakeClock(Now);
+
             Service = new MarketBreadthService(
                 Universes,
                 new UniverseCatalog(Universes),
-                new TradingCalendar(_exchanges),
+                new QuoteService(new TradingCalendar(_exchanges), Reader, registry, clock),
                 Reader,
-                registry,
-                new FakeClock(Now),
+                clock,
                 NullLogger<MarketBreadthService>.Instance);
         }
 
@@ -406,7 +408,7 @@ public sealed class MarketBreadthServiceTests
 
         public InMemoryUniverses Universes { get; } = new();
 
-        public FakeBreadthReader Reader { get; } = new();
+        public FakeQuoteReader Reader { get; } = new();
 
         public MarketBreadthService Service { get; }
 

@@ -46,8 +46,10 @@ public enum BreadthCategory
 /// </param>
 /// <param name="PreviousClose">
 /// The previous close restated onto the session's basis — multiplied by the
-/// factor of every action going ex on the session — or null when either bar
+/// factor of every action going ex on the session and, for an equity, rounded
+/// to the venue's tick as the exchange's reference is — or null when either bar
 /// is missing. Equal to <paramref name="RawPreviousClose"/> on an ordinary day.
+/// The member's <see cref="Quotes.Quote.Reference"/>.
 /// </param>
 /// <param name="Close">The session's close, or null when there is no bar.</param>
 /// <param name="Change">

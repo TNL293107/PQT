@@ -2,13 +2,8 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Diagnostics;
-using PersonalQuant.Application.Exchanges;
-using PersonalQuant.Application.MarketData;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Universes;
-using PersonalQuant.Domain.CorporateActions;
-using PersonalQuant.Domain.Exchanges;
-using PersonalQuant.Domain.Instruments;
-using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Domain.Universes;
 
 namespace PersonalQuant.Application.Breadth;
@@ -45,50 +40,30 @@ public interface IMarketBreadthService
 /// <para>
 /// <strong>Members</strong> are read through <see cref="IUniverseCatalog"/>,
 /// so a session the universe does not claim to know is refused rather than
-/// counted over an empty set (ADR-020). <strong>The previous session</strong>
-/// is each member's own venue's previous trading day: members on different
-/// venues are supported, and the session must be a trading day on every venue
-/// any member trades on, because a count that mixed one venue's session with
-/// another's holiday would compare closes from different days.
+/// counted over an empty set (ADR-020).
 /// </para>
 /// <para>
-/// <strong>The change</strong> is measured on the session's basis: the
-/// previous close is multiplied by the factor of every action going ex after
-/// the previous session and on or before this one, which is the exchange's own
-/// reference-price rule. Later factors are not applied, because they rescale
-/// both closes alike and cancel out of the ratio; leaving them out means the
-/// close shown is the close the market printed that day. The factors are the
-/// ones <see cref="CorporateActions.IPriceAdjustmentService"/> stored and the
-/// bars endpoint applies, read for the current series — every factor this
-/// system currently knows, which is what ADR-022 says a current read applies.
+/// <strong>The move</strong> of each member is its quote from
+/// <see cref="IQuoteService"/> — close against the previous close restated for
+/// actions going ex and rounded to the tick, on each member's own venue's
+/// previous trading day. Breadth only counts; a watchlist showing the same name
+/// on the same session shows the same move.
 /// </para>
 /// </remarks>
 /// <param name="universes">The universe store, for the coverage claim.</param>
 /// <param name="catalog">Answers who belonged, refusing what is not known.</param>
-/// <param name="calendar">Venue trading calendars.</param>
-/// <param name="reader">Bulk reads of instruments, closes and factors.</param>
-/// <param name="providers">Says which sources adjust at source.</param>
+/// <param name="quotes">Quotes the members.</param>
+/// <param name="reader">Bulk reads of closes, for choosing a default session.</param>
 /// <param name="clock">Today, when no session is named.</param>
 /// <param name="logger">The log.</param>
 internal sealed class MarketBreadthService(
     IUniverseRepository universes,
     IUniverseCatalog catalog,
-    ITradingCalendar calendar,
-    IBreadthReader reader,
-    IMarketDataProviderRegistry providers,
+    IQuoteService quotes,
+    IQuoteReader reader,
     IClock clock,
     ILogger<MarketBreadthService> logger) : IMarketBreadthService
 {
-    /// <summary>
-    /// How far back the previous trading day is looked for.
-    /// </summary>
-    /// <remarks>
-    /// Tet closes Vietnamese venues for up to nine weekdays; a month is
-    /// comfortably more than any closure on record, and a gap longer than that
-    /// is a calendar problem the refusal should surface.
-    /// </remarks>
-    private const int PreviousSessionLookbackDays = 31;
-
     /// <summary>
     /// How far back a default session is looked for.
     /// </summary>
@@ -99,9 +74,6 @@ internal sealed class MarketBreadthService(
     /// reaches the older day on purpose.
     /// </remarks>
     private const int DefaultSessionLookbackDays = 31;
-
-    /// <summary>Decimal places a change is reported to.</summary>
-    private const int ChangeScale = 6;
 
     /// <inheritdoc />
     public async Task<BreadthResult> ComputeAsync(
@@ -155,214 +127,43 @@ internal sealed class MarketBreadthService(
             return BreadthResult.Computed(new MarketBreadth(code, session, defaulted, [], []));
         }
 
-        var instruments = await reader
-            .ListInstrumentsAsync(members, cancellationToken)
-            .ConfigureAwait(false);
+        var board = await quotes.QuoteAsync(members, session, cancellationToken).ConfigureAwait(false);
 
-        var venues = await ResolveVenuesAsync(
-                code, session, [.. instruments.Select(item => item.ExchangeId).Distinct()], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (venues.Refusal is { } refusal)
+        return board.Outcome switch
         {
-            return refusal;
-        }
-
-        var rows = await MeasureAsync(members, instruments, venues.Venues, session, cancellationToken)
-            .ConfigureAwait(false);
-
-        return BreadthResult.Computed(new MarketBreadth(
-            code,
-            session,
-            defaulted,
-            [.. venues.Venues.Values.OrderBy(venue => venue.Code.Value, StringComparer.Ordinal)],
-            rows));
-    }
-
-    /// <summary>
-    /// Checks the session against every member venue's calendar and finds the
-    /// session before it on each.
-    /// </summary>
-    private async Task<VenueResolution> ResolveVenuesAsync(
-        UniverseCode code,
-        DateOnly session,
-        IReadOnlyList<ExchangeId> venueIds,
-        CancellationToken cancellationToken)
-    {
-        var coverage = (await calendar.ListCoverageAsync(cancellationToken).ConfigureAwait(false))
-            .ToDictionary(entry => entry.ExchangeId);
-
-        var resolved = new Dictionary<ExchangeId, BreadthVenue>();
-
-        foreach (var venueId in venueIds)
-        {
-            if (!coverage.TryGetValue(venueId, out var venue) || !venue.Covers(session))
-            {
-                return VenueResolution.Refused(BreadthResult.Refused(
-                    BreadthOutcome.CalendarNotCovered,
-                    code,
-                    session,
-                    $"The {Name(venue)} trading calendar is not transcribed for {Day(session)}, so whether "
-                        + "it was a session cannot be said. Breadth is refused rather than guessed."));
-            }
-
-            var window = await calendar
-                .LoadAsync(venueId, session.AddDays(-PreviousSessionLookbackDays), session, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!window.IsTradingDay(session))
-            {
-                return VenueResolution.Refused(BreadthResult.Refused(
-                    BreadthOutcome.NotATradingDay,
-                    code,
-                    session,
-                    $"{Day(session)} is not a trading day on {venue.Code} — a weekend or a recorded closure."));
-            }
-
-            var previous = window.TradingDays().Where(day => day < session).Select(day => (DateOnly?)day).LastOrDefault();
-
-            if (previous is not { } before || !venue.Covers(before))
-            {
-                return VenueResolution.Refused(BreadthResult.Refused(
-                    BreadthOutcome.CalendarNotCovered,
-                    code,
-                    session,
-                    $"The {venue.Code} trading calendar is not transcribed for the session before "
-                        + $"{Day(session)}, so there is no previous close to measure against."));
-            }
-
-            resolved[venueId] = new BreadthVenue(venue.Code, before);
-        }
-
-        return new VenueResolution(resolved, Refusal: null);
-    }
-
-    /// <summary>
-    /// Reads both sessions' closes and the factors between them for every
-    /// member, in two queries, and classifies each member.
-    /// </summary>
-    private async Task<IReadOnlyList<BreadthMember>> MeasureAsync(
-        IReadOnlyList<InstrumentId> members,
-        IReadOnlyList<BreadthInstrument> instruments,
-        IReadOnlyDictionary<ExchangeId, BreadthVenue> venues,
-        DateOnly session,
-        CancellationToken cancellationToken)
-    {
-        var earliest = venues.Values.Min(venue => venue.PreviousSession);
-
-        var closes = (await reader
-                .ListDailyClosesAsync(members, earliest, session, cancellationToken)
-                .ConfigureAwait(false))
-            .ToDictionary(close => (close.InstrumentId, close.Session));
-
-        var factors = (await reader
-                .ListFactorsGoingExAsync(members, earliest.AddDays(1), session, cancellationToken)
-                .ConfigureAwait(false))
-            .ToLookup(factor => factor.InstrumentId);
-
-        var byId = instruments.ToDictionary(instrument => instrument.InstrumentId);
-
-        return
-        [
-            .. members
-                .Select(id => byId.TryGetValue(id, out var instrument)
-                    ? instrument
-                    : throw new InvalidOperationException(
-                        $"A membership names instrument {id}, which the instrument master does not hold."))
-                .Select(instrument => Measure(
-                    instrument, venues[instrument.ExchangeId], session, closes, factors[instrument.InstrumentId]))
-                .OrderBy(member => member.Ticker.Value, StringComparer.Ordinal),
-        ];
-    }
-
-    private BreadthMember Measure(
-        BreadthInstrument instrument,
-        BreadthVenue venue,
-        DateOnly session,
-        Dictionary<(InstrumentId InstrumentId, DateOnly Session), SessionClose> closes,
-        IEnumerable<ExDateFactor> factors)
-    {
-        closes.TryGetValue((instrument.InstrumentId, session), out var today);
-        closes.TryGetValue((instrument.InstrumentId, venue.PreviousSession), out var before);
-
-        if (today is null || before is null)
-        {
-            return Row(instrument, venue, before, restated: null, today, BreadthCategory.NoData);
-        }
-
-        var factor = FactorBetween(before, today, factors);
-
-        if (!factor.TryApply(before.Close, out var restated))
-        {
-            // Only reachable with a factor that rescales a price out of range,
-            // which the engine refuses to store. Counted as no data rather than
-            // as a move nobody can vouch for.
-            return Row(instrument, venue, before, restated: null, today, BreadthCategory.NoData);
-        }
-
-        var category = today.Close.Value.CompareTo(restated.Value) switch
-        {
-            > 0 => BreadthCategory.Advancing,
-            < 0 => BreadthCategory.Declining,
-            _ => BreadthCategory.Unchanged,
+            QuoteOutcome.Quoted => BreadthResult.Computed(new MarketBreadth(
+                code,
+                session,
+                defaulted,
+                [.. board.Venues.Select(venue => new BreadthVenue(venue.Code, venue.PreviousSession))],
+                [.. board.Quotes.Select(Member)])),
+            QuoteOutcome.CalendarNotCovered => BreadthResult.Refused(
+                BreadthOutcome.CalendarNotCovered, code, session, board.Detail),
+            QuoteOutcome.NotATradingDay => BreadthResult.Refused(
+                BreadthOutcome.NotATradingDay, code, session, board.Detail),
+            _ => throw new InvalidOperationException(
+                $"A named session was answered with {board.Outcome}, which only a defaulted one can be."),
         };
-
-        return Row(instrument, venue, before, restated, today, category);
     }
 
-    /// <summary>
-    /// Combines the factors of every action going ex after the previous session
-    /// and on or before this one.
-    /// </summary>
-    /// <remarks>
-    /// The interval is <see cref="PriceAdjustment.AppliesTo"/>'s rule read from
-    /// both ends: a factor applies to a bar that opened strictly before its
-    /// ex-date, so it applies to the previous session's bar and not to this
-    /// one's exactly when <c>previous &lt; exDate &lt;= session</c>. A bar from
-    /// a source that adjusts at source is already on today's basis, and
-    /// adjusting it again would be wrong by the factor — the same rule the bars
-    /// endpoint follows.
-    /// </remarks>
-    private AdjustmentFactor FactorBetween(
-        SessionClose before,
-        SessionClose today,
-        IEnumerable<ExDateFactor> factors)
-    {
-        if (AdjustsAtSource(before.Source) || AdjustsAtSource(today.Source))
-        {
-            return AdjustmentFactor.Identity;
-        }
-
-        return factors
-            .Where(factor => factor.ExDate > before.Session && factor.ExDate <= today.Session)
-            .Aggregate(AdjustmentFactor.Identity, (combined, factor) => combined.Combine(factor.Factor));
-    }
-
-    private bool AdjustsAtSource(SourceCode source) =>
-        providers.TryResolve(source, out var provider)
-        && provider.Capability.Limitations.AdjustsPricesAtSource;
-
-    private static BreadthMember Row(
-        BreadthInstrument instrument,
-        BreadthVenue venue,
-        SessionClose? before,
-        Price? restated,
-        SessionClose? today,
-        BreadthCategory category) =>
+    private static BreadthMember Member(Quote quote) =>
         new(
-            instrument.InstrumentId,
-            instrument.Ticker,
-            venue.Code,
-            venue.PreviousSession,
-            before?.Close.Value,
-            restated?.Value,
-            today?.Close.Value,
-            restated is not null && today is not null
-                ? decimal.Round(
-                    (today.Close.Value / restated.Value) - 1m, ChangeScale, MidpointRounding.ToEven)
-                : null,
-            today?.Volume,
-            category);
+            quote.InstrumentId,
+            quote.Ticker,
+            quote.Venue,
+            quote.PreviousSession,
+            quote.RawPreviousClose,
+            quote.Reference,
+            quote.Close,
+            quote.Change,
+            quote.Volume,
+            quote.Move switch
+            {
+                PriceMove.Advancing => BreadthCategory.Advancing,
+                PriceMove.Declining => BreadthCategory.Declining,
+                PriceMove.Unchanged => BreadthCategory.Unchanged,
+                _ => BreadthCategory.NoData,
+            });
 
     /// <summary>
     /// Finds the latest session up to today on which some member — a member
@@ -480,20 +281,8 @@ internal sealed class MarketBreadthService(
         ApplicationLog.BreadthRefused(logger, result.Code.Value, result.Outcome);
     }
 
-    private static string Name(VenueCalendarCoverage? venue) =>
-        venue?.Code.Value ?? "venue's";
-
     private static string Day(DateOnly date) =>
         date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-    /// <summary>The venues resolved, or why they could not be.</summary>
-    private sealed record VenueResolution(
-        IReadOnlyDictionary<ExchangeId, BreadthVenue> Venues,
-        BreadthResult? Refusal)
-    {
-        public static VenueResolution Refused(BreadthResult refusal) =>
-            new(new Dictionary<ExchangeId, BreadthVenue>(), refusal);
-    }
 
     /// <summary>The session chosen by default, or why none could be.</summary>
     private sealed record SessionChoice(DateOnly Session, BreadthResult? Refusal)

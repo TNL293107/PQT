@@ -40,6 +40,9 @@ public static class ApplicationServiceCollectionExtensions
 
         AddMarketData(services);
 
+        // Quotes: the one close-against-reference rule breadth and watchlists share.
+        services.AddScoped<Quotes.IQuoteService, Quotes.QuoteService>();
+
         // Market breadth (ADR-026 slice 2). The one count every interface reads.
         services.AddScoped<Universes.IUniverseDirectory, Universes.UniverseDirectory>();
         services.AddScoped<Breadth.IMarketBreadthService, Breadth.MarketBreadthService>();

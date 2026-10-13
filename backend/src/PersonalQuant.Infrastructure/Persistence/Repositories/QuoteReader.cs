@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using PersonalQuant.Application.Breadth;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 
 namespace PersonalQuant.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// EF Core implementation of <see cref="IBreadthReader"/>.
+/// EF Core implementation of <see cref="IQuoteReader"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,10 +23,10 @@ namespace PersonalQuant.Infrastructure.Persistence.Repositories;
 /// </para>
 /// </remarks>
 /// <param name="dbContext">The unit of work to read through.</param>
-internal sealed class BreadthReader(PersonalQuantDbContext dbContext) : IBreadthReader
+internal sealed class QuoteReader(PersonalQuantDbContext dbContext) : IQuoteReader
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<BreadthInstrument>> ListInstrumentsAsync(
+    public async Task<IReadOnlyList<QuoteInstrument>> ListInstrumentsAsync(
         IReadOnlyCollection<InstrumentId> instrumentIds,
         CancellationToken cancellationToken = default)
     {
@@ -43,7 +43,7 @@ internal sealed class BreadthReader(PersonalQuantDbContext dbContext) : IBreadth
         return
         [
             .. instruments.Select(instrument =>
-                new BreadthInstrument(instrument.Id, instrument.Ticker, instrument.ExchangeId)),
+                new QuoteInstrument(instrument.Id, instrument.Ticker, instrument.ExchangeId, instrument.AssetType)),
         ];
     }
 

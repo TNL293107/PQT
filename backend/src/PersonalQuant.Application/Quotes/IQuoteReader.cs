@@ -3,34 +3,34 @@ using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 
-namespace PersonalQuant.Application.Breadth;
+namespace PersonalQuant.Application.Quotes;
 
 /// <summary>
-/// Reads what a breadth count needs for a whole universe at once.
+/// Reads what quoting a set of instruments on a session needs, for the whole
+/// set at once.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A port of its own rather than three more methods on the instrument, bar and
 /// corporate action repositories. Each of those reads one instrument at a time,
-/// because every caller so far wanted one series; breadth wants two sessions of
-/// thirty, and asking the per-instrument reads thirty times is the N+1 the
-/// console would feel on every keystroke of <c>BREADTH</c>.
+/// because every caller so far wanted one series; a quote board wants two
+/// sessions of thirty, and asking the per-instrument reads thirty times is the
+/// N+1 the console would feel on every keystroke of <c>BREADTH</c> or <c>WL</c>.
 /// </para>
 /// <para>
-/// Every method takes the whole member set and answers in one query, so a
-/// breadth count costs the same number of round trips for VN30 as for a
-/// universe of three hundred.
+/// Every method takes the whole set and answers in one query, so quoting costs
+/// the same number of round trips for VN30 as for a venue of three hundred.
 /// </para>
 /// </remarks>
-public interface IBreadthReader
+public interface IQuoteReader
 {
     /// <summary>
-    /// Reads the ticker and venue of each instrument named.
+    /// Reads the ticker, venue and asset type of each instrument named.
     /// </summary>
     /// <param name="instrumentIds">The instruments.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>One entry per instrument found, in no particular order.</returns>
-    Task<IReadOnlyList<BreadthInstrument>> ListInstrumentsAsync(
+    Task<IReadOnlyList<QuoteInstrument>> ListInstrumentsAsync(
         IReadOnlyCollection<InstrumentId> instrumentIds,
         CancellationToken cancellationToken = default);
 
@@ -39,9 +39,9 @@ public interface IBreadthReader
     /// sessions, inclusive at both ends, as currently stored.
     /// </summary>
     /// <remarks>
-    /// The current series, not a point-in-time one. Breadth answers "how did
-    /// the market move that day" with what this system now holds, as the bars
-    /// endpoint does without <c>knownAsOf</c>.
+    /// The current series, not a point-in-time one. A quote answers "how did
+    /// it move that day" with what this system now holds, as the bars endpoint
+    /// does without <c>knownAsOf</c>.
     /// </remarks>
     /// <param name="instrumentIds">The instruments.</param>
     /// <param name="fromDate">The first session, inclusive.</param>
@@ -76,15 +76,17 @@ public interface IBreadthReader
 }
 
 /// <summary>
-/// An instrument as a breadth count names it.
+/// An instrument as a quote names it.
 /// </summary>
 /// <param name="InstrumentId">The canonical identifier.</param>
 /// <param name="Ticker">The ticker it trades under now.</param>
 /// <param name="ExchangeId">The venue whose calendar its sessions follow.</param>
-public sealed record BreadthInstrument(
+/// <param name="AssetType">What it is, which decides whether its reference is rounded to a tick.</param>
+public sealed record QuoteInstrument(
     InstrumentId InstrumentId,
     Ticker Ticker,
-    ExchangeId ExchangeId);
+    ExchangeId ExchangeId,
+    AssetType AssetType);
 
 /// <summary>
 /// One instrument's close and volume on one session.

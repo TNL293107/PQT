@@ -1,4 +1,4 @@
-using PersonalQuant.Application.Breadth;
+using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Exchanges;
@@ -83,26 +83,26 @@ internal sealed class InMemoryUniverses : IUniverseRepository
 /// Instruments, closes and factors held in memory, counting the reads so a test
 /// can assert the count does not grow with the members.
 /// </summary>
-internal sealed class FakeBreadthReader : IBreadthReader
+internal sealed class FakeQuoteReader : IQuoteReader
 {
-    private readonly List<BreadthInstrument> _instruments = [];
+    private readonly List<QuoteInstrument> _instruments = [];
     private readonly List<SessionClose> _closes = [];
     private readonly List<ExDateFactor> _factors = [];
 
     public int Reads { get; private set; }
 
-    public void Add(BreadthInstrument instrument) => _instruments.Add(instrument);
+    public void Add(QuoteInstrument instrument) => _instruments.Add(instrument);
 
     public void Add(SessionClose close) => _closes.Add(close);
 
     public void Add(ExDateFactor factor) => _factors.Add(factor);
 
-    public Task<IReadOnlyList<BreadthInstrument>> ListInstrumentsAsync(
+    public Task<IReadOnlyList<QuoteInstrument>> ListInstrumentsAsync(
         IReadOnlyCollection<InstrumentId> instrumentIds,
         CancellationToken cancellationToken = default)
     {
         Reads++;
-        return Task.FromResult<IReadOnlyList<BreadthInstrument>>(
+        return Task.FromResult<IReadOnlyList<QuoteInstrument>>(
             [.. _instruments.Where(instrument => instrumentIds.Contains(instrument.InstrumentId))]);
     }
 
@@ -135,8 +135,8 @@ internal sealed class FakeBreadthReader : IBreadthReader
     }
 }
 
-/// <summary>Shorthand for the values a breadth test writes.</summary>
-internal static class BreadthValues
+/// <summary>Shorthand for the values a quote or breadth test writes.</summary>
+internal static class QuoteValues
 {
     public static readonly SourceCode Source = SourceCode.Create("TEST");
 
@@ -146,6 +146,6 @@ internal static class BreadthValues
     public static ExDateFactor Factor(InstrumentId id, DateOnly exDate, decimal price) =>
         new(id, exDate, AdjustmentFactor.Create(price, 1m));
 
-    public static BreadthInstrument Instrument(string ticker, ExchangeId venue) =>
-        new(InstrumentId.New(), Ticker.Create(ticker), venue);
+    public static QuoteInstrument Instrument(string ticker, ExchangeId venue, AssetType assetType = AssetType.Equity) =>
+        new(InstrumentId.New(), Ticker.Create(ticker), venue, assetType);
 }
