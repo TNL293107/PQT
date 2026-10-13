@@ -30,6 +30,7 @@ public sealed class ResearchJobTests
     [InlineData("momentum-slice")]
     [InlineData("1momentum")]
     [InlineData("momentum slice")]
+    [InlineData("momentum_slice\n")]
     public void A_kind_the_worker_could_not_name_a_handler_after_is_refused(string kind)
     {
         // Kinds are handler names in Python; anything else would be queued to

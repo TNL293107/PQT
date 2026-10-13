@@ -161,6 +161,8 @@ public sealed partial class ResearchJob
         return new ResearchJob(ResearchJobId.New(), kind, payload, createdAtUtc);
     }
 
-    [GeneratedRegex("^[a-z][a-z0-9_]*$", RegexOptions.CultureInvariant)]
+    // \z, not $: in .NET $ also matches before a final newline, so a kind
+    // ending in one would be queued under a name no handler has.
+    [GeneratedRegex(@"^[a-z][a-z0-9_]*\z", RegexOptions.CultureInvariant)]
     private static partial Regex KindPattern();
 }

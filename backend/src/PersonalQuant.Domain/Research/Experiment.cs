@@ -97,6 +97,8 @@ public sealed partial class Experiment
         return new Experiment(ExperimentId.New(), name, stated, createdAtUtc);
     }
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9_\-./]*$", RegexOptions.CultureInvariant)]
+    // \z, not $: in .NET $ also matches before a final newline, so a name
+    // ending in one would pass here and land in a different experiment.
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9_\-./]*\z", RegexOptions.CultureInvariant)]
     private static partial Regex NamePattern();
 }

@@ -90,17 +90,33 @@ watchlists and workspaces, behind an operator key
 data still changes only through the CLI and the host's scheduled ingestion,
 until authentication arrives in Phase 19.
 
-## Current work — Research Foundation Upgrade
+## Current work — Phase 5, sprint 4
 
-Ten workstreams between Phase 4 and Phase 5. Purpose: make the Phase 0–4 data
-architecture **empirically valid**, and establish the research foundation the
-quantitative phases depend on.
+Phase 5 (Market Intelligence Terminal) has a first slice of every named
+capability ([ADR-026](docs/architecture/decisions/ADR-026-market-intelligence-terminal.md)).
+Sprint 4 closes it against a written definition of done; the schedule is in
+the [sprint plan](docs/roadmap/sprint-plan.md), the scope in the
+[canonical roadmap](docs/roadmap/pqt-roadmap-v2.md).
+
+| # | Item |
+| --- | --- |
+| 4.1 | Phase 5 definition of done, in the roadmap |
+| 4.2 | Quotes in watchlists, from one `QuoteService` shared with breadth |
+| 4.3 | Tick-rounded reference prices for stock dividends |
+| 4.4 | Venue-wide breadth (`breadth --venue HOSE`) |
+| 4.5 | HOSE calendar 2016–2021 |
+| 4.6 | Small debt |
+
+**Research Foundation Upgrade — complete.** Ten workstreams between Phase 4 and
+Phase 5 made the Phase 0–4 data architecture empirically valid and laid the
+research foundation. Gate A (U1–U5 plus real-data validation) and Gate B
+(U6–U10) both passed on 11 October 2026.
 
 | | Workstream | Gate |
 | --- | --- | --- |
 | **U1** | Temporal / point-in-time correctness | A |
 | **U2** | Universe & survivorship correctness | A |
-| **U3** | **Real Vietnamese data provider integration — MANDATORY** | A |
+| **U3** | Real Vietnamese data provider integration | A |
 | **U4** | Adjustment & announcement awareness | A |
 | **U5** | Canonical dataset contract | A |
 | **U6** | Quant research abstraction layer | B |
@@ -108,38 +124,6 @@ quantitative phases depend on.
 | **U8** | Qlib research adapter | B |
 | **U9** | Experiment tracking & reproducibility | B |
 | **U10** | Python / .NET research boundary | B |
-
-**Gate A** — U1–U5 plus real-data validation — gates Phase 5.
-**Gate B** — U6–U10 — completes the Upgrade and runs in parallel with Phase 5.
-
-**Where U1 stands.** The price half is implemented: an append-only observation
-history beside `quant.bars` and a `knownAsOf` read over it, per
-[ADR-018](docs/architecture/decisions/ADR-018-point-in-time-market-bars.md).
-Announcement time is still recorded and unused, so an as-of read is
-point-in-time in its prices and not in its adjustments — U4 closes that, and
-until it does this is not an as-of read research may rely on.
-
-**Where U2 stands.** The model is implemented — half-open append-only
-membership, an as-of read, a database constraint refusing overlap while
-permitting re-entry, and coverage findings raised by the import. The history is
-not: nothing here states a real index's constituents, and seeding today's VN30
-to stand in for earlier years is exactly the bias the workstream removes. See
-[ADR-020](docs/architecture/decisions/ADR-020-universe-membership-and-coverage.md).
-
-**Where U3 stands.** Real Vietnamese prices now go through the pipeline: 1,164
-daily FPT bars from a native Vietcap adapter, the real exchange calendar for
-2022–2026, capability declared per source with explicit selection and no
-automatic fallback, and an
-[operator CLI](docs/development/operator-cli.md) that makes ingestion, backfill
-and finding resolution instructions rather than configuration plus a restart.
-It has since done the thing Gate A asks for: Vietcap serves prices already
-adjusted, so the raw series comes from CafeF
-([ADR-021](docs/architecture/decisions/ADR-021-raw-vietnamese-price-history.md)),
-and the `FPT` entitlements of 27 May 2016 are reproduced through the corporate
-action engine, as described above. U1–U10 are complete.
-
-> **U3 is mandatory. It must not be downgraded, deferred, or satisfied by
-> fixtures.** Synthetic data does not satisfy Gate A.
 
 The [canonical roadmap](docs/roadmap/pqt-roadmap-v2.md) sets out all twenty-one
 phases, both gates, and what each one has to deliver.
