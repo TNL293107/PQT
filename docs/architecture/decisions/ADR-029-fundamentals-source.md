@@ -398,6 +398,20 @@ Notes on the table:
   previous year end as presented now, and is treated as an observation of that
   period in the same way.
 
+## Note · 2026-10-13 · the IDS date bounds publication from above
+
+The first import (FPT, 2022) dated both half-year reports 25 August, 56 days
+after the half ended, past the 45-day deadline. FPT files every half-year
+report between 14 and 25 August. Listed issuers disclose to the exchange,
+which forwards to IDS, so the IDS date can trail the moment a filing became
+public. It cannot precede it: a filing is public once IDS shows it.
+
+The IDS date is therefore an upper bound on publication. Reading values
+from it can make a backtest learn of a report later than the market did. It
+cannot make the backtest learn of it early. That is the safe direction for
+ADR-029's binding test, and HOSE's timed listing can narrow it later. The
+importer's *late* list measures the IDS record, not the issuer.
+
 ## Consequences
 
 - **Sprint 6 item 6.2.** A fact has an instrument, a fiscal period, a statement

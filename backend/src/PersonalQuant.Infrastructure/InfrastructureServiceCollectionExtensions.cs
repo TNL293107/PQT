@@ -246,6 +246,14 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IVenueHistoryProvider>(_ => new Instruments.FileVenueHistoryProvider(path));
         }
 
+        if (!string.IsNullOrWhiteSpace(options.IdsFilingsDirectory))
+        {
+            var directory = options.IdsFilingsDirectory;
+
+            services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(
+                _ => new Fundamentals.IdsFilingFileProvider(directory));
+        }
+
         if (!string.IsNullOrWhiteSpace(options.UniverseDirectory))
         {
             var path = options.UniverseDirectory;

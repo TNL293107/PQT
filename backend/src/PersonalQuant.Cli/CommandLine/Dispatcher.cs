@@ -140,10 +140,16 @@ internal static class Dispatcher
                 return new WorkspaceCommands(Defer<IWorkspaceService>(services), output)
                     .RunAsync(command, cancellationToken);
 
+            case "fundamentals":
+                return new FundamentalsCommands(
+                        Defer<Application.Fundamentals.IFundamentalsImportService>(services),
+                        output)
+                    .RunAsync(command, cancellationToken);
+
             default:
                 output.Problem(
                     $"'{command.Group}' is not a command group. Try provider, instrument, ingest, "
-                        + "quality, coverage, adjust, dataset, research, universe, watchlist, workspace, schema or calendar.");
+                        + "quality, coverage, adjust, dataset, research, universe, watchlist, workspace, fundamentals, schema or calendar.");
 
                 return Task.FromResult(ExitCode.Usage);
         }

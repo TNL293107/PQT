@@ -543,6 +543,46 @@ pqt workspace delete morning
 Saving under an existing name replaces its lines. At most 50 lines of 256
 characters each, without control characters.
 
+### `fundamentals`
+
+Records disclosed financial reports from one named provider
+([ADR-029](../architecture/decisions/ADR-029-fundamentals-source.md)). `IDS`
+reads the documents [tools/ids-collector](../../tools/ids-collector/README.md)
+wrote to `MARKET_DATA_IDS_FILINGS`. Nothing is read without `--provider`.
+
+```bash
+pqt fundamentals import --provider IDS
+pqt fundamentals import --provider IDS --ticker FPT,VCB
+```
+
+Each filing is classified, normalised and dated, then saved on its own:
+
+- **Classified.** Its kind and scope come from its name, checked against the
+  form's period.
+- **Normalised.** Each column is placed in its period and span. A blank cell
+  is no value, and an all-zero statement was not filed.
+- **Dated.** `known_from_utc` is the next local midnight after the IDS date.
+
+A filing already held is read again. A changed value supersedes its reading;
+nothing is overwritten or removed. The raw document is retained whenever its
+checksum is new.
+
+The run prints two tables:
+
+- **late** lists filings dated past their Circular 96 deadline. IDS dates can
+  trail the exchange's, so this measures the record, not the issuer.
+- **refused** lists filings that were not recorded:
+
+| Reason | Means |
+| --- | --- |
+| `UnknownInstrument` | The ticker is not an active instrument |
+| `Unclassified` | The name does not say its kind, or says both scopes |
+| `PeriodConflict` | The form's period contradicts the name |
+| `ImplausibleDate` | Filed before its period ended, or an "audited year" filed within 45 days of year end |
+| `Unreadable` | A tab, heading, form or cell the importer does not read |
+| `ConflictingValues` | One line stated twice with different values |
+| `ValuesAppeared` | A report recorded without values now has some |
+
 ## Exit codes
 
 | Code | Meaning |

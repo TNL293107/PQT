@@ -422,6 +422,67 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.RawFundamentalsPayload", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Checksum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("checksum")
+                        .IsFixedLength();
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("FetchedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at_utc");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("SourceReference")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("source_reference");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fundamentals_raw_payloads");
+
+                    b.HasIndex("InstrumentId")
+                        .HasDatabaseName("ix_fundamentals_raw_payloads_instrument");
+
+                    b.HasIndex("Source", "SourceReference", "Checksum")
+                        .IsUnique()
+                        .HasDatabaseName("ux_fundamentals_raw_payloads_filing_checksum");
+
+                    b.ToTable("fundamentals_raw_payloads", "quant");
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.StatementLine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1742,6 +1803,16 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_financial_reports_instrument");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.RawFundamentalsPayload", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Instruments.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_fundamentals_raw_payloads_instrument");
                 });
 
             modelBuilder.Entity("PersonalQuant.Domain.Fundamentals.StatementLine", b =>

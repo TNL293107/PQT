@@ -134,6 +134,16 @@ public sealed class MarketDataOptions : IValidatableObject
     public string VenueHistoryPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the directory the IDS collector writes filings to, or an
+    /// empty string to leave the IDS fundamentals provider unregistered.
+    /// </summary>
+    /// <remarks>
+    /// Real disclosures, so the directory is git-ignored and never committed
+    /// (ADR-029; <c>data-policy.md</c>).
+    /// </remarks>
+    public string IdsFilingsDirectory { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the directory holding the universe definition and
     /// membership CSV files, or an empty string to leave the source
     /// unregistered.

@@ -48,6 +48,22 @@ public interface IFundamentalsRepository
         IReadOnlyCollection<FinancialReportId> reportIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Gets whether a filing's payload with this checksum is already retained.</summary>
+    /// <param name="source">The source.</param>
+    /// <param name="sourceReference">The source's key for the filing.</param>
+    /// <param name="checksum">The payload's checksum.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true"/> when it is.</returns>
+    Task<bool> HoldsPayloadAsync(
+        SourceCode source,
+        string sourceReference,
+        string checksum,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Stages a raw payload for saving.</summary>
+    /// <param name="payload">The payload.</param>
+    void Add(RawFundamentalsPayload payload);
+
     /// <summary>Stages a report for saving.</summary>
     /// <param name="report">The report.</param>
     void Add(FinancialReport report);

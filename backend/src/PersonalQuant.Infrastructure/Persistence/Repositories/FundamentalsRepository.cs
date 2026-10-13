@@ -84,6 +84,30 @@ internal sealed class FundamentalsRepository(PersonalQuantDbContext dbContext) :
     }
 
     /// <inheritdoc />
+    public Task<bool> HoldsPayloadAsync(
+        SourceCode source,
+        string sourceReference,
+        string checksum,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceReference);
+
+        var reference = sourceReference.Trim();
+
+        return dbContext.RawFundamentalsPayloads.AnyAsync(
+            payload => payload.Source == source && payload.SourceReference == reference && payload.Checksum == checksum,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public void Add(RawFundamentalsPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        dbContext.RawFundamentalsPayloads.Add(payload);
+    }
+
+    /// <inheritdoc />
     public void Add(FinancialReport report)
     {
         ArgumentNullException.ThrowIfNull(report);

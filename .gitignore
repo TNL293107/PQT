@@ -230,6 +230,9 @@ docker-compose.override.yml
 # Exported research datasets hold real market prices. The licence position
 # on every source this system reads forbids redistributing them.
 data/datasets/
+# Disclosed financial reports collected from the SSC portal (ADR-029). Statutory
+# disclosures, retained for personal research and never redistributed.
+data/fundamentals/
 datasets/raw/
 datasets/cache/
 datasets/tmp/

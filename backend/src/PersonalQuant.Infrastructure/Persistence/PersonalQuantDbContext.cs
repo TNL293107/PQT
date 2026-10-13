@@ -99,6 +99,9 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets every reading of every value those reports state.</summary>
     public DbSet<StatementLine> StatementLines => Set<StatementLine>();
 
+    /// <summary>Gets each distinct payload of each filing, verbatim.</summary>
+    public DbSet<RawFundamentalsPayload> RawFundamentalsPayloads => Set<RawFundamentalsPayload>();
+
     /// <summary>Gets the gaps recorded in those membership histories.</summary>
     public DbSet<UniverseCoverageFinding> UniverseCoverageFindings =>
         Set<UniverseCoverageFinding>();
