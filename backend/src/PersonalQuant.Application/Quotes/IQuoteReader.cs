@@ -75,19 +75,17 @@ public interface IQuoteReader
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads every equity the instrument master holds on a venue, with its
-    /// listing lifecycle, whatever its status.
+    /// Reads every equity the instrument master holds, on whatever venue, with
+    /// its listing lifecycle and whatever its status.
     /// </summary>
     /// <remarks>
-    /// The venue an instrument is on <em>now</em>: no venue history is recorded,
-    /// so a name that moved here is read as having always been here.
+    /// Every venue rather than one, because the venue an equity traded on in a
+    /// past session is its venue history's answer, not its current venue: a
+    /// name on HOSE now may have been on UPCOM that day. The caller filters.
     /// </remarks>
-    /// <param name="exchangeId">The venue.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The equities, in no particular order.</returns>
-    Task<IReadOnlyList<ListedEquity>> ListVenueEquitiesAsync(
-        ExchangeId exchangeId,
-        CancellationToken cancellationToken = default);
+    /// <returns>The equities, in no particular order; <see cref="QuoteInstrument.ExchangeId"/> is the current venue.</returns>
+    Task<IReadOnlyList<ListedEquity>> ListEquitiesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Says which of the instruments named hold at least one daily bar.

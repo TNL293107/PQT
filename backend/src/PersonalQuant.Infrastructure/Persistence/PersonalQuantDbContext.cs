@@ -89,6 +89,9 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets which securities belonged to those sets, and when.</summary>
     public DbSet<UniverseMembership> UniverseMemberships => Set<UniverseMembership>();
 
+    /// <summary>Gets the venues each security traded on, and when.</summary>
+    public DbSet<InstrumentVenueSpell> InstrumentVenueSpells => Set<InstrumentVenueSpell>();
+
     /// <summary>Gets the gaps recorded in those membership histories.</summary>
     public DbSet<UniverseCoverageFinding> UniverseCoverageFindings =>
         Set<UniverseCoverageFinding>();

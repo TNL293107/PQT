@@ -123,6 +123,17 @@ public sealed class MarketDataOptions : IValidatableObject
     public string CorporateActionPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the CSV of the venues instruments traded on over time, or
+    /// an empty string to leave it unregistered.
+    /// </summary>
+    /// <remarks>
+    /// With no source, every instrument is judged by its current venue for every
+    /// session — right for a name that never moved, and wrong by the band's
+    /// width for one that did.
+    /// </remarks>
+    public string VenueHistoryPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the directory holding the universe definition and
     /// membership CSV files, or an empty string to leave the source
     /// unregistered.

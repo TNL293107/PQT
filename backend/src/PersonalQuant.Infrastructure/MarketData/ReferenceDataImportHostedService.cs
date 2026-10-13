@@ -57,6 +57,7 @@ public sealed class ReferenceDataImportHostedService(
 
         await ImportCalendarAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
         await ImportInstrumentsAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
+        await ImportVenueHistoryAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
         await ImportCorporateActionsAsync(scope.ServiceProvider, cancellationToken)
             .ConfigureAwait(false);
         await ImportUniversesAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
@@ -115,6 +116,49 @@ public sealed class ReferenceDataImportHostedService(
         catch (Exception exception) when (IsRecoverable(exception))
         {
             InfrastructureLog.ReferenceDataImportFailed(logger, exception, "instrument list");
+        }
+    }
+
+    /// <summary>
+    /// Records which venue each instrument traded on, and when.
+    /// </summary>
+    /// <remarks>
+    /// After the instruments, whose aliases it resolves, and before the
+    /// corporate actions, whose discontinuity check reads the band of the venue
+    /// an ex-date traded on.
+    /// </remarks>
+    private async Task ImportVenueHistoryAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+    {
+        if (services.GetService<IVenueHistoryProvider>() is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var report = await services
+                .GetRequiredService<IVenueHistoryImportService>()
+                .ImportAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            InfrastructureLog.VenueHistoryImportCompleted(
+                logger,
+                report.Source,
+                report.InstrumentsRecorded,
+                report.InstrumentsUnchanged,
+                report.FindingsRejudged,
+                report.Rejections.Count);
+
+            foreach (var rejection in report.Rejections)
+            {
+                InfrastructureLog.VenueHistoryRejected(logger, rejection.Symbol, rejection.Reason, rejection.Detail);
+            }
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            InfrastructureLog.ReferenceDataImportFailed(logger, exception, "venue history");
         }
     }
 

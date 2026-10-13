@@ -194,6 +194,28 @@ internal static partial class InfrastructureLog
         int rejected);
 
     [LoggerMessage(
+        EventId = 1125,
+        Level = LogLevel.Information,
+        Message = "Venue history import from {Source} recorded {Recorded} instrument(s), {Unchanged} unchanged, re-judged {Rejudged} breach(es) on their own venue, rejected {Rejected}.")]
+    public static partial void VenueHistoryImportCompleted(
+        ILogger logger,
+        string source,
+        int recorded,
+        int unchanged,
+        int rejudged,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 1126,
+        Level = LogLevel.Warning,
+        Message = "Venue history for {Symbol} was not recorded ({Reason}): {Detail}")]
+    public static partial void VenueHistoryRejected(
+        ILogger logger,
+        string symbol,
+        Application.Instruments.VenueHistoryRejectionReason reason,
+        string detail);
+
+    [LoggerMessage(
         EventId = 1124,
         Level = LogLevel.Information,
         Message = "Universe import from {Source} defined {Defined} universe(s), created {Created} spell(s), closed {Closed}, recorded {AnnouncementsRecorded} announcement date(s), rejected {Rejected}; {OpenFindings} coverage finding(s) open.")]

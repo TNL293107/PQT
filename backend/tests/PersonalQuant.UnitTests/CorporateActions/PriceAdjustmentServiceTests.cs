@@ -767,6 +767,7 @@ public sealed class PriceAdjustmentServiceTests
                 Issues,
                 master,
                 exchanges,
+                new InMemoryVenueHistory(),
                 new FakeUnitOfWork(),
                 new FakeClock(Now),
                 NullLogger<PriceAdjustmentService>.Instance);

@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalQuant.Application.Quotes;
-using PersonalQuant.Domain.Exchanges;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 
@@ -114,13 +113,11 @@ internal sealed class QuoteReader(PersonalQuantDbContext dbContext) : IQuoteRead
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ListedEquity>> ListVenueEquitiesAsync(
-        ExchangeId exchangeId,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ListedEquity>> ListEquitiesAsync(CancellationToken cancellationToken = default)
     {
         var instruments = await dbContext.Instruments
             .AsNoTracking()
-            .Where(instrument => instrument.ExchangeId == exchangeId && instrument.AssetType == AssetType.Equity)
+            .Where(instrument => instrument.AssetType == AssetType.Equity)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

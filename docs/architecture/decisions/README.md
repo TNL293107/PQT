@@ -36,6 +36,7 @@ reasoning at the time is preserved.
 | [025](ADR-025-dataset-history-rows.md)                       | History rows in the canonical dataset, extending ADR-024 | Accepted |
 | [026](ADR-026-market-intelligence-terminal.md)               | The Market Intelligence Terminal's scope and first slices | Accepted |
 | [027](ADR-027-operator-write-path.md)                        | The first write path from a browser — an operator key | Accepted |
+| [028](ADR-028-venue-history.md)                             | Venue history — judging each session by the venue it traded on | Accepted |
 
 ## Format
 

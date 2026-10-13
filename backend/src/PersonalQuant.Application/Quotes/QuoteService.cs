@@ -1,6 +1,7 @@
 using System.Globalization;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Exchanges;
+using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.Exchanges;
@@ -62,11 +63,13 @@ public interface IQuoteService
 /// </remarks>
 /// <param name="calendar">Venue trading calendars.</param>
 /// <param name="reader">Bulk reads of instruments, closes and factors.</param>
+/// <param name="history">Says which venue each instrument traded on that session.</param>
 /// <param name="providers">Says which sources adjust at source.</param>
 /// <param name="clock">Today, when no session is named.</param>
 internal sealed class QuoteService(
     ITradingCalendar calendar,
     IQuoteReader reader,
+    IVenueHistoryRepository history,
     IMarketDataProviderRegistry providers,
     IClock clock) : IQuoteService
 {
@@ -129,11 +132,22 @@ internal sealed class QuoteService(
         var listed = await reader.ListInstrumentsAsync(ids, cancellationToken).ConfigureAwait(false);
         var byId = listed.ToDictionary(instrument => instrument.InstrumentId);
 
-        var named = ids
+        var current = ids
             .Select(id => byId.TryGetValue(id, out var instrument)
                 ? instrument
                 : throw new InvalidOperationException(
                     $"Instrument {id} was asked to be quoted, and the instrument master does not hold it."))
+            .ToList();
+
+        // Each instrument on the venue it traded on that session, by its
+        // recorded venue history: its previous session, its calendar and its
+        // tick are that venue's.
+        var timelines = await VenueTimelines
+            .LoadAsync(history, current.ToDictionary(item => item.InstrumentId, item => item.ExchangeId), cancellationToken)
+            .ConfigureAwait(false);
+
+        var named = current
+            .Select(item => item with { ExchangeId = timelines[item.InstrumentId].On(day) })
             .ToList();
 
         var venues = await ResolveVenuesAsync(

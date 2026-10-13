@@ -479,6 +479,46 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                     b.ToTable("instrument_identifiers", "quant");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.Instruments.InstrumentVenueSpell", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_to");
+
+                    b.Property<Guid>("ExchangeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exchange_id");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_instrument_venue_spells");
+
+                    b.HasIndex("ExchangeId");
+
+                    b.HasIndex("InstrumentId")
+                        .HasDatabaseName("ix_instrument_venue_spells_instrument");
+
+                    b.ToTable("instrument_venue_spells", "quant", t =>
+                        {
+                            t.HasCheckConstraint("ck_instrument_venue_spells_interval", "effective_from IS NULL OR effective_to IS NULL OR effective_to > effective_from");
+                        });
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.MarketData.BarRevision", b =>
                 {
                     b.Property<Guid>("InstrumentId")
@@ -1536,6 +1576,23 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_instrument_identifiers_instrument");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.Instruments.InstrumentVenueSpell", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Exchanges.Exchange", null)
+                        .WithMany()
+                        .HasForeignKey("ExchangeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_instrument_venue_spells_exchange");
+
+                    b.HasOne("PersonalQuant.Domain.Instruments.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_instrument_venue_spells_instrument");
                 });
 
             modelBuilder.Entity("PersonalQuant.Domain.MarketData.BarRevision", b =>

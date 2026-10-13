@@ -155,12 +155,14 @@ public sealed class QuoteServiceTests
         {
             Hose = Venue("HOSE");
             Service = new QuoteService(
-                new TradingCalendar(_exchanges), Reader, new MarketDataProviderRegistry([]), new FakeClock(Now));
+                new TradingCalendar(_exchanges), Reader, History, new MarketDataProviderRegistry([]), new FakeClock(Now));
         }
 
         public ExchangeId Hose { get; }
 
         public FakeQuoteReader Reader { get; } = new();
+
+        public InMemoryVenueHistory History { get; } = new();
 
         public QuoteService Service { get; }
 

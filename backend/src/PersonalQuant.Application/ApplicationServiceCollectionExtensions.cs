@@ -30,6 +30,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IInstrumentCatalog, InstrumentCatalog>();
         services.AddScoped<IInstrumentImportService, InstrumentImportService>();
         services.AddScoped<IInstrumentTransferService, InstrumentTransferService>();
+        services.AddScoped<IVenueHistoryImportService, VenueHistoryImportService>();
         services.AddScoped<Universes.IUniverseCatalog, Universes.UniverseCatalog>();
         services.AddScoped<
             Universes.IUniverseCoverageReview,

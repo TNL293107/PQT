@@ -33,7 +33,8 @@ namespace PersonalQuant.Application.CorporateActions;
 /// <param name="bars">The canonical series, for the close each factor measures against.</param>
 /// <param name="issues">Open quality findings an action may account for.</param>
 /// <param name="instruments">Resolves the instrument's venue and asset class.</param>
-/// <param name="exchanges">Supplies the venue's price limit.</param>
+/// <param name="exchanges">Supplies each venue's price limit.</param>
+/// <param name="history">Says which venue an ex-date traded on.</param>
 /// <param name="unitOfWork">Commits the run.</param>
 /// <param name="clock">Supplies the computation instant.</param>
 /// <param name="logger">Logger for adjustment telemetry.</param>
@@ -43,6 +44,7 @@ internal sealed class PriceAdjustmentService(
     IDataQualityRepository issues,
     IInstrumentRepository instruments,
     IExchangeRepository exchanges,
+    IVenueHistoryRepository history,
     IUnitOfWork unitOfWork,
     IClock clock,
     ILogger<PriceAdjustmentService> logger) : IPriceAdjustmentService
@@ -123,7 +125,7 @@ internal sealed class PriceAdjustmentService(
         // needed only by the discontinuity check, and an instrument whose
         // venue is not held simply skips it — a missing venue is not a reason
         // to refuse to adjust a series.
-        var band = await FindPriceLimitAsync(instrumentId, cancellationToken)
+        var bandOn = await LoadBandsAsync(instrumentId, cancellationToken)
             .ConfigureAwait(false);
 
         var live = new List<CorporateAction>();
@@ -240,7 +242,7 @@ internal sealed class PriceAdjustmentService(
                     instrumentId,
                     exDate,
                     byExDate[exDate],
-                    band,
+                    bandOn(exDate),
                     computedAtUtc,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -410,16 +412,18 @@ internal sealed class PriceAdjustmentService(
     }
 
     /// <summary>
-    /// Finds the daily band the instrument's venue enforces, when there is one
-    /// to check against.
+    /// Finds, for any session, the daily band of the venue the instrument
+    /// traded on that session, when there is one to check against.
     /// </summary>
     /// <remarks>
     /// Null for an instrument whose venue is unknown, whose venue publishes no
     /// band, or that is calculated rather than traded. An index has no band to
     /// breach, so an action recorded against one cannot be checked this way and
-    /// is left alone rather than flagged on every volatile day.
+    /// is left alone rather than flagged on every volatile day. The venue is
+    /// the one in the recorded venue history for the ex-date, so an action that
+    /// went ex while a name traded on UPCOM is judged by UPCOM's band.
     /// </remarks>
-    private async Task<PriceLimit?> FindPriceLimitAsync(
+    private async Task<Func<DateOnly, PriceLimit?>> LoadBandsAsync(
         InstrumentId instrumentId,
         CancellationToken cancellationToken)
     {
@@ -429,14 +433,17 @@ internal sealed class PriceAdjustmentService(
 
         if (instrument is null || instrument.AssetType == AssetType.Index)
         {
-            return null;
+            return _ => null;
         }
 
-        var exchange = await exchanges
-            .FindByIdAsync(instrument.ExchangeId, cancellationToken)
-            .ConfigureAwait(false);
+        var timeline = new VenueTimeline(
+            instrument.ExchangeId,
+            await history.ListAsync([instrumentId], cancellationToken).ConfigureAwait(false));
 
-        return exchange?.DailyPriceLimit;
+        var venues = (await exchanges.ListAsync(cancellationToken).ConfigureAwait(false))
+            .ToDictionary(exchange => exchange.Id);
+
+        return session => venues.TryGetValue(timeline.On(session), out var venue) ? venue.DailyPriceLimit : null;
     }
 
     /// <summary>

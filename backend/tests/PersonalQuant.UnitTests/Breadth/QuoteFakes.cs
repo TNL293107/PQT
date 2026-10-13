@@ -100,13 +100,10 @@ internal sealed class FakeQuoteReader : IQuoteReader
     /// <summary>Equities the venue reads return, with their lifecycle.</summary>
     public List<ListedEquity> Equities { get; } = [];
 
-    public Task<IReadOnlyList<ListedEquity>> ListVenueEquitiesAsync(
-        ExchangeId exchangeId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ListedEquity>> ListEquitiesAsync(CancellationToken cancellationToken = default)
     {
         Reads++;
-        return Task.FromResult<IReadOnlyList<ListedEquity>>(
-            [.. Equities.Where(equity => equity.Instrument.ExchangeId == exchangeId)]);
+        return Task.FromResult<IReadOnlyList<ListedEquity>>([.. Equities]);
     }
 
     public Task<IReadOnlySet<InstrumentId>> ListWithDailyBarsAsync(

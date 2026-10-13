@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Diagnostics;
 using PersonalQuant.Application.Exchanges;
+using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.Quotes;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Domain.Exchanges;
@@ -77,6 +78,7 @@ public interface IMarketBreadthService
 /// <param name="universes">The universe store, for the coverage claim.</param>
 /// <param name="catalog">Answers who belonged, refusing what is not known.</param>
 /// <param name="exchanges">Resolves a venue code.</param>
+/// <param name="history">Says which venue each equity traded on that session.</param>
 /// <param name="quotes">Quotes the members.</param>
 /// <param name="reader">Bulk reads of closes, listings and holdings.</param>
 /// <param name="clock">Today, when no session is named.</param>
@@ -85,6 +87,7 @@ internal sealed class MarketBreadthService(
     IUniverseRepository universes,
     IUniverseCatalog catalog,
     IExchangeRepository exchanges,
+    IVenueHistoryRepository history,
     IQuoteService quotes,
     IQuoteReader reader,
     IClock clock,
@@ -185,7 +188,18 @@ internal sealed class MarketBreadthService(
                 BreadthOutcome.UnknownVenue, scope, session, $"No venue is registered under the code {venue}.");
         }
 
-        var equities = await reader.ListVenueEquitiesAsync(exchange.Id, cancellationToken).ConfigureAwait(false);
+        var equities = await reader.ListEquitiesAsync(cancellationToken).ConfigureAwait(false);
+
+        var timelines = await VenueTimelines
+            .LoadAsync(
+                history,
+                equities.ToDictionary(equity => equity.Instrument.InstrumentId, equity => equity.Instrument.ExchangeId),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // On this venue that session, by its venue history, and listed then.
+        bool Member(ListedEquity equity, DateOnly day) =>
+            timelines[equity.Instrument.InstrumentId].On(day) == exchange.Id && equity.ListedOnSession(day);
 
         DateOnly day;
 
@@ -195,7 +209,7 @@ internal sealed class MarketBreadthService(
         }
         else
         {
-            var chosen = await LatestVenueSessionAsync(venue, equities, cancellationToken).ConfigureAwait(false);
+            var chosen = await LatestVenueSessionAsync(venue, equities, Member, cancellationToken).ConfigureAwait(false);
 
             if (chosen.Refusal is { } refusal)
             {
@@ -205,7 +219,7 @@ internal sealed class MarketBreadthService(
             day = chosen.Session;
         }
 
-        var members = equities.Where(equity => equity.ListedOnSession(day)).ToList();
+        var members = equities.Where(equity => Member(equity, day)).ToList();
         var ids = members.Select(member => member.Instrument.InstrumentId).ToList();
 
         IReadOnlySet<InstrumentId> held = ids.Count == 0
@@ -239,6 +253,7 @@ internal sealed class MarketBreadthService(
     private async Task<SessionChoice> LatestVenueSessionAsync(
         ExchangeCode venue,
         IReadOnlyList<ListedEquity> equities,
+        Func<ListedEquity, DateOnly, bool> member,
         CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
@@ -250,7 +265,7 @@ internal sealed class MarketBreadthService(
             : await reader.ListDailyClosesAsync([.. byId.Keys], from, today, cancellationToken).ConfigureAwait(false);
 
         var latest = closes
-            .Where(close => byId[close.InstrumentId].ListedOnSession(close.Session))
+            .Where(close => member(byId[close.InstrumentId], close.Session))
             .Select(close => (DateOnly?)close.Session)
             .Max();
 

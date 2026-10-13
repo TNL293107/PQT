@@ -65,6 +65,24 @@ public sealed class BarQualityInspectorTests
     }
 
     [Fact]
+    public async Task Each_session_is_judged_by_the_band_of_the_venue_it_traded_on()
+    {
+        // UPCOM-like ±15% until Wednesday, the harness's ±7% from Wednesday on.
+        // A 12% fall on Tuesday is an ordinary UPCOM day; the same fall on
+        // Thursday is impossible on the new venue.
+        var harness = new Harness();
+        harness.WithCalendarThrough(new DateOnly(2026, 12, 31));
+        harness.MovedFrom("UPC", 15m, DateOnly.FromDateTime(Monday.AddDays(2).UtcDateTime));
+        harness.Store(Week(100m, 88m, 88m, 77.44m, 77.44m));
+
+        var inspection = await harness.InspectAsync();
+
+        var issue = Assert.Single(inspection.Raised, raised => raised.Kind == DataQualityIssueKind.PriceLimitBreach);
+        Assert.Equal(Monday.AddDays(3), issue.SessionAtUtc);
+        Assert.Contains("QLT", issue.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_move_inside_the_band_is_not_raised()
     {
         var harness = new Harness();
@@ -427,6 +445,7 @@ public sealed class BarQualityInspectorTests
                 _master,
                 _exchanges,
                 new TradingCalendar(_exchanges),
+                History,
                 Bars,
                 _issues,
                 new FakeClock(Now),
@@ -444,7 +463,22 @@ public sealed class BarQualityInspectorTests
 
         public FakeBarRepository Bars { get; }
 
+        public InMemoryVenueHistory History { get; } = new();
+
         public void Store(params OhlcvBar[] bars) => Bars.AddRange(bars);
+
+        /// <summary>
+        /// Records that the instrument traded on another venue until a session,
+        /// and on the harness venue from that session on.
+        /// </summary>
+        public void MovedFrom(string code, decimal bandPercent, DateOnly firstSessionHere)
+        {
+            var here = VenueId;
+            var before = _exchanges.Add(code, Now, bandPercent);
+
+            History.Add(InstrumentVenueSpell.Record(HarnessInstrumentId, before, null, firstSessionHere, Now));
+            History.Add(InstrumentVenueSpell.Record(HarnessInstrumentId, here, firstSessionHere, null, Now));
+        }
 
         public void WithHoliday(DateOnly date, string name) =>
             _exchanges.AddHoliday(TradingHoliday.Record(VenueId, date, name, Now));

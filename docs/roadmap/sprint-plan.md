@@ -104,7 +104,7 @@ source.
 
 | # | Item | Notes |
 | --- | --- | --- |
-| 6.1 | **ADR-028: fundamentals source and licence** | Candidates: issuer filings published through HOSE/HNX disclosure, and aggregators. The binding test is from `system-context.md`: each fact must carry its fiscal period **and** the moment it became public. A source with only the period cannot support honest backtests and is rejected. The licence is checked before any import |
+| 6.1 | **ADR-029: fundamentals source and licence** | Candidates: issuer filings published through HOSE/HNX disclosure, and aggregators. The binding test is from `system-context.md`: each fact must carry its fiscal period **and** the moment it became public. A source with only the period cannot support honest backtests and is rejected. The licence is checked before any import |
 | 6.2 | **Domain model** | A statement line per fiscal period (income, balance sheet, cash flow), with `reported_at` and an append-only revision history like `bar_revisions`. A restatement is a new revision, never an overwrite |
 | 6.3 | **Provider and import pipeline** | Same shape as market data: explicit provider selection, raw payload retained, normalisation, findings for implausible values |
 | 6.4 | **As-of read** | `knownAsOf` over fundamentals: a statement published after the instant is absent. Tests with a synthetic restatement prove it |
@@ -172,7 +172,7 @@ overfit. This is the milestone the project's research claims rest on.
 | When | Decision |
 | --- | --- |
 | End of sprint 4 | Declare Phase 5 complete |
-| Sprint 6 start | Approve the fundamentals source and its licence (ADR-028) |
+| Sprint 6 start | Approve the fundamentals source and its licence (ADR-029) |
 | End of sprint 7 | Declare Phase 6 complete |
 | End of sprint 9 | Declare Phase 7 complete |
 | End of sprint 11 | Declare Phase 8 complete |

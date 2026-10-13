@@ -115,6 +115,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<Application.Terminal.IWatchlistRepository, WatchlistRepository>();
         services.AddScoped<Application.Terminal.IWorkspaceRepository, WorkspaceRepository>();
         services.AddScoped<Application.Quotes.IQuoteReader, QuoteReader>();
+        services.AddScoped<Application.Instruments.IVenueHistoryRepository, VenueHistoryRepository>();
 
         // The research store. One object serves both ports because they are two
         // halves of the same fact: where a dataset's bytes go, and what this
@@ -235,6 +236,13 @@ public static class InfrastructureServiceCollectionExtensions
 
             services.AddSingleton<ICorporateActionProvider>(
                 _ => new FileCorporateActionProvider(path));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.VenueHistoryPath))
+        {
+            var path = options.VenueHistoryPath;
+
+            services.AddSingleton<IVenueHistoryProvider>(_ => new Instruments.FileVenueHistoryProvider(path));
         }
 
         if (!string.IsNullOrWhiteSpace(options.UniverseDirectory))

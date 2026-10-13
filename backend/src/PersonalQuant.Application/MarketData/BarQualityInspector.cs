@@ -102,10 +102,17 @@ public sealed record QualityInspection(
 /// index is calculated rather than traded — VN-Index has no band to breach, and
 /// checking it against one would raise a finding on every volatile day.
 /// </para>
+/// <para>
+/// Each session is judged by the venue it traded on, from the instrument's
+/// recorded venue history: a name that moved from UPCOM to HOSE has its UPCOM
+/// sessions checked against UPCOM's band and calendar, not HOSE's. A name with
+/// no recorded history is judged by its current venue throughout.
+/// </para>
 /// </remarks>
 /// <param name="instruments">Resolves the instrument's venue and asset class.</param>
-/// <param name="exchanges">Supplies the venue's price limit.</param>
-/// <param name="calendar">Supplies the venue's trading days.</param>
+/// <param name="exchanges">Supplies each venue's price limit.</param>
+/// <param name="calendar">Supplies each venue's trading days.</param>
+/// <param name="history">Says which venue each session traded on.</param>
 /// <param name="bars">The canonical series.</param>
 /// <param name="issues">Where findings are recorded.</param>
 /// <param name="clock">Supplies the detection instant.</param>
@@ -114,6 +121,7 @@ internal sealed class BarQualityInspector(
     IInstrumentRepository instruments,
     IExchangeRepository exchanges,
     ITradingCalendar calendar,
+    IVenueHistoryRepository history,
     IBarRepository bars,
     IDataQualityRepository issues,
     Abstractions.IClock clock,
@@ -128,7 +136,7 @@ internal sealed class BarQualityInspector(
     /// anything being wrong. Half a per cent is comfortably above that rounding
     /// and far below the smallest move that would indicate a corporate action.
     /// </remarks>
-    private const decimal PriceLimitTolerance = 0.005m;
+    internal const decimal PriceLimitTolerance = 0.005m;
 
     /// <inheritdoc />
     public async Task<QualityInspection> InspectAsync(
@@ -161,11 +169,14 @@ internal sealed class BarQualityInspector(
             return QualityInspection.NotRun("No instrument exists with that identifier.");
         }
 
-        var exchange = await exchanges
-            .FindByIdAsync(instrument.ExchangeId, cancellationToken)
-            .ConfigureAwait(false);
+        var timeline = new VenueTimeline(
+            instrument.ExchangeId,
+            await history.ListAsync([instrumentId], cancellationToken).ConfigureAwait(false));
 
-        if (exchange is null)
+        var venues = (await exchanges.ListAsync(cancellationToken).ConfigureAwait(false))
+            .ToDictionary(exchange => exchange.Id);
+
+        if (!venues.ContainsKey(instrument.ExchangeId))
         {
             return QualityInspection.NotRun("The instrument's venue is not held.");
         }
@@ -187,13 +198,16 @@ internal sealed class BarQualityInspector(
             .OrderBy(bar => bar.OpenedAtUtc)
             .ToList();
 
-        var window = await calendar
-            .LoadAsync(
-                exchange.Id,
-                DateOnly.FromDateTime(fromUtc.UtcDateTime),
-                DateOnly.FromDateTime(toUtc.AddTicks(-1).UtcDateTime),
-                cancellationToken)
-            .ConfigureAwait(false);
+        // One calendar window per stretch spent on a venue: a session is
+        // expected, or not, by the venue that ran it.
+        var windows = new List<TradingCalendarWindow>();
+
+        foreach (var (venue, from, to) in timeline.Stretches(
+                     DateOnly.FromDateTime(fromUtc.UtcDateTime),
+                     DateOnly.FromDateTime(toUtc.AddTicks(-1).UtcDateTime)))
+        {
+            windows.Add(await calendar.LoadAsync(venue, from, to, cancellationToken).ConfigureAwait(false));
+        }
 
         var existing = await issues
             .ListAsync(instrumentId, interval, fromUtc, toUtc, cancellationToken)
@@ -206,12 +220,22 @@ internal sealed class BarQualityInspector(
         var detectedAtUtc = clock.UtcNow;
         var raised = new List<DataQualityIssue>();
 
-        RaiseCalendarFindings(
-            instrumentId, interval, stored, window, already, detectedAtUtc, raised);
+        foreach (var window in windows)
+        {
+            var inWindow = stored
+                .Where(bar => DateOnly.FromDateTime(bar.OpenedAtUtc.UtcDateTime) is var day
+                    && day >= window.From
+                    && day <= window.To)
+                .ToList();
+
+            RaiseCalendarFindings(
+                instrumentId, interval, inWindow, window, already, detectedAtUtc, raised);
+        }
 
         await RaisePriceLimitFindingsAsync(
                 instrument,
-                exchange,
+                timeline,
+                venues,
                 interval,
                 fromUtc,
                 stored,
@@ -237,7 +261,9 @@ internal sealed class BarQualityInspector(
         // is then unknown rather than zero — and reporting the weekday count
         // would assert that every weekday was a trading day, which is the
         // claim the calendar exists to refute.
-        var expected = window.IsComplete ? window.TradingDays().Count() : 0;
+        var expected = windows.TrueForAll(window => window.IsComplete)
+            ? windows.Sum(window => window.TradingDays().Count())
+            : 0;
 
         if (raised.Count > 0)
         {
@@ -332,7 +358,8 @@ internal sealed class BarQualityInspector(
     /// </remarks>
     private async Task RaisePriceLimitFindingsAsync(
         Instrument instrument,
-        Exchange exchange,
+        VenueTimeline timeline,
+        Dictionary<ExchangeId, Exchange> venues,
         BarInterval interval,
         DateTimeOffset fromUtc,
         List<OhlcvBar> stored,
@@ -341,12 +368,7 @@ internal sealed class BarQualityInspector(
         List<DataQualityIssue> raised,
         CancellationToken cancellationToken)
     {
-        if (exchange.DailyPriceLimit is not { } limit || stored.Count == 0)
-        {
-            return;
-        }
-
-        if (instrument.AssetType == AssetType.Index)
+        if (stored.Count == 0 || instrument.AssetType == AssetType.Index)
         {
             return;
         }
@@ -364,7 +386,15 @@ internal sealed class BarQualityInspector(
 
         foreach (var bar in stored)
         {
-            if (previousClose is { } reference && !limit.Permits(reference, bar.Close.Value, PriceLimitTolerance))
+            // The band of the venue the session traded on. A venue that
+            // publishes none is skipped for that session, and the absence is
+            // the venue's, visible on its record.
+            var session = DateOnly.FromDateTime(bar.OpenedAtUtc.UtcDateTime);
+
+            if (previousClose is { } reference
+                && venues.TryGetValue(timeline.On(session), out var exchange)
+                && exchange.DailyPriceLimit is { } limit
+                && !limit.Permits(reference, bar.Close.Value, PriceLimitTolerance))
             {
                 var move = (bar.Close.Value - reference) / reference;
 

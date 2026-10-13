@@ -424,6 +424,28 @@ public sealed class MarketBreadthServiceTests
     }
 
     [Fact]
+    public async Task A_name_that_moved_counts_on_the_venue_it_traded_on_that_session()
+    {
+        // UPCOM until Wednesday, HOSE from Wednesday: Tuesday is an UPCOM
+        // session for it and Wednesday a HOSE one.
+        var harness = new Harness();
+        var upcom = harness.Venue("UPCOM");
+        var mover = harness.Equity("MOV");
+        harness.History.Add(InstrumentVenueSpell.Record(mover, upcom, null, Wednesday, Harness.Recorded));
+        harness.History.Add(InstrumentVenueSpell.Record(mover, harness.Hose, Wednesday, null, Harness.Recorded));
+        harness.Closes(mover, (Monday, 100m, 10), (Tuesday, 101m, 10), (Wednesday, 102m, 10));
+
+        var upcomTuesday = (await harness.VenueAsync("UPCOM", Tuesday)).Breadth!;
+        var hoseTuesday = (await harness.VenueAsync("HOSE", Tuesday)).Breadth!;
+        var hoseWednesday = (await harness.VenueAsync("HOSE", Wednesday)).Breadth!;
+
+        Assert.Equal(["MOV"], upcomTuesday.Members.Select(member => member.Ticker.Value));
+        Assert.Equal("UPCOM", Assert.Single(upcomTuesday.Members).Venue.Value);
+        Assert.Empty(hoseTuesday.Members);
+        Assert.Equal(("HOSE", Tuesday), (Assert.Single(hoseWednesday.Members).Venue.Value, hoseWednesday.Members[0].PreviousSession));
+    }
+
+    [Fact]
     public async Task An_unknown_venue_is_refused()
     {
         var result = await new Harness().VenueAsync("XSES", Wednesday);
@@ -472,7 +494,8 @@ public sealed class MarketBreadthServiceTests
                 Universes,
                 new UniverseCatalog(Universes),
                 _exchanges,
-                new QuoteService(new TradingCalendar(_exchanges), Reader, registry, clock),
+                History,
+                new QuoteService(new TradingCalendar(_exchanges), Reader, History, registry, clock),
                 Reader,
                 clock,
                 NullLogger<MarketBreadthService>.Instance);
@@ -483,6 +506,8 @@ public sealed class MarketBreadthServiceTests
         public InMemoryUniverses Universes { get; } = new();
 
         public FakeQuoteReader Reader { get; } = new();
+
+        public InMemoryVenueHistory History { get; } = new();
 
         public MarketBreadthService Service { get; }
 
