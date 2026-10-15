@@ -64,6 +64,26 @@ internal static class StatementNormaliser
         ArgumentNullException.ThrowIfNull(classification);
 
         rejection = null;
+
+        // Two tabs holding one table is a capture taken before the portal
+        // redrew: the second statement's name over the first's rows. Seen in
+        // the 6.5 collection, where five filings' income statements equalled
+        // their cash flows. Empty or all-zero tables may coincide honestly.
+        var duplicated = filing.Tables
+            .Where(table => table.Rows.Any(row => row.Values.Any(cell => !string.IsNullOrWhiteSpace(cell) && cell.Trim() != "0")))
+            .GroupBy(table => string.Join('\n', table.Rows.Select(row => row.Code.Trim() + "|" + string.Join('|', row.Values))))
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (duplicated is not null)
+        {
+            rejection = new FilingRejection(
+                filing.Reference,
+                filing.Ticker,
+                FilingRejectionReason.Unreadable,
+                $"Tabs {string.Join(" and ", duplicated.Select(table => table.Name))} hold the same table; it was read before the page redrew.");
+            return null;
+        }
+
         var values = new Dictionary<(FinancialStatement, string, FiscalQuarter, PeriodSpan), decimal>();
         var codes = new HashSet<string>(StringComparer.Ordinal);
 

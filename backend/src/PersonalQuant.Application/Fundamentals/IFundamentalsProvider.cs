@@ -73,6 +73,9 @@ public sealed record ProviderFiling(
     /// </remarks>
     public DateOnly? IndexedOn { get; init; }
 
+    /// <summary>Gets the name of the filed document, such as <c>BCTC_rieng_le_Q4.23.pdf</c>, when the source gives one.</summary>
+    public string? Document { get; init; }
+
     /// <summary>Gets the date the values read are dated by: the later of the two.</summary>
     public DateOnly DisclosedOn => IndexedOn is { } indexed && indexed > SubmittedOn ? indexed : SubmittedOn;
 }

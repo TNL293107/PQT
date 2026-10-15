@@ -68,7 +68,14 @@ internal static class FilingClassifier
         var name = Fold(filing.ReportName);
         var text = name + " " + Fold(filing.Summary);
 
-        var scope = ScopeOf(name) ?? ScopeOf(Fold(filing.Summary));
+        // The name first, then the abstract, then the abstract's
+        // abbreviations (BIDV: "BCTC RL", "BCTC HN"), then the document's
+        // file name (SHB: "BCTC_rieng_le_Q4.23.pdf"). A filing that says it
+        // nowhere is refused; its scope is never guessed from its siblings.
+        var scope = ScopeOf(name)
+            ?? ScopeOf(Fold(filing.Summary))
+            ?? ScopeOfAbbreviation(filing.Summary)
+            ?? ScopeOfDocument(filing.Document);
         var kind = KindOf(name) ?? KindOf(Fold(filing.Summary));
 
         if (scope is null || kind is null)
@@ -165,6 +172,42 @@ internal static class FilingClassifier
     {
         var consolidated = text.Contains("hợp nhất", StringComparison.Ordinal);
         var separate = text.Contains("riêng", StringComparison.Ordinal) || text.Contains("mẹ", StringComparison.Ordinal);
+
+        return (consolidated, separate) switch
+        {
+            (true, false) => FinancialStatementScope.Consolidated,
+            (false, true) => FinancialStatementScope.Separate,
+            _ => null,
+        };
+    }
+
+    private static FinancialStatementScope? ScopeOfAbbreviation(string? summary)
+    {
+        // Upper-case whole words only: "HN" inside a word, or a lower-case
+        // "hn", is not the abbreviation.
+        var words = (summary ?? string.Empty).Split(
+            [' ', '.', ',', '-', '_', '/', '(', ')', ':'], StringSplitOptions.RemoveEmptyEntries);
+
+        return (words.Contains("HN", StringComparer.Ordinal), words.Contains("RL", StringComparer.Ordinal)) switch
+        {
+            (true, false) => FinancialStatementScope.Consolidated,
+            (false, true) => FinancialStatementScope.Separate,
+            _ => null,
+        };
+    }
+
+    private static FinancialStatementScope? ScopeOfDocument(string? document)
+    {
+        var name = "_" + string.Concat((document ?? string.Empty).ToLowerInvariant()
+            .Select(character => char.IsAsciiLetterOrDigit(character) ? character : '_')) + "_";
+
+        var consolidated = name.Contains("_hop_nhat_", StringComparison.Ordinal)
+            || name.Contains("_hopnhat_", StringComparison.Ordinal)
+            || name.Contains("_hn_", StringComparison.Ordinal);
+        var separate = name.Contains("_rieng_", StringComparison.Ordinal)
+            || name.Contains("_rieng_le_", StringComparison.Ordinal)
+            || name.Contains("_rl_", StringComparison.Ordinal)
+            || name.Contains("_cong_ty_me_", StringComparison.Ordinal);
 
         return (consolidated, separate) switch
         {

@@ -123,6 +123,22 @@ public sealed class StatementNormaliserTests
     }
 
     [Fact]
+    public void Two_tabs_holding_the_same_table_refuse_the_filing()
+    {
+        // The income statement's rows captured again under the cash flow's
+        // name, as the slow portal produced in the 6.5 collection.
+        var income = new ProviderStatementTable("KQKD", ["Lũy kế từ đầu năm đến cuối kỳ này Năm nay"], [Filings.Row("10", "1,000")]);
+        var tables = new[]
+        {
+            Filings.Balance(("270", "5,000", "4,500"), ("440", "5,000", "4,500")),
+            income,
+            income with { Name = "LCTT-TT" },
+        };
+
+        Assert.Equal(FilingRejectionReason.Unreadable, Refusal(Filings.Quarterly(tables: tables)));
+    }
+
+    [Fact]
     public void A_balance_sheet_matching_no_known_form_refuses_the_filing() =>
         Assert.Equal(
             FilingRejectionReason.Unreadable,

@@ -74,6 +74,36 @@ public sealed class FilingClassifierTests
         Assert.Equal(FilingRejectionReason.Unclassified, rejection!.Reason);
     }
 
+    [Theory]
+    [InlineData("BIDV CBTT BCTC RL Quý I.2022", null, FinancialStatementScope.Separate)]
+    [InlineData("BIDV CBTT BCTC HN Quý I.2022", null, FinancialStatementScope.Consolidated)]
+    [InlineData("BCTC quý 4.2023", "BCTC_rieng_le_Q4.23.pdf", FinancialStatementScope.Separate)]
+    [InlineData("BCTC quý 4.2023", "20220426__BID__BCTC_hop_nhat_Q1.pdf", FinancialStatementScope.Consolidated)]
+    public void A_name_silent_on_scope_is_read_from_the_abstract_abbreviation_or_document(
+        string summary,
+        string? document,
+        FinancialStatementScope scope)
+    {
+        var filing = Filings.Quarterly(name: "Báo cáo tài chính quý 1/ năm 2022") with { Summary = summary, Document = document };
+
+        Assert.Equal(scope, FilingClassifier.Classify(filing, out _)!.Scope);
+    }
+
+    [Fact]
+    public void A_filing_that_says_its_scope_nowhere_is_refused()
+    {
+        // LPB: "Báo cáo tài chính Quý I năm 2022", BCTC_Q1.2022__CA.pdf.
+        var filing = Filings.Quarterly(name: "Báo cáo tài chính quý 1/ năm 2022") with
+        {
+            Summary = "Báo cáo tài chính Quý I năm 2022",
+            Document = "BCTC_Q1.2022__CA.pdf",
+        };
+
+        _ = FilingClassifier.Classify(filing, out var rejection);
+
+        Assert.Equal(FilingRejectionReason.Unclassified, rejection!.Reason);
+    }
+
     [Fact]
     public void A_correction_is_recognised_from_its_name() =>
         Assert.True(FilingClassifier.Classify(

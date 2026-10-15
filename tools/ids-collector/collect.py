@@ -263,8 +263,9 @@ def read_filing(page: Page, listing: Listing, pause: float) -> dict:
     )
 
     tables = []
+    previous = None
 
-    for tab in tabs:
+    for index, tab in enumerate(tabs):
         page.evaluate(
             """(name) => [...document.querySelectorAll('a,div,span')]
                 .find(e => e.children.length === 0 && e.textContent.trim() === name && e.offsetParent).click()""",
@@ -273,29 +274,33 @@ def read_filing(page: Page, listing: Listing, pause: float) -> dict:
         page.wait_for_load_state("networkidle")
         time.sleep(pause)
 
-        table = page.evaluate(
-            """(codePattern) => {
-                const code = new RegExp(codePattern, 'i');
-                const headers = [...new Set([...document.querySelectorAll('th,[role=columnheader]')]
-                    .filter(e => e.offsetParent)
-                    .map(e => e.innerText.replace(/\\s+/g, ' ').trim().normalize('NFC'))
-                    .filter(Boolean))];
-                const columns = headers.slice(3);
-                const rows = [...document.querySelectorAll('tr')]
-                    .map(tr => [...tr.querySelectorAll('td')].map(td => td.innerText.trim()))
-                    .filter(cells => cells.length >= 4 && code.test(cells[1] || ''))
-                    .map(cells => ({
-                        label: cells[0].replace(/\\s+/g, ' ').normalize('NFC'),
-                        code: cells[1],
-                        values: cells.slice(3, 3 + columns.length),
-                    }));
-                return {columns, rows};
-            }""",
-            LINE_CODE.pattern,
-        )
+        # The first tab is the one shown on arrival; every later one must
+        # replace it. On a slow portal the click returns before the new tab
+        # is drawn, and reading then captured one statement under another's
+        # name. So wait until the table differs from the last one and holds
+        # still across two reads.
+        table = read_table(page)
+        deadline = time.monotonic() + 45
+
+        while True:
+            settled = read_table(page)
+            changed = index == 0 or signature(settled) != previous
+            if changed and signature(settled) == signature(table) and settled["rows"]:
+                break
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"{listing.reference}: tab {tab} never replaced the one before it.")
+            table = settled
+            time.sleep(1)
+
+        previous = signature(table)
 
         if table["rows"]:
             tables.append({"name": tab, **table})
+
+    signatures = [signature(table) for table in tables]
+
+    if len(set(signatures)) != len(signatures):
+        raise RuntimeError(f"{listing.reference}: two tabs read the same table.")
 
     return {
         "schema": SCHEMA,
@@ -314,6 +319,35 @@ def read_filing(page: Page, listing: Listing, pause: float) -> dict:
         "fetchedAtUtc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "tables": tables,
     }
+
+
+def signature(table: dict) -> str:
+    """What a table holds: its headings and every row's code and cells."""
+    return json.dumps([table["columns"], [[row["code"], row["values"]] for row in table["rows"]]], ensure_ascii=False)
+
+
+def read_table(page: Page) -> dict:
+    """Reads the statement table currently drawn: its value headings and rows."""
+    return page.evaluate(
+            """(codePattern) => {
+                const code = new RegExp(codePattern, 'i');
+                const headers = [...new Set([...document.querySelectorAll('th,[role=columnheader]')]
+                    .filter(e => e.offsetParent)
+                    .map(e => e.innerText.replace(/\\s+/g, ' ').trim().normalize('NFC'))
+                    .filter(Boolean))];
+                const columns = headers.slice(3);
+                const rows = [...document.querySelectorAll('tr')]
+                    .map(tr => [...tr.querySelectorAll('td')].map(td => td.innerText.trim()))
+                    .filter(cells => cells.length >= 4 && code.test(cells[1] || ''))
+                    .map(cells => ({
+                        label: cells[0].replace(/\\s+/g, ' ').normalize('NFC'),
+                        code: cells[1],
+                        values: cells.slice(3, 3 + columns.length),
+                    }));
+                return {columns, rows};
+            }""",
+        LINE_CODE.pattern,
+    )
 
 
 def is_financial_statement(listing: Listing) -> bool:

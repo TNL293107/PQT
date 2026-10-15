@@ -127,6 +127,7 @@ internal sealed class IdsFilingFileProvider(string directory) : IFundamentalsPro
                     IndexedOn = OptionalText(root, "indexedOn") is { } indexed
                         ? DateOnly.ParseExact(indexed, "yyyy-MM-dd", CultureInfo.InvariantCulture)
                         : null,
+                    Document = OptionalText(root, "document"),
                 };
         }
         catch (Exception exception) when (exception is JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
