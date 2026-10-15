@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, sync_playwright
 
 SEARCH_URL = "https://congbothongtin.ssc.gov.vn/faces/NewsSearch"
@@ -85,7 +86,24 @@ def set_field(page: Page, field_id: str, value: str) -> None:
     )
 
 
+RETRY_WAITS = (30, 60, 120, 300)
+
+
 def search(page: Page, ticker: str, start: date, end: date, pause: float) -> tuple[int, list[Listing]]:
+    """Runs one search, retrying through a dropped connection or a slow page."""
+    for wait in (*RETRY_WAITS, None):
+        try:
+            return search_once(page, ticker, start, end, pause)
+        except PlaywrightError as error:
+            if wait is None:
+                raise
+            print(f"retrying in {wait}s after: {str(error).splitlines()[0]}", file=sys.stderr)
+            time.sleep(wait)
+
+    raise AssertionError("unreachable")
+
+
+def search_once(page: Page, ticker: str, start: date, end: date, pause: float) -> tuple[int, list[Listing]]:
     """Runs one search and returns the total the portal reports and the rows shown."""
     page.goto(SEARCH_URL, wait_until="networkidle")
     page.wait_for_selector(f"[id='{TICKER_FIELD}']")
@@ -142,28 +160,44 @@ def list_filings(page: Page, ticker: str, start: date, end: date, pause: float) 
 
 
 def listed_in(page: Page, listing: Listing, start: date, end: date, pause: float) -> bool:
-    """Whether a search over a range returns this filing."""
-    _, rows = search(page, listing.ticker, start, end, pause)
-    return any(row.report_name == listing.report_name and row.summary == listing.summary for row in rows)
+    """Whether a search over a range returns this filing.
+
+    A search shows one page. When the range holds more filings than that,
+    a filing missing from the page may be on the next, so the range is
+    halved until each half fits.
+    """
+    total, rows = search(page, listing.ticker, start, end, pause)
+
+    if any(row.report_name == listing.report_name and row.summary == listing.summary for row in rows):
+        return True
+
+    if total <= PAGE_SIZE or start == end:
+        return False
+
+    middle = date.fromordinal((start.toordinal() + end.toordinal()) // 2)
+    return listed_in(page, listing, start, middle, pause) or listed_in(
+        page, listing, date.fromordinal(middle.toordinal() + 1), end, pause
+    )
 
 
 def indexed_on(page: Page, listing: Listing, pause: float) -> date:
     """Finds the date the portal's search files a filing under.
 
     The listing shows when a filing was sent, but the search filters on
-    another date, which for some filings is later: ACB's separate FY2023
-    statements show 06/03/2024 and are found only on 11/03/2024. The values
-    read now are the filing as it stands at that later date, so it is
-    recorded, and the importer dates the values by the later of the two.
+    another date, later for some filings and earlier for others: ACB's
+    separate FY2023 statements show 06/03/2024 and are found only on
+    11/03/2024. The values read now are the filing as it stands at the
+    later date, so it is recorded, and the importer dates the values by the
+    later of the two. Either side of the sent date is searched.
     """
     if listed_in(page, listing, listing.submitted_on, listing.submitted_on, pause):
         return listing.submitted_on
 
-    low = date.fromordinal(listing.submitted_on.toordinal() + 1)
+    low = date.fromordinal(listing.submitted_on.toordinal() - 400)
     high = min(date.fromordinal(listing.submitted_on.toordinal() + 400), date.today())
 
     if not listed_in(page, listing, low, high, pause):
-        raise RuntimeError(f"{listing.reference}: no search within a year of {listing.submitted_on} returns it.")
+        raise RuntimeError(f"{listing.reference}: no search within 400 days of {listing.submitted_on} returns it.")
 
     while low < high:
         middle = date.fromordinal((low.toordinal() + high.toordinal()) // 2)
@@ -311,7 +345,12 @@ def main() -> int:
             folder.mkdir(parents=True, exist_ok=True)
 
             for year in range(args.from_year, args.to_year + 1):
-                listings = list_filings(page, ticker, date(year, 1, 1), date(year, 12, 31), args.pause)
+                try:
+                    listings = list_filings(page, ticker, date(year, 1, 1), date(year, 12, 31), args.pause)
+                except Exception as error:  # noqa: BLE001 - one year must not stop the run
+                    failed += 1
+                    print(f"FAILED {ticker} {year} listing: {str(error).splitlines()[0]}", file=sys.stderr)
+                    continue
 
                 for listing in listings:
                     if not is_financial_statement(listing):
