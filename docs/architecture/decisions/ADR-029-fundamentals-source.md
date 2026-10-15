@@ -425,6 +425,23 @@ cannot make the backtest learn of it early. That is the safe direction for
 ADR-029's binding test, and HOSE's timed listing can narrow it later. The
 importer's *late* list measures the IDS record, not the issuer.
 
+## Known gap · 2026-10-15 · STB and GVR filings fail on IDS
+
+During the 6.5 collection, every STB and GVR filing page on IDS failed. The
+listing showed each filing, and opening one returned *Error 500 — Internal
+Server Error* or redirected back to the search. It was not rate limiting:
+in the same minutes, FPT, VCB and TCB filings, including ones never opened
+before, opened normally. Tried 2026-10-15, several hours apart.
+
+STB and GVR therefore have **no fundamentals** from IDS. The coverage
+registry must show that as *not collected* for the two names, never as
+empty. Collection is paused at the operator's request, with these two left
+open, to be fixed later:
+
+- retry IDS when the portal's fault clears;
+- or take those two names' disclosure dates from HOSE's timed listing and
+  their values from the PDF or the `vendor` basis, under verification 3.
+
 ## Consequences
 
 - **Sprint 6 item 6.2.** A fact has an instrument, a fiscal period, a statement
