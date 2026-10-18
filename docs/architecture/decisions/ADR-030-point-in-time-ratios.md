@@ -74,18 +74,48 @@ of `t`, so the close must be too. An adjusted close would mix bases.
 
 - **Treasury shares are counted as outstanding.** Where an issuer holds
   treasury shares, its per-share figures are understated and its P/E and P/B
-  overstated, by the treasury fraction. For VN30 names that fraction is
-  small. The bias is one-directional and documented, and it is not hidden by
-  an estimate.
+  overstated, by the treasury fraction. The bias is one-directional and
+  documented, and it is not hidden by an estimate.
+
+  Measured 2026-10-18 on the ten names imported so far: treasury shares at
+  cost (415, 414) are zero for nine of them, and 0.011% of charter capital
+  for SHB. Cost overstates the count fraction, since treasury shares are
+  bought above par. VNM, MWG and HPG, which are known to hold treasury
+  shares, were not imported yet. The claim that the fraction is small is
+  therefore measured for those ten names and **assumed** for the rest,
+  until they are measured.
 - **A rights issue's share factor assumes full subscription.** That is how
   the adjustment engine already states it (ADR-014).
-- **Charter capital moves only when registered.** An action's shares are
-  counted from its ex-date. If registration falls after the next quarter
-  end, that quarter's charter capital may not include them yet, and both
-  counts could then agree or differ by the action. This is accepted: the
-  action is counted from the first balance sheet dated after its ex-date,
-  and never twice, because only actions after the balance-sheet quarter
-  are applied.
+- **Charter capital moves only when the increase is registered.** That
+  registration can lag the ex-date. Take a bonus issue that goes ex in
+  quarter Q and is registered in Q+1:
+  - quarter Q's balance sheet does not include the new shares;
+  - the action is not applied either, because its ex-date falls before Q
+    ended;
+  - so until Q+1's balance sheet is known, the count misses the action, and
+    P/E and P/B are understated by it.
+
+  Measured 2026-10-18 on the eight share-count actions of FPT, ACB and MBB
+  between 2023 and 2025, each one's quarter-end capital already includes it.
+  FPT's bonus that went ex on 5 July 2023 took capital from ₫11,043bn at
+  2023Q2 to ₫12,700bn at 2023Q3, which is 1.15×. The case is possible, so
+  the implementation must check for it:
+  - for every share-count action, compare the charter capital of the two
+    balance sheets around its ex-date with its share factor;
+  - when the step is missing in the quarter of the ex-date, apply the
+    action in that quarter as well, and record a finding;
+  - when the step appears twice, refuse to apply it, so that no action is
+    counted twice.
+
+  The same comparison found two other things for the backlog. ACB's capital
+  rose 15% in 2023Q2 with no corporate action recorded, because the action
+  predates the entitlements sourced in sprint 5. MBB's form states two
+  different capital figures for 2022Q4 and for 2023Q4, in different reports.
+- **Par is assumed to be ₫10,000.** It is the par of every common share
+  listed in Vietnam today. The implementation checks the assumption for each
+  issuer that reports basic EPS: profit to the parent divided by shares
+  should land near the reported EPS. A name that misses by more than a bonus
+  issue's worth gets a finding, not a silent ratio.
 
 ## Consequences
 
