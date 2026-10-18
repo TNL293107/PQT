@@ -17,11 +17,13 @@ namespace PersonalQuant.Cli.Commands;
 /// </remarks>
 /// <param name="imports">The import service.</param>
 /// <param name="reader">The point-in-time read.</param>
+/// <param name="ratioService">The point-in-time ratios.</param>
 /// <param name="instruments">Resolves a ticker.</param>
 /// <param name="output">Where the answer is written.</param>
 internal sealed class FundamentalsCommands(
     Lazy<IFundamentalsImportService> imports,
     Lazy<IFundamentalsReader> reader,
+    Lazy<IFundamentalRatioService> ratioService,
     Lazy<IInstrumentResolver> instruments,
     Output output)
 {
@@ -33,7 +35,7 @@ internal sealed class FundamentalsCommands(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!command.Validate(["provider", "ticker", "known-as-of", "scope", "statement", "code"], out var problem))
+        if (!command.Validate(["provider", "ticker", "known-as-of", "scope", "statement", "code", "on"], out var problem))
         {
             output.Problem(problem);
             return Task.FromResult(ExitCode.Usage);
@@ -43,6 +45,7 @@ internal sealed class FundamentalsCommands(
         {
             ("import", []) => ImportAsync(command, cancellationToken),
             ("as-of", [var ticker]) => AsOfAsync(ticker, command, cancellationToken),
+            ("ratios", [var ticker]) => RatiosAsync(ticker, command, cancellationToken),
             _ => Task.FromResult(Usage()),
         };
     }
@@ -216,12 +219,64 @@ internal sealed class FundamentalsCommands(
         return ExitCode.Ok;
     }
 
+    /// <summary>Prints an issuer's point-in-time ratios for a session (ADR-030).</summary>
+    private async Task<int> RatiosAsync(string ticker, CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.TryDate("on", out var day, out var badDate))
+        {
+            output.Problem(badDate);
+            return ExitCode.Usage;
+        }
+
+        if (day is not { } session)
+        {
+            output.Problem("'fundamentals ratios' needs --on yyyy-MM-dd, the session whose close prices them.");
+            return ExitCode.Usage;
+        }
+
+        var resolution = await instruments.Value.ResolveAsync(ticker, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (resolution.Outcome != InstrumentResolutionOutcome.Resolved || resolution.Instrument is not { } instrument)
+        {
+            output.Problem($"'{ticker}' does not name one active instrument.");
+            return ExitCode.Refused;
+        }
+
+        var ratios = await ratioService.Value.ReadAsync(instrument.InstrumentId, session, cancellationToken).ConfigureAwait(false);
+
+        output.Field("session", session.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 22);
+        output.Field("statements", ratios.Scope?.ToString() ?? "none known", 22);
+        output.Field("balance sheet", ratios.BalanceSheet?.ToString() ?? "none known", 22);
+        output.Field("profit quarters", ratios.ProfitQuarters.Count == 0 ? "none" : string.Join(" ", ratios.ProfitQuarters), 22);
+        output.Field("actions", $"{Count(ratios.ActionsApplied)} applied, {Count(ratios.ActionsWithheld)} withheld", 22);
+        output.Blank();
+        output.Table(
+            ["ratio", "value", "absent because"],
+            [
+                Row("close", ratios.Close, "#,##0.##"),
+                Row("shares", ratios.Shares, "#,##0"),
+                Row("net profit (TTM)", ratios.NetProfitTtm, "#,##0"),
+                Row("EPS (TTM)", ratios.EpsTtm, "#,##0.##"),
+                Row("book value / share", ratios.BookValuePerShare, "#,##0.##"),
+                Row("P/E", ratios.PriceToEarnings, "0.00"),
+                Row("P/B", ratios.PriceToBook, "0.00"),
+                Row("ROE (TTM)", ratios.ReturnOnEquity, "0.00%"),
+                Row("dividend yield (TTM)", ratios.DividendYield, "0.00%"),
+            ]);
+
+        return ExitCode.Ok;
+
+        static IReadOnlyList<string> Row(string name, RatioValue ratio, string format) =>
+            [name, ratio.Value?.ToString(format, CultureInfo.InvariantCulture) ?? "—", ratio.Absent ?? string.Empty];
+    }
+
     private int Usage()
     {
         output.Problem(
             "pqt fundamentals import --provider <CODE> [--ticker FPT,VCB]\n"
                 + "pqt fundamentals as-of <TICKER> --known-as-of yyyy-MM-dd [--scope consolidated|separate]\n"
-                + "                     [--statement balance|income|cash-direct|cash-indirect] [--code 10]");
+                + "                     [--statement balance|income|cash-direct|cash-indirect] [--code 10]\n"
+                + "pqt fundamentals ratios <TICKER> --on yyyy-MM-dd");
         return ExitCode.Usage;
     }
 
