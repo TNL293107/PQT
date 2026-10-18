@@ -1,6 +1,6 @@
 # ADR-030: Point-in-time ratios and the share count behind them
 
-**Status:** Accepted · **Date:** 2026-10-18 · **Phase:** Sprint 7, Phase 6 (point-in-time fundamentals)
+**Status:** Proposed · **Date:** 2026-10-18 · **Phase:** Sprint 7, Phase 6 (point-in-time fundamentals)
 
 ## Context
 

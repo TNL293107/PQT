@@ -107,13 +107,13 @@ first import is 33 VN30 names; securities firms and insurers wait.
 | 6.4 | As-of read: `IFundamentalsReader`, `pqt fundamentals as-of` | ✅ a later filing and a later restatement are absent; FPT FY2021 read live before and after its audit |
 | 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ⏳ resumed 2026-10-18 for the 20 names not yet collected; STB and GVR are a known IDS gap (ADR-029) |
 
-Sprint 7 started on the operator's instruction while 6.5 collects:
+Sprint 7 work drafted ahead of the room's plan agreement; it is a proposal until the plan is agreed (operator, 2026-10-18):
 
 | # | Item | State |
 | --- | --- | --- |
-| 7.1 | Point-in-time ratios ([ADR-030](docs/architecture/decisions/ADR-030-point-in-time-ratios.md)): EPS (TTM), P/E, P/B, ROE, dividend yield on an action-adjusted share count | ✅ `pqt fundamentals ratios`; FPT on 2023-08-01: P/E 18.5, P/B 4.4 |
-| 7.2 | Surfaces: console `FA`, `GET /instruments/{id}/ratios` and `/fundamentals`, coverage registry Fundamentals row measured | ✅ |
-| 7.3 | Dataset contract: fundamentals as of each session (manifest v4) | next |
+| 7.1 | Point-in-time ratios ([ADR-030](docs/architecture/decisions/ADR-030-point-in-time-ratios.md)): EPS (TTM), P/E, P/B, ROE, dividend yield on an action-adjusted share count | drafted (unpushed), pending agreement |
+| 7.2 | Surfaces: console `FA`, `GET /instruments/{id}/ratios` and `/fundamentals`, coverage registry Fundamentals row measured | drafted (unpushed), pending agreement |
+| 7.3 | Dataset contract: fundamentals as of each session (manifest v4) | |
 | 7.4 | Phase 6 definition of done | |
 
 **Sprint 5 — data reach, complete.**
