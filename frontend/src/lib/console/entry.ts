@@ -57,6 +57,11 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     summary: "Coverage — which datasets PQT holds for it, and to what extent",
     options: [],
   },
+  {
+    code: "FA",
+    summary: "Fundamentals — point-in-time EPS, P/E, P/B, ROE and yield (--on a session)",
+    options: ["on"],
+  },
 ];
 
 /** The verbs that name no security. */

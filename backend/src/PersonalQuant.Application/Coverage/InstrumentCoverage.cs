@@ -31,7 +31,7 @@ namespace PersonalQuant.Application.Coverage;
 /// <param name="Prices">One entry per resolution the system records, daily first.</param>
 /// <param name="CorporateActions">The corporate actions recorded against it.</param>
 /// <param name="Universes">Every universe PQT defines, ordered by code.</param>
-/// <param name="Fundamentals">Fundamentals, which PQT does not collect yet.</param>
+/// <param name="Fundamentals">The financial reports recorded against it (Phase 6).</param>
 public sealed record InstrumentCoverage(
     InstrumentId InstrumentId,
     Ticker Ticker,
@@ -40,7 +40,7 @@ public sealed record InstrumentCoverage(
     IReadOnlyList<PriceCoverage> Prices,
     CorporateActionCoverage CorporateActions,
     IReadOnlyList<UniverseMembershipCoverage> Universes,
-    DatasetCoverage Fundamentals);
+    FundamentalsCoverage Fundamentals);
 
 /// <summary>
 /// One resolution of the price series.
@@ -176,3 +176,24 @@ public sealed record UniverseMembershipCoverage(
 /// <param name="State">The state.</param>
 /// <param name="Note">Why.</param>
 public sealed record DatasetCoverage(CoverageState State, string Note);
+
+/// <summary>
+/// The financial reports recorded against an instrument (ADR-029).
+/// </summary>
+/// <param name="State">Held, not held, or not collected with the reason.</param>
+/// <param name="Reports">Reports recorded.</param>
+/// <param name="WithoutValues">Of those, reports disclosed with an empty form.</param>
+/// <param name="FirstPeriod">The earliest quarter a report closes on.</param>
+/// <param name="LastPeriod">The latest quarter a report closes on.</param>
+/// <param name="LastDisclosedOn">The latest disclosure date.</param>
+/// <param name="Sources">The disclosure sources, ordered.</param>
+/// <param name="Note">Why a figure is absent or a state was reached, when that needs saying.</param>
+public sealed record FundamentalsCoverage(
+    CoverageState State,
+    int Reports,
+    int WithoutValues,
+    Domain.Fundamentals.FiscalQuarter? FirstPeriod,
+    Domain.Fundamentals.FiscalQuarter? LastPeriod,
+    DateOnly? LastDisclosedOn,
+    IReadOnlyList<Domain.MarketData.SourceCode> Sources,
+    string? Note);

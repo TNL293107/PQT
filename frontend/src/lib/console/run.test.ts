@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Instrument } from "../../types/instrument";
 import type { BarSeries, DataQualityReport } from "../../types/marketData";
 import type { InstrumentCoverage } from "../../types/coverage";
+import type { FundamentalRatios } from "../../types/fundamentals";
 import { runEntry, type ConsoleServices } from "./run";
 
 const FPT: Instrument = {
@@ -58,6 +59,21 @@ const REPORT: DataQualityReport = {
   calendarIsComplete: true,
 };
 
+const RATIOS: FundamentalRatios = {
+  instrumentId: FPT.instrumentId,
+  session: "2023-08-01",
+  knownAsOfUtc: "2023-08-01T00:00:00Z",
+  scope: "Consolidated",
+  balanceSheet: "2023Q2",
+  profitQuarters: ["2022Q3", "2022Q4", "2023Q1", "2023Q2"],
+  actionsApplied: 1,
+  actionsWithheld: 0,
+  ratios: [
+    { name: "epsTtm", value: 4573.37, absent: null },
+    { name: "priceToEarnings", value: null, absent: "trailing loss; no earnings multiple" },
+  ],
+};
+
 const COVERAGE: InstrumentCoverage = {
   instrumentId: FPT.instrumentId,
   ticker: "FPT",
@@ -74,7 +90,16 @@ const COVERAGE: InstrumentCoverage = {
     note: "No corporate action is recorded for this instrument.",
   },
   universes: [],
-  fundamentals: { state: "NotCollected", note: "Phase 6" },
+  fundamentals: {
+    state: "NotCollected",
+    reports: 0,
+    withoutValues: 0,
+    firstPeriod: null,
+    lastPeriod: null,
+    lastDisclosedOn: null,
+    sources: [],
+    note: "IDS fails on every filing page (ADR-029, known gap)",
+  },
 };
 
 /**
@@ -107,6 +132,7 @@ function stubServices(overrides: Partial<ConsoleServices> = {}): ConsoleServices
       runs: [],
     })),
     coverage: vi.fn(async () => COVERAGE),
+    ratios: vi.fn(async () => RATIOS),
     health: vi.fn(async () => ({
       services: [],
       checkedAt: new Date("2026-09-05T00:00:00Z"),
@@ -388,6 +414,28 @@ describe("runEntry — QLTY and ING", () => {
     const record = (await runEntry("FPT ING", stubServices())).record;
 
     expect(record).toMatchObject({ kind: "ingestion", runs: [] });
+  });
+});
+
+describe("runEntry — FA", () => {
+  it("reads the point-in-time ratios of the resolved security on its latest session by default", async () => {
+    const services = stubServices();
+
+    const record = (await runEntry("FPT FA", services)).record;
+
+    expect(record).toEqual({ kind: "fundamentals", instrument: FPT, ratios: RATIOS });
+    expect(services.ratios).toHaveBeenCalledWith(FPT.instrumentId, undefined, undefined);
+  });
+
+  it("prices them on a named session, and refuses a date that is not one", async () => {
+    const services = stubServices();
+
+    await runEntry("FPT FA --on 2023-08-01", services);
+    const refused = (await runEntry("FPT FA --on 2023-02-31", services)).record;
+
+    expect(services.ratios).toHaveBeenCalledWith(FPT.instrumentId, "2023-08-01", undefined);
+    expect(services.ratios).toHaveBeenCalledTimes(1);
+    expect(refused.kind).toBe("error");
   });
 });
 

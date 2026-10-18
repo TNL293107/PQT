@@ -164,7 +164,17 @@ internal static class CoverageReport
             Add(rows, $"Universe {universe.Code}", universe.State, SpellExtent(universe), SpellDetail(universe), universe.Note);
         }
 
-        Add(rows, "Fundamentals", coverage.Fundamentals.State, string.Empty, coverage.Fundamentals.Note, note: null);
+        var fundamentals = coverage.Fundamentals;
+
+        Add(
+            rows,
+            "Fundamentals",
+            fundamentals.State,
+            fundamentals.FirstPeriod is { } first && fundamentals.LastPeriod is { } last ? $"{first} → {last}" : string.Empty,
+            fundamentals.State == CoverageState.Held
+                ? $"{fundamentals.Reports.ToString(CultureInfo.InvariantCulture)} reports, last disclosed {fundamentals.LastDisclosedOn:yyyy-MM-dd}"
+                : fundamentals.Note ?? string.Empty,
+            fundamentals.State == CoverageState.Held ? fundamentals.Note : null);
 
         output.Table(["DATASET", "STATE", "EXTENT", "DETAIL"], rows);
         output.Blank();

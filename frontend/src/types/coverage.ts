@@ -87,10 +87,21 @@ export interface UniverseCoverage {
   readonly note: string;
 }
 
-/** A dataset reported by state alone. */
-export interface DatasetCoverage {
+/**
+ * The financial reports recorded against the instrument (ADR-029). Reports
+ * are counted, not rows; a report disclosed with an empty form is counted
+ * apart, because PQT knows that period was published and holds no values.
+ */
+export interface FundamentalsCoverage {
   readonly state: CoverageState;
-  readonly note: string;
+  readonly reports: number;
+  readonly withoutValues: number;
+  /** The earliest quarter a report closes on, such as `2021Q4`. */
+  readonly firstPeriod: string | null;
+  readonly lastPeriod: string | null;
+  readonly lastDisclosedOn: string | null;
+  readonly sources: readonly string[];
+  readonly note: string | null;
 }
 
 /** What PQT holds for one instrument, dataset by dataset. */
@@ -102,5 +113,5 @@ export interface InstrumentCoverage {
   readonly prices: readonly PriceCoverage[];
   readonly corporateActions: CorporateActionCoverage;
   readonly universes: readonly UniverseCoverage[];
-  readonly fundamentals: DatasetCoverage;
+  readonly fundamentals: FundamentalsCoverage;
 }

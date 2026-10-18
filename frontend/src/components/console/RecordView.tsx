@@ -5,6 +5,7 @@ import type { ConsoleRecord } from "../../lib/console/records";
 import { PriceChart } from "./PriceChart";
 import { BreadthView, UniversesView } from "./BreadthView";
 import { CoverageView } from "./CoverageView";
+import { FundamentalsView } from "./FundamentalsView";
 import { WatchlistView, WatchlistsView, WorkspaceView, WorkspacesView } from "./OperatorStateView";
 
 /** Renders whatever a command produced. */
@@ -78,6 +79,9 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
 
     case "coverage":
       return <CoverageView coverage={record.coverage} />;
+
+    case "fundamentals":
+      return <FundamentalsView ratios={record.ratios} />;
 
     case "watchlists":
       return <WatchlistsView listing={record.listing} />;

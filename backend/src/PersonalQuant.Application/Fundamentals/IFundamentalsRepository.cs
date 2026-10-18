@@ -48,6 +48,12 @@ public interface IFundamentalsRepository
         IReadOnlyCollection<FinancialReportId> reportIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Summarises the reports recorded for one instrument, for the coverage registry.</summary>
+    /// <param name="instrumentId">The instrument.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The summary; zero reports when none is recorded.</returns>
+    Task<FundamentalsSummary> SummariseAsync(InstrumentId instrumentId, CancellationToken cancellationToken = default);
+
     /// <summary>Gets whether a filing's payload with this checksum is already retained.</summary>
     /// <param name="source">The source.</param>
     /// <param name="sourceReference">The source's key for the filing.</param>
@@ -72,3 +78,18 @@ public interface IFundamentalsRepository
     /// <param name="line">The line.</param>
     void Add(StatementLine line);
 }
+
+/// <summary>What is recorded for one instrument's fundamentals.</summary>
+/// <param name="Reports">Reports recorded.</param>
+/// <param name="WithoutValues">Of those, reports disclosed with an empty form.</param>
+/// <param name="FirstPeriod">The earliest quarter a report closes on, when any.</param>
+/// <param name="LastPeriod">The latest quarter a report closes on, when any.</param>
+/// <param name="LastDisclosedOn">The latest disclosure date, when any.</param>
+/// <param name="Sources">The sources reports came from, ordered.</param>
+public sealed record FundamentalsSummary(
+    int Reports,
+    int WithoutValues,
+    FiscalQuarter? FirstPeriod,
+    FiscalQuarter? LastPeriod,
+    DateOnly? LastDisclosedOn,
+    IReadOnlyList<SourceCode> Sources);

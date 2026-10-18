@@ -316,14 +316,33 @@ public sealed class InstrumentCoverageServiceTests
     }
 
     [Fact]
-    public async Task Fundamentals_are_not_collected_until_phase_6()
+    public async Task An_issuer_with_no_report_is_not_held_and_one_with_reports_is_held_by_period()
     {
         var harness = new Harness();
 
-        var coverage = await harness.DescribeAsync(harness.Instrument);
+        var empty = await harness.DescribeAsync(harness.Instrument);
 
-        Assert.Equal(CoverageState.NotCollected, coverage!.Fundamentals.State);
-        Assert.Equal("Phase 6", coverage.Fundamentals.Note);
+        harness.Fundamentals.Add(PersonalQuant.Domain.Fundamentals.FinancialReport.Record(
+            harness.Instrument,
+            SourceCode.Create("IDS"),
+            "ids-1",
+            PersonalQuant.Domain.Fundamentals.FinancialReportKind.Quarterly,
+            PersonalQuant.Domain.Fundamentals.FinancialStatementScope.Consolidated,
+            PersonalQuant.Domain.Fundamentals.FinancialTemplate.NonFinancialCircular99,
+            PersonalQuant.Domain.Fundamentals.FiscalQuarter.Create(2026, 1),
+            "BCTC",
+            new DateOnly(2026, 4, 24),
+            null,
+            TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"),
+            isCorrection: false,
+            valuesFiled: false,
+            new DateTimeOffset(2026, 10, 18, 0, 0, 0, TimeSpan.Zero)));
+
+        var held = await harness.DescribeAsync(harness.Instrument);
+
+        Assert.Equal((CoverageState.NotHeld, "no report recorded"), (empty!.Fundamentals.State, empty.Fundamentals.Note));
+        Assert.Equal((CoverageState.Held, 1, 1), (held!.Fundamentals.State, held.Fundamentals.Reports, held.Fundamentals.WithoutValues));
+        Assert.Equal("1 disclosed without values", held.Fundamentals.Note);
     }
 
     [Fact]
@@ -391,8 +410,11 @@ public sealed class InstrumentCoverageServiceTests
                 new TradingCalendar(Venues),
                 Store,
                 Universes,
-                new MarketDataProviderRegistry([provider]));
+                new MarketDataProviderRegistry([provider]),
+                Fundamentals);
         }
+
+        public PersonalQuant.UnitTests.Fundamentals.InMemoryFundamentals Fundamentals { get; } = new();
 
         public InMemoryInstrumentMaster Master { get; } = new();
 

@@ -71,6 +71,7 @@ app.MapWatchlistEndpoints();
 app.MapWorkspaceEndpoints();
 app.MapUniverseEndpoints();
 app.MapCoverageEndpoints();
+app.MapFundamentalsEndpoints();
 
 await app.RunAsync();
 

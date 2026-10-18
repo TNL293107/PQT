@@ -85,8 +85,9 @@ public sealed class CoverageEndpointTests(DependencyContainerFixture containers)
         Assert.All(coverage.Prices.Skip(1), price => Assert.Equal("NotCollected", price.State));
 
         Assert.Equal("NotHeld", coverage.CorporateActions.State);
-        Assert.Equal("NotCollected", coverage.Fundamentals.State);
-        Assert.Equal("Phase 6", coverage.Fundamentals.Note);
+        Assert.Equal("NotHeld", coverage.Fundamentals.State);
+        Assert.Equal(0, coverage.Fundamentals.Reports);
+        Assert.Equal("no report recorded", coverage.Fundamentals.Note);
     }
 
     [Fact]

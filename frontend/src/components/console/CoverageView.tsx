@@ -1,6 +1,7 @@
 import type {
   CorporateActionCoverage,
   CoverageState,
+  FundamentalsCoverage,
   InstrumentCoverage,
   PriceCoverage,
   UniverseCoverage,
@@ -37,14 +38,7 @@ export function CoverageView({ coverage }: { readonly coverage: InstrumentCovera
     ...coverage.prices.map(priceRow),
     actionRow(coverage.corporateActions),
     ...coverage.universes.map(universeRow),
-    {
-      key: "fundamentals",
-      dataset: "Fundamentals",
-      state: coverage.fundamentals.state,
-      extent: "",
-      detail: coverage.fundamentals.note,
-      note: null,
-    },
+    fundamentalsRow(coverage.fundamentals),
   ];
 
   return (
@@ -172,6 +166,31 @@ function actionRow(actions: CorporateActionCoverage): Row {
     extent: span(actions.firstExDate, actions.lastExDate),
     detail: facts.join(" · "),
     note: actions.note,
+  };
+}
+
+function fundamentalsRow(fundamentals: FundamentalsCoverage): Row {
+  const held = fundamentals.state === "Held";
+  const detail = held
+    ? [
+        `${count(fundamentals.reports)} report${fundamentals.reports === 1 ? "" : "s"}`,
+        fundamentals.lastDisclosedOn ? `last disclosed ${fundamentals.lastDisclosedOn}` : "",
+        fundamentals.sources.join(", "),
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : (fundamentals.note ?? "");
+
+  return {
+    key: "fundamentals",
+    dataset: "Fundamentals",
+    state: fundamentals.state,
+    extent:
+      fundamentals.firstPeriod && fundamentals.lastPeriod
+        ? `${fundamentals.firstPeriod} → ${fundamentals.lastPeriod}`
+        : "",
+    detail,
+    note: held ? fundamentals.note : null,
   };
 }
 

@@ -38,7 +38,8 @@ internal sealed class InstrumentCoverageService(
     ITradingCalendar calendar,
     ICoverageRepository coverage,
     IUniverseRepository universes,
-    IMarketDataProviderRegistry providers) : IInstrumentCoverageService
+    IMarketDataProviderRegistry providers,
+    Fundamentals.IFundamentalsRepository fundamentals) : IInstrumentCoverageService
 {
     /// <summary>
     /// The resolutions reported, daily first and then from coarse to fine.
@@ -58,8 +59,24 @@ internal sealed class InstrumentCoverageService(
         BarInterval.OneMinute,
     ];
 
-    /// <summary>Why fundamentals are not held.</summary>
-    internal const string FundamentalsReason = "Phase 6";
+    /// <summary>
+    /// Names the first fundamentals import leaves out, and why (ADR-029).
+    /// </summary>
+    /// <remarks>
+    /// Their coverage is <see cref="CoverageState.NotCollected"/> with the
+    /// reason, never <see cref="CoverageState.NotHeld"/>: PQT did not look,
+    /// or could not, which is a different fact from having looked and found
+    /// nothing.
+    /// </remarks>
+    internal static readonly IReadOnlyDictionary<string, string> FundamentalsNotCollected =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["SSI"] = "securities firm, outside the first import (ADR-029)",
+            ["TCX"] = "securities firm, outside the first import (ADR-029)",
+            ["BVH"] = "insurer, outside the first import (ADR-029)",
+            ["STB"] = "IDS fails on every filing page (ADR-029, known gap)",
+            ["GVR"] = "IDS fails on every filing page (ADR-029, known gap)",
+        };
 
     /// <inheritdoc />
     public async Task<InstrumentCoverage?> DescribeAsync(
@@ -106,7 +123,39 @@ internal sealed class InstrumentCoverageService(
             prices,
             DescribeCorporateActions(actions),
             memberships,
-            new DatasetCoverage(CoverageState.NotCollected, FundamentalsReason));
+            DescribeFundamentals(
+                instrument.Ticker,
+                await fundamentals.SummariseAsync(instrumentId, cancellationToken).ConfigureAwait(false)));
+    }
+
+    /// <summary>
+    /// Decides the state of the fundamentals dataset (sprint 7.2).
+    /// </summary>
+    /// <remarks>
+    /// Reports and periods are counted, not rows: a report is a disclosure,
+    /// and a report disclosed with an empty form is counted apart, because it
+    /// is a period PQT knows was published and holds no values for.
+    /// </remarks>
+    private static FundamentalsCoverage DescribeFundamentals(Ticker ticker, Fundamentals.FundamentalsSummary summary)
+    {
+        if (summary.Reports > 0)
+        {
+            return new FundamentalsCoverage(
+                CoverageState.Held,
+                summary.Reports,
+                summary.WithoutValues,
+                summary.FirstPeriod,
+                summary.LastPeriod,
+                summary.LastDisclosedOn,
+                summary.Sources,
+                summary.WithoutValues > 0
+                    ? $"{summary.WithoutValues.ToString(CultureInfo.InvariantCulture)} disclosed without values"
+                    : null);
+        }
+
+        return FundamentalsNotCollected.TryGetValue(ticker.Value, out var reason)
+            ? new FundamentalsCoverage(CoverageState.NotCollected, 0, 0, null, null, null, [], reason)
+            : new FundamentalsCoverage(CoverageState.NotHeld, 0, 0, null, null, null, [], "no report recorded");
     }
 
     /// <summary>

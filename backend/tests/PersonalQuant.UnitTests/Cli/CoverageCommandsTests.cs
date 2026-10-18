@@ -85,7 +85,8 @@ public sealed class CoverageCommandsTests
         Assert.Contains("VNX", daily, StringComparison.Ordinal);
         Assert.Contains("1 open finding", daily, StringComparison.Ordinal);
         Assert.Contains("last attempt 2026-08-29 VNX Succeeded", daily, StringComparison.Ordinal);
-        Assert.Contains("Phase 6", Line(harness.Result, "Fundamentals"), StringComparison.Ordinal);
+        Assert.Contains("2021Q4 → 2025Q3", Line(harness.Result, "Fundamentals"), StringComparison.Ordinal);
+        Assert.Contains("24 reports, last disclosed 2025-10-23", Line(harness.Result, "Fundamentals"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -221,7 +222,15 @@ public sealed class CoverageCommandsTests
                     [],
                     "VNMID declares no coverage, so the absence of a spell says nothing about membership."),
             ],
-            new DatasetCoverage(CoverageState.NotCollected, "Phase 6"));
+            new FundamentalsCoverage(
+                CoverageState.Held,
+                24,
+                0,
+                PersonalQuant.Domain.Fundamentals.FiscalQuarter.Create(2021, 4),
+                PersonalQuant.Domain.Fundamentals.FiscalQuarter.Create(2025, 3),
+                new DateOnly(2025, 10, 23),
+                [SourceCode.Create("IDS")],
+                null));
     }
 
     /// <summary>Answers with whatever coverage a test declared, keyed by instrument.</summary>

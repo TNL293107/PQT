@@ -84,6 +84,32 @@ internal sealed class FundamentalsRepository(PersonalQuantDbContext dbContext) :
     }
 
     /// <inheritdoc />
+    public async Task<FundamentalsSummary> SummariseAsync(InstrumentId instrumentId, CancellationToken cancellationToken = default)
+    {
+        // A few hundred rows at most per issuer; read the columns and fold here
+        // rather than teach EF to group over a complex property.
+        var reports = await dbContext.FinancialReports
+            .AsNoTracking()
+            .Where(report => report.InstrumentId == instrumentId)
+            .Select(report => new { report.Period, report.ValuesFiled, report.DisclosedOn, report.Source })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (reports.Count == 0)
+        {
+            return new FundamentalsSummary(0, 0, null, null, null, []);
+        }
+
+        return new FundamentalsSummary(
+            reports.Count,
+            reports.Count(report => !report.ValuesFiled),
+            reports.Min(report => report.Period),
+            reports.Max(report => report.Period),
+            reports.Max(report => report.DisclosedOn),
+            [.. reports.Select(report => report.Source).Distinct().OrderBy(source => source.Value, StringComparer.Ordinal)]);
+    }
+
+    /// <inheritdoc />
     public Task<bool> HoldsPayloadAsync(
         SourceCode source,
         string sourceReference,

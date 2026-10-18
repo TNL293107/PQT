@@ -8,6 +8,7 @@ import {
   fetchQuality,
   fetchQualityIssues,
 } from "../api/marketData";
+import { fetchRatios } from "../api/fundamentals";
 import { fetchBreadth, fetchUniverses, UniverseApiError } from "../api/universes";
 import { parseEntry, readCount } from "./entry";
 import { liveOperatorServices, runKey, runWatchlist, runWorkspace, type OperatorServices } from "./operator";
@@ -25,6 +26,7 @@ export interface ConsoleServices {
   readonly issues: typeof fetchQualityIssues;
   readonly ingestion: typeof fetchIngestionHistory;
   readonly coverage: typeof fetchCoverage;
+  readonly ratios: typeof fetchRatios;
   readonly health: typeof fetchSystemHealth;
   readonly universes: typeof fetchUniverses;
   readonly breadth: typeof fetchBreadth;
@@ -42,6 +44,7 @@ export const liveServices: ConsoleServices = {
   issues: fetchQualityIssues,
   ingestion: fetchIngestionHistory,
   coverage: fetchCoverage,
+  ratios: fetchRatios,
   health: fetchSystemHealth,
   universes: fetchUniverses,
   breadth: fetchBreadth,
@@ -154,6 +157,9 @@ export async function runEntry(
 
       case "COV":
         return { record: await coverage(instrument, services, signal) };
+
+      case "FA":
+        return { record: await fundamentals(instrument, entry.options, services, signal) };
 
       default:
         return { record: { kind: "description", instrument } };
@@ -437,6 +443,27 @@ async function ingestion(
  * answer was decided by the server, which the operator CLI calls too, so the
  * console cannot come to a different verdict about what is missing.
  */
+/**
+ * `FA` — an issuer's point-in-time ratios (ADR-030). Without `--on` the server
+ * prices them on the latest session it holds a close for.
+ */
+async function fundamentals(
+  instrument: Instrument,
+  options: Readonly<Record<string, string | null>>,
+  services: ConsoleServices,
+  signal?: AbortSignal,
+): Promise<ConsoleRecord> {
+  const on = readDay(options, "on");
+
+  if ("record" in on) {
+    return on.record;
+  }
+
+  const ratios = await services.ratios(instrument.instrumentId, on.day ?? undefined, signal);
+
+  return { kind: "fundamentals", instrument, ratios };
+}
+
 async function coverage(
   instrument: Instrument,
   services: ConsoleServices,

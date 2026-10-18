@@ -1,4 +1,8 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using PersonalQuant.Api.Contracts;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Exchanges;
 using PersonalQuant.Application.Fundamentals;
@@ -145,6 +149,37 @@ public sealed class FundamentalsPersistenceTests(DependencyContainerFixture cont
         Assert.Equal((110m, true), (Assert.Single(august.Values).Value, august.Values[0].Restated));
     }
 
+    [Fact]
+    public async Task The_fundamentals_endpoint_serves_the_as_of_read_and_refuses_a_bad_date()
+    {
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var scope = await CreateScopeAsync();
+        var instrument = await ArrangeAsync(scope, "FRG");
+        var original = Report(instrument, $"ids-{Guid.NewGuid():N}");
+        var restating = Report(instrument, $"ids-{Guid.NewGuid():N}", FiscalQuarter.Create(2022, 2), new DateOnly(2022, 7, 22));
+        scope.Fundamentals.Add(original);
+        scope.Fundamentals.Add(restating);
+        scope.Fundamentals.Add(Line(original, FinancialStatement.IncomeStatement, "10", Q1, PeriodSpan.Quarter, 100m));
+        scope.Fundamentals.Add(Line(restating, FinancialStatement.IncomeStatement, "10", Q1, PeriodSpan.Quarter, 110m));
+        await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        using var client = scope.CreateClient();
+        var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        var may = await client.GetFromJsonAsync<FundamentalsAsOfResponse>(
+            new Uri($"/instruments/{instrument.Value}/fundamentals?knownAsOf=2022-05-01", UriKind.Relative),
+            json,
+            TestContext.Current.CancellationToken);
+        var bad = await client.GetAsync(
+            new Uri($"/instruments/{instrument.Value}/fundamentals?knownAsOf=May-2022", UriKind.Relative),
+            TestContext.Current.CancellationToken);
+
+        var value = Assert.Single(may!.Values);
+        Assert.Equal((100m, "2022Q1", "Quarter", false, 1), (value.Value, value.Period, value.Span, value.Restated, may.ReportsWithheld));
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+    }
+
     private static FinancialReport Report(
         InstrumentId instrument,
         string reference,
@@ -247,6 +282,8 @@ public sealed class FundamentalsPersistenceTests(DependencyContainerFixture cont
         public IFundamentalsRepository Fundamentals { get; }
 
         public IFundamentalsReader Reader { get; }
+
+        public HttpClient CreateClient() => _factory.CreateClient();
 
         public async ValueTask DisposeAsync()
         {

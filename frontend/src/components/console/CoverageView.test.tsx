@@ -99,7 +99,16 @@ const COVERAGE: InstrumentCoverage = {
       note: "VNMID declares no coverage, so the absence of a spell says nothing about membership.",
     },
   ],
-  fundamentals: { state: "NotCollected", note: "Phase 6" },
+  fundamentals: {
+    state: "NotCollected",
+    reports: 0,
+    withoutValues: 0,
+    firstPeriod: null,
+    lastPeriod: null,
+    lastDisclosedOn: null,
+    sources: [],
+    note: "IDS fails on every filing page (ADR-029, known gap)",
+  },
 };
 
 function renderCoverage(coverage: InstrumentCoverage = COVERAGE) {
@@ -185,7 +194,27 @@ describe("CoverageView", () => {
     renderCoverage();
 
     expect(row("Price 5m")).toHaveTextContent("No registered source serves 5m bars");
-    expect(row("Fundamentals")).toHaveTextContent("Phase 6");
+    expect(row("Fundamentals")).toHaveTextContent("known gap");
+  });
+
+  it("counts the fundamentals reports held and says how many came without values", () => {
+    renderCoverage({
+      ...COVERAGE,
+      fundamentals: {
+        state: "Held",
+        reports: 24,
+        withoutValues: 2,
+        firstPeriod: "2021Q4",
+        lastPeriod: "2026Q2",
+        lastDisclosedOn: "2026-08-21",
+        sources: ["IDS"],
+        note: "2 disclosed without values",
+      },
+    });
+
+    expect(row("Fundamentals")).toHaveTextContent("2021Q4 → 2026Q2");
+    expect(row("Fundamentals")).toHaveTextContent("24 reports · last disclosed 2026-08-21 · IDS");
+    expect(row("Fundamentals")).toHaveTextContent("2 disclosed without values");
   });
 
   it("shows a membership spell that is still running as running to now", () => {

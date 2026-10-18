@@ -91,7 +91,7 @@ watchlists and workspaces, behind an operator key
 data still changes only through the CLI and the host's scheduled ingestion,
 until authentication arrives in Phase 19.
 
-## Current work — sprint 6, point-in-time fundamentals
+## Current work — sprints 6 and 7, point-in-time fundamentals
 
 **Phase 6 — in progress.** Its source is settled in
 [ADR-029](docs/architecture/decisions/ADR-029-fundamentals-source.md). The
@@ -105,7 +105,16 @@ first import is 33 VN30 names; securities firms and insurers wait.
 | 6.2 | Domain model: reports with `known_from_utc`, statement lines with an append-only reading history | ✅ `financial_reports`, `statement_lines` |
 | 6.3 | Provider and import pipeline: IDS collector, normaliser, `pqt fundamentals import` | ✅ FPT 2022: 12 reports, 3,728 lines, idempotent on re-read |
 | 6.4 | As-of read: `IFundamentalsReader`, `pqt fundamentals as-of` | ✅ a later filing and a later restatement are absent; FPT FY2021 read live before and after its audit |
-| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ⏸ paused: 554 filings collected (13 names), 456 reports imported before the last pass; STB and GVR fail on IDS (Error 500) and are recorded as a known gap in ADR-029 |
+| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ⏳ resumed 2026-10-18 for the 20 names not yet collected; STB and GVR are a known IDS gap (ADR-029) |
+
+Sprint 7 started on the operator's instruction while 6.5 collects:
+
+| # | Item | State |
+| --- | --- | --- |
+| 7.1 | Point-in-time ratios ([ADR-030](docs/architecture/decisions/ADR-030-point-in-time-ratios.md)): EPS (TTM), P/E, P/B, ROE, dividend yield on an action-adjusted share count | ✅ `pqt fundamentals ratios`; FPT on 2023-08-01: P/E 18.5, P/B 4.4 |
+| 7.2 | Surfaces: console `FA`, `GET /instruments/{id}/ratios` and `/fundamentals`, coverage registry Fundamentals row measured | ✅ |
+| 7.3 | Dataset contract: fundamentals as of each session (manifest v4) | next |
+| 7.4 | Phase 6 definition of done | |
 
 **Sprint 5 — data reach, complete.**
 

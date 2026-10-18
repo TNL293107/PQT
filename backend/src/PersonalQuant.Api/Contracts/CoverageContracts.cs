@@ -26,7 +26,7 @@ namespace PersonalQuant.Api.Contracts;
 /// <param name="Prices">One entry per resolution, daily first.</param>
 /// <param name="CorporateActions">The corporate actions recorded.</param>
 /// <param name="Universes">Every universe PQT defines, ordered by code.</param>
-/// <param name="Fundamentals">Fundamentals, not collected until Phase 6.</param>
+/// <param name="Fundamentals">The financial reports recorded (ADR-029).</param>
 public sealed record InstrumentCoverageResponse(
     Guid InstrumentId,
     string Ticker,
@@ -35,7 +35,7 @@ public sealed record InstrumentCoverageResponse(
     IReadOnlyList<PriceCoverageResponse> Prices,
     CorporateActionCoverageResponse CorporateActions,
     IReadOnlyList<UniverseCoverageResponse> Universes,
-    DatasetCoverageResponse Fundamentals)
+    FundamentalsCoverageResponse Fundamentals)
 {
     /// <summary>Projects the application answer onto the wire contract.</summary>
     /// <param name="coverage">The answer.</param>
@@ -52,8 +52,7 @@ public sealed record InstrumentCoverageResponse(
             [.. coverage.Prices.Select(PriceCoverageResponse.From)],
             CorporateActionCoverageResponse.From(coverage.CorporateActions),
             [.. coverage.Universes.Select(UniverseCoverageResponse.From)],
-            new DatasetCoverageResponse(
-                coverage.Fundamentals.State.ToString(), coverage.Fundamentals.Note));
+            FundamentalsCoverageResponse.From(coverage.Fundamentals));
     }
 }
 
@@ -231,3 +230,41 @@ public sealed record UniverseSpellResponse(
 /// <param name="State">The coverage state.</param>
 /// <param name="Note">Why.</param>
 public sealed record DatasetCoverageResponse(string State, string Note);
+
+/// <summary>The financial reports recorded against an instrument.</summary>
+/// <param name="State">Held, NotHeld or NotCollected.</param>
+/// <param name="Reports">Reports recorded.</param>
+/// <param name="WithoutValues">Of those, disclosed with an empty form.</param>
+/// <param name="FirstPeriod">The earliest quarter a report closes on, such as <c>2021Q4</c>.</param>
+/// <param name="LastPeriod">The latest quarter a report closes on.</param>
+/// <param name="LastDisclosedOn">The latest disclosure date.</param>
+/// <param name="Sources">The disclosure sources.</param>
+/// <param name="Note">Why a figure is absent or a state was reached.</param>
+public sealed record FundamentalsCoverageResponse(
+    string State,
+    int Reports,
+    int WithoutValues,
+    string? FirstPeriod,
+    string? LastPeriod,
+    DateOnly? LastDisclosedOn,
+    IReadOnlyList<string> Sources,
+    string? Note)
+{
+    /// <summary>Projects the application answer onto the wire contract.</summary>
+    /// <param name="coverage">The answer.</param>
+    /// <returns>The response representation.</returns>
+    public static FundamentalsCoverageResponse From(FundamentalsCoverage coverage)
+    {
+        ArgumentNullException.ThrowIfNull(coverage);
+
+        return new FundamentalsCoverageResponse(
+            coverage.State.ToString(),
+            coverage.Reports,
+            coverage.WithoutValues,
+            coverage.FirstPeriod?.ToString(),
+            coverage.LastPeriod?.ToString(),
+            coverage.LastDisclosedOn,
+            [.. coverage.Sources.Select(source => source.Value)],
+            coverage.Note);
+    }
+}

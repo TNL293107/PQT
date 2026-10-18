@@ -40,6 +40,21 @@ internal sealed class InMemoryFundamentals : IFundamentalsRepository
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<StatementLine>>([.. Lines.Where(line => reportIds.Contains(line.ReportId))]);
 
+    public Task<FundamentalsSummary> SummariseAsync(InstrumentId instrumentId, CancellationToken cancellationToken = default)
+    {
+        var held = Reports.Where(report => report.InstrumentId == instrumentId).ToList();
+
+        return Task.FromResult(held.Count == 0
+            ? new FundamentalsSummary(0, 0, null, null, null, [])
+            : new FundamentalsSummary(
+                held.Count,
+                held.Count(report => !report.ValuesFiled),
+                held.Min(report => report.Period),
+                held.Max(report => report.Period),
+                held.Max(report => report.DisclosedOn),
+                [.. held.Select(report => report.Source).Distinct()]));
+    }
+
     public Task<bool> HoldsPayloadAsync(
         SourceCode source,
         string sourceReference,

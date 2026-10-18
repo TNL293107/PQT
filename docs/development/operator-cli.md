@@ -599,6 +599,27 @@ it:
 - `--scope` defaults to consolidated and `--statement` to income. Separate
   and consolidated are never mixed.
 
+`ratios` prints the point-in-time ratios of
+[ADR-030](../architecture/decisions/ADR-030-point-in-time-ratios.md) for a
+session, as known before the session opened:
+
+```bash
+pqt fundamentals ratios FPT --on 2023-08-01
+```
+
+The ratios are EPS and net profit over the trailing four quarters, book
+value per share, P/E, P/B, ROE and dividend yield.
+
+- **Shares** are the latest balance sheet's charter capital at the ₫10,000
+  par, multiplied by the share factor of each action that went ex since then
+  and was announced by the session.
+- **An absent ratio** prints its reason and never a zero. The reason may be
+  a quarter not known yet, a trailing loss, or no close on the session.
+
+The console's `FPT FA [--on yyyy-MM-dd]` reads the same, through
+`GET /instruments/{id}/ratios`. `GET /instruments/{id}/fundamentals?knownAsOf=`
+serves the statement values behind them.
+
 ## Exit codes
 
 | Code | Meaning |

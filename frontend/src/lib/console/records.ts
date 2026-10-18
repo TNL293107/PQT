@@ -9,6 +9,7 @@ import type { SystemHealth } from "../../types/health";
 import type { ChartStyle } from "../chart/series";
 import type { Breadth, UniverseList } from "../../types/universe";
 import type { InstrumentCoverage } from "../../types/coverage";
+import type { FundamentalRatios } from "../../types/fundamentals";
 import type { Watchlist, WatchlistList, WatchlistQuotes } from "../../types/watchlist";
 import type { Workspace, WorkspaceList } from "../../types/workspace";
 
@@ -59,6 +60,11 @@ export type ConsoleRecord =
       readonly kind: "coverage";
       readonly instrument: Instrument;
       readonly coverage: InstrumentCoverage;
+    }
+  | {
+      readonly kind: "fundamentals";
+      readonly instrument: Instrument;
+      readonly ratios: FundamentalRatios;
     }
   | { readonly kind: "watchlists"; readonly listing: WatchlistList }
   | {
