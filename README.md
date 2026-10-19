@@ -93,7 +93,7 @@ until authentication arrives in Phase 19.
 
 ## Current work — sprints 6 and 7, point-in-time fundamentals
 
-**Phase 6 — in progress.** Its source is settled in
+**Phase 6 — sprint 6 items complete 2026-10-19.** Its source is settled in
 [ADR-029](docs/architecture/decisions/ADR-029-fundamentals-source.md). The
 SSC's disclosure system (IDS) dates every filing and carries the issuer's own
 values for banks and, up to fiscal 2025, for non-financial companies. The
@@ -105,7 +105,7 @@ first import is 33 VN30 names; securities firms and insurers wait.
 | 6.2 | Domain model: reports with `known_from_utc`, statement lines with an append-only reading history | ✅ `financial_reports`, `statement_lines` |
 | 6.3 | Provider and import pipeline: IDS collector, normaliser, `pqt fundamentals import` | ✅ FPT 2022: 12 reports, 3,728 lines, idempotent on re-read |
 | 6.4 | As-of read: `IFundamentalsReader`, `pqt fundamentals as-of` | ✅ a later filing and a later restatement are absent; FPT FY2021 read live before and after its audit |
-| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ⏸ paused 2026-10-18 after the second batch: 913 filings, 902 reports (836 with values), 271,231 lines; next batch: VPB SAB (partial), BCM BSR DGC HPG MCH MSN VHM VIC VJC VNM VPL VRE, and FPT/SSB recaptures; STB and GVR are a known IDS gap (ADR-029) |
+| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ✅ 2026-10-19: 1,602 filings, 1,580 reports (1,433 with values), 456,079 lines; 22 refused and listed (LPB states no scope; issuers' wrong fiscal years); known IDS gaps: STB, GVR, and HPG's consolidated 2022Q2 and 2022 half year (ADR-029) |
 
 Sprint 7 work drafted ahead of the room's plan agreement; it is a proposal until the plan is agreed (operator, 2026-10-18):
 

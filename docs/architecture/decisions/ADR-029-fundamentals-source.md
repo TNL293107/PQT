@@ -442,6 +442,36 @@ open, to be fixed later:
 - or take those two names' disclosure dates from HOSE's timed listing and
   their values from the PDF or the `vendor` basis, under verification 3.
 
+## Result of the first import · 2026-10-19
+
+The 6.5 collection finished in three batches.
+
+- **Collected:** 1,602 filings from 31 names.
+- **Imported:** 1,580 reports, of which 1,433 have values, and 456,079
+  statement lines.
+- **Refused:** 22 filings, each listed with its reason; none was guessed.
+  - LPB, 11 filings: neither the name, the abstract nor the document says
+    whether the accounts are separate or consolidated.
+  - 11 filings with an implausible date, mostly issuers that entered the
+    wrong fiscal year on the form: ACB, BCM, HDB ×2, MWG, VCB, VHM ×2, VIC,
+    VPB ×2.
+
+**"Tổng hợp" is read as separate, but only as a last resort.** BCM files its
+parent-and-branches reports as *Tổng hợp* (combined). A combined report
+consolidates no subsidiary, so it is the separate statement (operator,
+2026-10-19). IDS also lists ACB's, HDB's, MBB's and SHB's consolidated
+reports under a *Tổng hợp* type, with *hợp nhất* only in the abstract. So
+the word decides the scope only when nothing in the name or the abstract
+says consolidated.
+
+**Known gap: HPG's consolidated 2022Q2 and 2022 half-year reports.** The
+search listed both filings, and both failed with "could not be found again"
+when the collector reopened them. A later run listed neither, so they were
+not retried. Only HPG's separate reports exist for those two periods. When
+this gap is fixed, the search should be retried with the filing date widened
+by a few days, because IDS records both a sent date and an indexed date. The
+gap is recorded with STB and GVR, to be fixed later.
+
 ## Consequences
 
 - **Sprint 6 item 6.2.** A fact has an instrument, a fiscal period, a statement
