@@ -14,13 +14,27 @@ public sealed class FilingClassifierTests
     [InlineData("Báo cáo tài chính Hợp nhất - Quý", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated)]
     [InlineData("Riêng - Quý", FinancialReportKind.Quarterly, FinancialStatementScope.Separate)]
     [InlineData("Báo cáo tài chính Mẹ - Quý", FinancialReportKind.Quarterly, FinancialStatementScope.Separate)]
-    [InlineData("hợp nhất quý 3/ năm 2022", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated)]
-    public void Quarterly_names_as_IDS_writes_them_are_read(string name, FinancialReportKind kind, FinancialStatementScope scope)
+    [InlineData("hợp nhất quý 3/ năm 2022", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated)]    public void Quarterly_names_as_IDS_writes_them_are_read(string name, FinancialReportKind kind, FinancialStatementScope scope)
     {
         var classified = FilingClassifier.Classify(Filings.Quarterly(name: name), out var rejection);
 
         Assert.Null(rejection);
         Assert.Equal((kind, scope, FiscalQuarter.Create(2022, 1)), (classified!.Kind, classified.Scope, classified.Period));
+    }
+
+    [Theory]
+    [InlineData("BCTC TỔNG HỢP QUÝ 3 NĂM 2025", FinancialStatementScope.Separate)]
+    [InlineData("Báo cáo tài chính hợp nhất quý 1 năm 2022", FinancialStatementScope.Consolidated)]
+    public void A_combined_report_is_separate_unless_it_says_consolidated(string summary, FinancialStatementScope scope)
+    {
+        // BCM files its combined reports as "Tổng hợp"; IDS also lists ACB's
+        // consolidated ones under that type, with the scope in the abstract.
+        var filing = Filings.Quarterly(name: "Báo cáo tài chính Tổng hợp - Quý") with { Summary = summary };
+
+        var classified = FilingClassifier.Classify(filing, out var rejection);
+
+        Assert.Null(rejection);
+        Assert.Equal(scope, classified!.Scope);
     }
 
     [Fact]

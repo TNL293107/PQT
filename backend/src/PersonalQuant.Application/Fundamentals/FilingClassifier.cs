@@ -75,7 +75,8 @@ internal static class FilingClassifier
         var scope = ScopeOf(name)
             ?? ScopeOf(Fold(filing.Summary))
             ?? ScopeOfAbbreviation(filing.Summary)
-            ?? ScopeOfDocument(filing.Document);
+            ?? ScopeOfDocument(filing.Document)
+            ?? ScopeOfCombined(text);
         var kind = KindOf(name) ?? KindOf(Fold(filing.Summary));
 
         if (scope is null || kind is null)
@@ -179,6 +180,18 @@ internal static class FilingClassifier
             (false, true) => FinancialStatementScope.Separate,
             _ => null,
         };
+    }
+
+    private static FinancialStatementScope? ScopeOfCombined(string text)
+    {
+        // A combined report (BCM: "BCTC TỔNG HỢP QUÝ 3 NĂM 2025") adds the
+        // parent's branches and dependent units and consolidates no
+        // subsidiary, so it is the separate statement. It is read last, and
+        // only when nothing says consolidated: IDS also files ACB's, HDB's,
+        // MBB's and SHB's consolidated reports under a "Tổng hợp" type.
+        return text.Contains("tổng hợp", StringComparison.Ordinal) && !text.Contains("hợp nhất", StringComparison.Ordinal)
+            ? FinancialStatementScope.Separate
+            : null;
     }
 
     private static FinancialStatementScope? ScopeOfAbbreviation(string? summary)
