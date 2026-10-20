@@ -38,6 +38,7 @@ public interface IFundamentalsImportService
 /// <param name="LinesRestated">Lines whose value changed since they were last read.</param>
 /// <param name="Late">Filings recorded after their deadline.</param>
 /// <param name="Rejections">Filings refused, with the reason.</param>
+/// <param name="Withheld">Filings recorded with their values withheld, because their form is another filing's.</param>
 public sealed record FundamentalsImportReport(
     SourceCode Provider,
     int FilingsRead,
@@ -47,7 +48,8 @@ public sealed record FundamentalsImportReport(
     int LinesRecorded,
     int LinesRestated,
     IReadOnlyList<LateFiling> Late,
-    IReadOnlyList<FilingRejection> Rejections);
+    IReadOnlyList<FilingRejection> Rejections,
+    IReadOnlyList<FilingRejection> Withheld);
 
 /// <summary>
 /// Records disclosed financial reports and the values they state (ADR-029,
@@ -109,6 +111,8 @@ public sealed class FundamentalsImportService(
 
         var run = new Run(source);
         var issuers = new Dictionary<string, Issuer?>(StringComparer.Ordinal);
+        var read = filings.ToDictionary(filing => filing, Read);
+        var withheld = SharedForms.Find(read);
 
         foreach (var filing in filings)
         {
@@ -129,7 +133,8 @@ public sealed class FundamentalsImportService(
                 continue;
             }
 
-            await ImportAsync(run, filing, issuer, cancellationToken).ConfigureAwait(false);
+            await ImportAsync(run, filing, read[filing], withheld.GetValueOrDefault(filing), issuer, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var report = new FundamentalsImportReport(
@@ -141,7 +146,8 @@ public sealed class FundamentalsImportService(
             run.LinesRecorded,
             run.LinesRestated,
             run.Late,
-            run.Rejections);
+            run.Rejections,
+            run.Withheld);
 
         ApplicationLog.FundamentalsImported(
             logger, source.Code.Value, report.FilingsRead, report.ReportsRecorded, report.ReportsWithoutValues,
@@ -155,27 +161,53 @@ public sealed class FundamentalsImportService(
         return report;
     }
 
-    private async Task ImportAsync(Run run, ProviderFiling filing, Issuer issuer, CancellationToken cancellationToken)
+    private static ReadFiling Read(ProviderFiling filing)
     {
         var classification = FilingClassifier.Classify(filing, out var refused);
 
         if (classification is null)
         {
-            run.Rejections.Add(refused!);
-            return;
+            return new ReadFiling(null, null, refused);
         }
 
         var normalised = StatementNormaliser.Normalise(filing, classification, out refused);
+        return new ReadFiling(classification, normalised, refused);
+    }
 
-        if (normalised is null)
+    private async Task ImportAsync(
+        Run run,
+        ProviderFiling filing,
+        ReadFiling read,
+        FilingRejection? withheld,
+        Issuer issuer,
+        CancellationToken cancellationToken)
+    {
+        if (read is not { Classification: { } classification, Normalised: { } normalised })
         {
-            run.Rejections.Add(refused!);
+            run.Rejections.Add(read.Refused!);
             return;
         }
 
         var now = clock.UtcNow;
         var existing = await fundamentals.FindReportAsync(run.Source.Code, filing.Reference, cancellationToken)
             .ConfigureAwait(false);
+
+        if (withheld is not null)
+        {
+            // Append-only: values recorded before the rule existed stay, and
+            // are reported for the operator to purge, never quietly kept.
+            if (existing is { ValuesFiled: true })
+            {
+                run.Rejections.Add(withheld with
+                {
+                    Detail = withheld.Detail + " It is already held with values; purge it and import again.",
+                });
+                return;
+            }
+
+            run.Withheld.Add(withheld);
+            normalised = normalised with { Values = [] };
+        }
 
         RawFundamentalsPayload raw;
 
@@ -356,11 +388,22 @@ public sealed class FundamentalsImportService(
 
     private sealed record Issuer(InstrumentId InstrumentId, TimeZoneInfo TimeZone);
 
+    /// <summary>A filing classified and normalised, or the reason it could not be.</summary>
+    /// <param name="Classification">What it is, or null when refused.</param>
+    /// <param name="Normalised">Its values, or null when refused.</param>
+    /// <param name="Refused">Why it was refused.</param>
+    internal sealed record ReadFiling(
+        FilingClassification? Classification,
+        NormalisedFiling? Normalised,
+        FilingRejection? Refused);
+
     private sealed class Run(IFundamentalsProvider source)
     {
         public IFundamentalsProvider Source { get; } = source;
 
         public List<FilingRejection> Rejections { get; } = [];
+
+        public List<FilingRejection> Withheld { get; } = [];
 
         public List<LateFiling> Late { get; } = [];
 

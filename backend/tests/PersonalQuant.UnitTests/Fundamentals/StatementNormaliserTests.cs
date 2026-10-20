@@ -144,6 +144,39 @@ public sealed class StatementNormaliserTests
             FilingRejectionReason.Unreadable,
             Refusal(Filings.Quarterly(tables: [Filings.Balance(("100", "5,000", "4,500"))])));
 
+    [Fact]
+    public void A_form_typed_in_millions_is_read_in_dong_and_its_earnings_per_share_as_typed()
+    {
+        // VPL's form: ₫17,933bn of capital typed as 17,933,004, and EPS in đồng.
+        var tables = new[]
+        {
+            Filings.Balance(("270", "76,896,069", "44,072,730"), ("440", "76,896,069", "44,072,730"), ("411a", "17,933,004", "15,041,382")),
+            new ProviderStatementTable("KQKD", Filings.IncomeColumns, [Filings.Row("60", "408,275", "", "", ""), Filings.Row("70", "145", "", "", "")]),
+        };
+
+        var normalised = Normalise(Filings.Quarterly(tables: tables));
+        var values = normalised.Values.ToDictionary(value => (value.Statement, value.LineCode, value.Period, value.Span), value => value.Value);
+
+        Assert.Equal(1_000_000m, normalised.Unit);
+        Assert.Equal(17_933_004_000_000m, values[(FinancialStatement.BalanceSheet, "411a", Q1, PeriodSpan.Instant)]);
+        Assert.Equal(408_275_000_000m, values[(FinancialStatement.IncomeStatement, "60", Q1, PeriodSpan.Quarter)]);
+        Assert.Equal(145m, values[(FinancialStatement.IncomeStatement, "70", Q1, PeriodSpan.Quarter)]);
+    }
+
+    [Fact]
+    public void A_form_typed_in_dong_is_left_as_typed()
+    {
+        var tables = new[] { Filings.Balance(("270", "5,000", "4,500"), ("440", "5,000", "4,500"), ("411a", "14,813,301,220,000", "")) };
+
+        Assert.Equal(1m, Normalise(Filings.Quarterly(tables: tables)).Unit);
+    }
+
+    [Fact]
+    public void Charter_capital_that_fits_no_unit_refuses_the_filing() =>
+        Assert.Equal(
+            FilingRejectionReason.UnknownUnit,
+            Refusal(Filings.Quarterly(tables: [Filings.Balance(("270", "5,000", "4,500"), ("440", "5,000", "4,500"), ("411a", "5,000", ""))])));
+
     private static NormalisedFiling Normalise(ProviderFiling filing)
     {
         var classification = FilingClassifier.Classify(filing, out _)!;

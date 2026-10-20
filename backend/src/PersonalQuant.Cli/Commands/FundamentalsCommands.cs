@@ -83,6 +83,23 @@ internal sealed class FundamentalsCommands(
         output.Field("lines restated", Count(report.LinesRestated), 22);
         output.Field("late", Count(report.Late.Count), 22);
         output.Field("refused", Count(report.Rejections.Count), 22);
+        output.Field(
+            "values withheld",
+            $"{Count(report.Withheld.Count(withheld => withheld.Reason == FilingRejectionReason.SharedForm))} sharing the consolidated form, "
+                + $"{Count(report.Withheld.Count(withheld => withheld.Reason == FilingRejectionReason.RepeatedForm))} repeating an earlier period's",
+            22);
+
+        // A shared form is the rule for every parent company, so only the
+        // repeated ones, which are each an issuer's error, are listed.
+        var repeated = report.Withheld.Where(withheld => withheld.Reason == FilingRejectionReason.RepeatedForm).ToList();
+
+        if (repeated.Count > 0)
+        {
+            output.Blank();
+            output.Table(
+                ["ticker", "filing", "withheld"],
+                [.. repeated.Select(withheld => (IReadOnlyList<string>)[withheld.Ticker, withheld.Reference, withheld.Detail])]);
+        }
 
         if (report.Late.Count > 0)
         {

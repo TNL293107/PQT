@@ -140,9 +140,72 @@ public sealed class FundamentalsImportServiceTests
     }
 
     [Fact]
+    public async Task A_separate_report_showing_the_consolidated_form_is_recorded_without_values()
+    {
+        // IDS shows one form per issuer and period, under both reports.
+        var harness = new Harness(
+            Filings.Quarterly(reference: "FPT-consolidated"),
+            Filings.Quarterly(reference: "FPT-separate", name: "Báo cáo tài chính Mẹ - Quý"));
+
+        var report = await harness.ImportAsync();
+
+        var separate = harness.Store.Reports.Single(recorded => recorded.SourceReference == "FPT-separate");
+        Assert.False(separate.ValuesFiled);
+        Assert.All(harness.Store.Lines, line => Assert.Equal("FPT-consolidated", Reference(harness, line)));
+        Assert.Equal(FilingRejectionReason.SharedForm, Assert.Single(report.Withheld).Reason);
+        Assert.Equal((1, 1), (report.ReportsRecorded, report.ReportsWithoutValues));
+    }
+
+    [Fact]
+    public async Task A_separate_report_with_its_own_form_keeps_its_values()
+    {
+        var harness = new Harness(
+            Filings.Quarterly(reference: "FPT-consolidated"),
+            Filings.Quarterly(reference: "FPT-separate", name: "Báo cáo tài chính Mẹ - Quý", tables: Filings.NonFinancialTables(revenue: "400")));
+
+        var report = await harness.ImportAsync();
+
+        Assert.Empty(report.Withheld);
+        Assert.All(harness.Store.Reports, recorded => Assert.True(recorded.ValuesFiled));
+    }
+
+    [Fact]
+    public async Task A_form_repeating_an_earlier_periods_values_is_recorded_without_them()
+    {
+        // DGC's 2022Q3 form repeats its 2022Q2 values, each column one quarter on.
+        var harness = new Harness(
+            Filings.Quarterly(quarter: 2, reference: "FPT-Q2"),
+            Filings.Quarterly(quarter: 3, reference: "FPT-Q3"));
+
+        var report = await harness.ImportAsync();
+
+        Assert.Equal(("FPT-Q3", FilingRejectionReason.RepeatedForm), (Assert.Single(report.Withheld).Reference, report.Withheld[0].Reason));
+        Assert.False(harness.Store.Reports.Single(recorded => recorded.SourceReference == "FPT-Q3").ValuesFiled);
+    }
+
+    [Fact]
+    public async Task A_separate_report_held_with_shared_values_from_before_is_reported_for_purging()
+    {
+        var harness = new Harness(Filings.Quarterly(reference: "FPT-separate", name: "Báo cáo tài chính Mẹ - Quý"));
+        await harness.ImportAsync();
+
+        harness.Supply(
+            Filings.Quarterly(reference: "FPT-consolidated"),
+            Filings.Quarterly(reference: "FPT-separate", name: "Báo cáo tài chính Mẹ - Quý"));
+        var again = await harness.ImportAsync();
+
+        var refused = Assert.Single(again.Rejections);
+        Assert.Equal(("FPT-separate", FilingRejectionReason.SharedForm), (refused.Reference, refused.Reason));
+        Assert.Contains("purge", refused.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_import_names_its_provider_and_reads_no_other() =>
         await Assert.ThrowsAsync<ArgumentException>(
             () => new Harness().Service.ImportAsync(SourceCode.Create("VCI"), [], TestContext.Current.CancellationToken));
+
+    private static string Reference(Harness harness, StatementLine line) =>
+        harness.Store.Reports.Single(report => report.Id == line.ReportId).SourceReference;
 
     private sealed class Harness
     {

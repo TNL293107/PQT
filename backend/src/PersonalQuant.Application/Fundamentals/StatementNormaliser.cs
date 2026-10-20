@@ -19,8 +19,9 @@ internal sealed record NormalisedValue(
 
 /// <summary>A filing's form and its values.</summary>
 /// <param name="Template">The form the values were filed on.</param>
-/// <param name="Values">The values; empty when the form was left empty.</param>
-internal sealed record NormalisedFiling(FinancialTemplate Template, IReadOnlyList<NormalisedValue> Values);
+/// <param name="Values">The values in đồng; empty when the form was left empty.</param>
+/// <param name="Unit">The đồng in one unit the issuer typed: 1, or 1,000,000 for a form typed in millions.</param>
+internal sealed record NormalisedFiling(FinancialTemplate Template, IReadOnlyList<NormalisedValue> Values, decimal Unit = 1m);
 
 /// <summary>
 /// Turns a filing's tables into values, each in its period and span.
@@ -43,9 +44,29 @@ internal sealed record NormalisedFiling(FinancialTemplate Template, IReadOnlyLis
 /// recorded, and a filing with nothing else is recorded without values
 /// (ADR-029, verification 4).
 /// </para>
+/// <para>
+/// The form has no unit field, and issuers type in the unit of their own
+/// statements: HDB, VIB and LPB in 2022, and VPL throughout, typed millions.
+/// The unit is read from charter capital, the one line whose size is known
+/// within limits, and every amount is turned into đồng. Earnings per share
+/// is typed in đồng by everyone and is left as typed.
+/// </para>
 /// </remarks>
 internal static class StatementNormaliser
 {
+    /// <summary>The least charter capital, in đồng, the unit check accepts.</summary>
+    /// <remarks>
+    /// ₫100bn. Every name in the first import has more than ₫1,000bn. A form
+    /// typed in millions then reads below ₫100m, and in thousands below
+    /// ₫100bn, so exactly one unit fits. A smaller issuer needs this widened
+    /// deliberately, with the thousands case thought through again.
+    /// </remarks>
+    internal const decimal MinimumCharterCapital = 100_000_000_000m;
+
+    /// <summary>The most charter capital, in đồng, the unit check accepts.</summary>
+    internal const decimal MaximumCharterCapital = 1_000_000_000_000_000m;
+
+    private static readonly decimal[] Units = [1m, 1_000m, 1_000_000m];
     private const NumberStyles CellStyle =
         NumberStyles.AllowLeadingSign | NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint
             | NumberStyles.AllowParentheses | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite;
@@ -157,9 +178,72 @@ internal static class StatementNormaliser
             return null;
         }
 
+        if (UnitOf(template.Value, values, classification.Period) is not { } unit)
+        {
+            rejection = new FilingRejection(
+                filing.Reference,
+                filing.Ticker,
+                FilingRejectionReason.UnknownUnit,
+                $"Charter capital is stated as {CharterCapital(template.Value, values, classification.Period)}, which is no "
+                    + "plausible amount in đồng, thousands or millions.");
+            return null;
+        }
+
         return new NormalisedFiling(
             template.Value,
-            [.. values.Select(pair => new NormalisedValue(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3, pair.Key.Item4, pair.Value))]);
+            [
+                .. values.Select(pair => new NormalisedValue(
+                    pair.Key.Item1,
+                    pair.Key.Item2,
+                    pair.Key.Item3,
+                    pair.Key.Item4,
+                    IsPerShare(template.Value, pair.Key.Item1, pair.Key.Item2) ? pair.Value : pair.Value * unit)),
+            ],
+            unit);
+    }
+
+    /// <summary>Whether a line is stated per share, in đồng whatever the form's unit.</summary>
+    /// <param name="template">The form.</param>
+    /// <param name="statement">The statement.</param>
+    /// <param name="code">The line code.</param>
+    /// <returns>True for basic and diluted earnings per share.</returns>
+    internal static bool IsPerShare(FinancialTemplate template, FinancialStatement statement, string code) =>
+        statement == FinancialStatement.IncomeStatement && template switch
+        {
+            FinancialTemplate.Bank => code == "23",
+            _ => code is "70" or "71",
+        };
+
+    private static decimal? UnitOf(
+        FinancialTemplate template,
+        Dictionary<(FinancialStatement, string, FiscalQuarter, PeriodSpan), decimal> values,
+        FiscalQuarter period)
+    {
+        // A form with no capital, an empty one above all, has nothing to scale
+        // or nothing to check it by, and is taken as typed.
+        if (CharterCapital(template, values, period) is not { } capital)
+        {
+            return 1m;
+        }
+
+        var fits = Units
+            .Where(unit => capital * unit is >= MinimumCharterCapital and <= MaximumCharterCapital)
+            .ToList();
+
+        return fits.Count == 1 ? fits[0] : null;
+    }
+
+    private static decimal? CharterCapital(
+        FinancialTemplate template,
+        Dictionary<(FinancialStatement, string, FiscalQuarter, PeriodSpan), decimal> values,
+        FiscalQuarter period)
+    {
+        decimal? Line(string code) =>
+            values.TryGetValue((FinancialStatement.BalanceSheet, code, period, PeriodSpan.Instant), out var value) && value > 0m
+                ? value
+                : null;
+
+        return template == FinancialTemplate.Bank ? Line("411") : Line("411a") ?? Line("411");
     }
 
     private static FinancialStatement StatementOf(string tab) => tab.Trim().ToUpperInvariant() switch

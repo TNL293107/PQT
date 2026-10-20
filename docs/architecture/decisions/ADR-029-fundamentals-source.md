@@ -472,6 +472,61 @@ this gap is fixed, the search should be retried with the filing date widened
 by a few days, because IDS records both a sent date and an indexed date. The
 gap is recorded with STB and GVR, to be fixed later.
 
+## Correction · 2026-10-20 · one form per issuer and period, and typed units
+
+Two facts found while checking the data for ADR-030, both wrong in the import
+above, corrected by sprint 7 item B0 and a full re-import.
+
+**IDS shows one data form per issuer and period, under every report of it.**
+A filing's name says separate or consolidated, but its form does not. FPT's
+separate report for 2025Q2 shows the consolidated revenue, and a line for
+profit to the parent that no separate statement has. This was checked by
+opening each filing in a fresh browser, so it is the portal, not the
+collector.
+
+- Of the 1,602 filings, 680 groups of two or more show one form.
+- In 604 of the groups, the filings were filed on one day. In 76, the separate
+  and consolidated filings came on different days.
+- In two groups, the form repeats an earlier period. DGC's 2022Q3 shows its
+  2022Q2 values, and MBB's 2023 annual shows its 2022 values. That explains
+  MBB's two charter-capital figures.
+
+The importer now records such a filing **without values**:
+- a separate report that shares the consolidated report's form, for the same
+  period (`SharedForm`);
+- any report whose form repeats an earlier period's (`RepeatedForm`).
+
+The filing and its date are kept. A separate report has values only where its
+form is its own. A report that was already held with shared values is
+refused, with a note to purge it, because append-only storage never drops
+values quietly.
+
+**The form has no unit, and issuers type their own.** HDB, VIB and LPB typed
+millions in 2022, and VPL typed millions throughout. Their charter capital
+read as about ₫20m, so share counts were a millionth of the truth. The unit
+is now read from charter capital:
+- exactly one of đồng, thousands or millions must put it between ₫100bn and
+  ₫1,000,000bn;
+- every amount is scaled to đồng;
+- EPS (70 and 71, bank 23) is typed in đồng by everyone and is left as typed.
+
+A form whose capital fits no unit is refused (`UnknownUnit`): six VNM filings
+from 2025 state ₫157.9bn, a hundredth of VNM's capital. EPS lines typed a
+million times too large remain on some bank forms (VCB, VIB, TCB, BID, LPB). No ratio reads them, and
+the par check of ADR-030 will report them.
+
+Re-import of 2026-10-20, after purging the three tables:
+
+| | Before | After |
+| --- | --- | --- |
+| Reports | 1,580 | 1,574 |
+| Reports with values | 1,433 | 740 |
+| Statement lines | 456,079 | 235,577 |
+| Values withheld | — | 683 shared, 4 repeated |
+| Refused | 22 | 28 (the six VNM filings) |
+
+FPT on 2023-08-01 reads as before: P/E 18.48, P/B 4.44, ROE 26.58%.
+
 ## Consequences
 
 - **Sprint 6 item 6.2.** A fact has an instrument, a fiscal period, a statement

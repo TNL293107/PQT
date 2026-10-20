@@ -26,6 +26,21 @@ public enum FilingRejectionReason
 
     /// <summary>A report recorded without values now has values.</summary>
     ValuesAppeared = 7,
+
+    /// <summary>Charter capital fits no unit the form could have been typed in.</summary>
+    UnknownUnit = 8,
+
+    /// <summary>
+    /// A separate report whose form is the consolidated report's: recorded,
+    /// with its values withheld.
+    /// </summary>
+    SharedForm = 9,
+
+    /// <summary>
+    /// A report whose form repeats an earlier period's: recorded, with its
+    /// values withheld.
+    /// </summary>
+    RepeatedForm = 10,
 }
 
 /// <summary>A filing that was not recorded, and why.</summary>
