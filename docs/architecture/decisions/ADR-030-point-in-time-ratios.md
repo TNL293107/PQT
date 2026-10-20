@@ -35,7 +35,9 @@ It is never zero and never estimated.
    sheet, divided by ₫10,000. That figure is multiplied by the share factor
    of every action that went ex after the balance sheet's quarter ended and
    on or before `t`, and that was announced on or before `t`. An action
-   announced later is not counted, as in a strict dataset read.
+   announced later is not counted, as in a strict dataset read. The two
+   checks below may add an action registered late or withhold one
+   registered early, and say so.
 2. **Net profit to the parent over the trailing twelve months** is the sum of
    the latest four quarters known, each read with the `Quarter` span: Circular
    200 code 61, or bank code 21 less 22. The four must be consecutive. A
@@ -58,6 +60,85 @@ It is never zero and never estimated.
 
 The close is the raw close of session `t`. The share count is on the basis
 of `t`, so the close must be too. An adjusted close would mix bases.
+
+The two cuts differ on purpose:
+- Statements and actions are cut at 00:00 UTC of `t`, which is 07:00 in
+  Hanoi, before the session opens.
+- The close is the end of `t`.
+
+A ratio is therefore what an investor could compute after the session closed,
+using only what was published before it opened. Nothing published during the
+session is used.
+
+The fiscal year is taken to end in December, as it does for every name in
+the first import (ADR-029). A trailing year is four calendar quarters.
+
+**Charter capital** is read as follows:
+- Bank form: 411.
+- Circular 200: common shares (411a) when they and preferred shares (411b)
+  add up to the total (411). MSN and VIC hold preferred shares, which a
+  per-share ratio must not count.
+- Circular 200, when the split does not add up and there are no preferred
+  shares: 411. VNM's 2025 forms carry a stray 411a.
+- Otherwise the count is absent.
+
+**A cancelled action counts nowhere, at any session.** No cancellation date
+is recorded. An action called off before its ex-date never changed a share.
+One "cancelled" after its ex-date is a correction of the record. Only actions
+that went ex by `t` are read, so excluding it borrows nothing from the
+future.
+
+**Dividend yield is zero only where zero is known.** It needs the issuer's
+recorded corporate-action history to reach back over the whole trailing year,
+meaning its earliest recorded action is at least 365 days before `t`.
+Otherwise the yield is absent (`NoDividendCoverage`). A history that starts
+inside the year cannot tell "paid nothing" from "not recorded".
+
+**Every absence carries a code** (`RatioAbsence`) and a sentence. A ratio
+built on an absent one carries its code: P/E on a missing quarter is
+`MissingQuarter`, not "no earnings". The codes are:
+- `NoBalanceSheet`
+- `NoCharterCapital`
+- `NoQuarterlyProfit`
+- `MissingQuarter`
+- `NoClose`
+- `TrailingLoss`
+- `EquityNotPositive`
+- `EquityNotKnownAtBothEnds`
+- `NoDividendCoverage`
+
+## The two checks, as implemented (sprint 7 item B, 2026-10-20)
+
+Both report **findings**: sentences returned with the ratios. A check never
+estimates a figure. It applies an action, withholds one, or says what it saw.
+
+**Charter capital against share factors.** Every announced share action that
+went ex by `t` is compared with the step in capital around it. Two quantities
+are compared:
+- the observed step: capital at the later balance sheet divided by capital at
+  the earlier one;
+- the expected step: the product of the factors of the announced actions
+  between the two balance sheets.
+
+The two match when they differ by less than 2%, or by less than half of
+`|factor − 1|` when that is smaller. The check has three outcomes:
+- *Registered late.* The action went ex within the year to the balance sheet,
+  and the step matches the expected step without this action's factor. It is
+  applied, with a finding.
+- *Registered early.* The action goes ex after the balance sheet. The
+  balance sheet's step from the quarter before already matches this action's
+  factor, and the actions in that quarter do not explain it. The action is
+  not applied a second time, with a finding.
+- *Unexplained.* The step matches neither. The finding states both numbers
+  and changes nothing. A step with no action near it at all, such as ACB's 15%
+  rise in 2023Q2, is not checked, because nothing is applied on it.
+
+**Par against reported EPS.** For the latest trailing quarter that reports
+basic EPS (70, bank 23), the check divides the quarter's profit by
+capital ÷ ₫10,000. Reported EPS deducts the bonus and welfare fund and is
+weighted over the period, so it runs below that figure by up to a sixth. A
+result more than twice or less than half the reported EPS is a finding: the
+share count or a unit is in doubt.
 
 ## Alternatives
 

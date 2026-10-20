@@ -291,6 +291,12 @@ internal sealed class FundamentalsCommands(
                 Row("dividend yield (TTM)", ratios.DividendYield, "0.00%"),
             ]);
 
+        if (ratios.Findings.Count > 0)
+        {
+            output.Blank();
+            output.Table(["finding"], [.. ratios.Findings.Select(finding => (IReadOnlyList<string>)[finding])]);
+        }
+
         return ExitCode.Ok;
 
         static IReadOnlyList<string> Row(string name, RatioValue ratio, string format) =>

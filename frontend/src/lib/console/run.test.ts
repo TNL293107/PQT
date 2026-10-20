@@ -69,9 +69,10 @@ const RATIOS: FundamentalRatios = {
   actionsApplied: 1,
   actionsWithheld: 0,
   ratios: [
-    { name: "epsTtm", value: 4573.37, absent: null },
-    { name: "priceToEarnings", value: null, absent: "trailing loss; no earnings multiple" },
+    { name: "epsTtm", value: 4573.37, absent: null, reason: null },
+    { name: "priceToEarnings", value: null, absent: "trailing loss; no earnings multiple", reason: "TrailingLoss" },
   ],
+  findings: [],
 };
 
 const COVERAGE: InstrumentCoverage = {

@@ -20,8 +20,9 @@ namespace PersonalQuant.UnitTests.Fundamentals;
 /// </list>
 /// <para>
 /// A 20% bonus issue goes ex on 15 February 2023, announced on 1 February. A
-/// ₫1,000 cash dividend went ex on 3 October 2022. The close on 1 March 2023
-/// is ₫60,000.
+/// ₫1,000 cash dividend went ex on 3 October 2022, and a ₫500 one on 1 October
+/// 2021, which is the start of the issuer's recorded action history. The
+/// close on 1 March 2023 is ₫60,000.
 /// </para>
 /// </remarks>
 public sealed class FundamentalRatioServiceTests
@@ -29,6 +30,8 @@ public sealed class FundamentalRatioServiceTests
     private static readonly DateTimeOffset Recorded = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
     private static readonly SourceCode Ids = SourceCode.Create("IDS");
     private static readonly DateOnly March = new(2023, 3, 1);
+    private static readonly FiscalQuarter Q3 = FiscalQuarter.Create(2022, 3);
+    private static readonly FiscalQuarter Q4 = FiscalQuarter.Create(2022, 4);
 
     [Fact]
     public async Task Every_ratio_uses_the_share_count_adjusted_to_the_session()
@@ -45,8 +48,9 @@ public sealed class FundamentalRatioServiceTests
         Assert.Equal(0.8m, ratios.PriceToBook.Value);
         Assert.Equal(0.125m, ratios.ReturnOnEquity.Value);
         Assert.Equal((1, 0), (ratios.ActionsApplied, ratios.ActionsWithheld));
-        Assert.Equal(FiscalQuarter.Create(2022, 4), ratios.BalanceSheet);
+        Assert.Equal(Q4, ratios.BalanceSheet);
         Assert.Equal([1, 2, 3, 4], ratios.ProfitQuarters.Select(quarter => quarter.Quarter));
+        Assert.Empty(ratios.Findings);
     }
 
     [Fact]
@@ -82,6 +86,18 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
+    public async Task A_cancelled_action_counts_nowhere()
+    {
+        var harness = new Harness();
+        harness.Bonus.Cancel("called off", Recorded);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Equal(0.0167m, decimal.Round(ratios.DividendYield.Value!.Value, 4));
+    }
+
+    [Fact]
     public async Task A_report_filed_after_the_session_does_not_count()
     {
         // The fourth quarter is filed on 25 January 2023. On 20 January only
@@ -96,6 +112,46 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
+    public async Task A_restatement_changes_the_ratios_only_from_the_day_it_became_known()
+    {
+        // A correction filed on 10 March 2023 restates the fourth quarter's
+        // profit from ₫250bn to ₫450bn.
+        var harness = new Harness();
+        var correction = harness.Report(Q4, new DateOnly(2023, 3, 10), isCorrection: true);
+        harness.Line(correction, FinancialStatement.IncomeStatement, "61", Q4, PeriodSpan.Quarter, 450_000_000_000m);
+        harness.Close(new DateOnly(2023, 3, 15), 60_000m);
+
+        var before = await harness.ReadAsync(March);
+        var after = await harness.ReadAsync(new DateOnly(2023, 3, 15));
+
+        Assert.Equal(1_000_000_000_000m, before.NetProfitTtm.Value);
+        Assert.Equal(1_200_000_000_000m, after.NetProfitTtm.Value);
+        Assert.Equal(10_000m, after.EpsTtm.Value);
+    }
+
+    [Fact]
+    public async Task A_missing_quarter_leaves_the_trailing_figures_absent_with_its_code()
+    {
+        var ratios = await new Harness(skipQuarter: 2).ReadAsync(March);
+
+        Assert.Null(ratios.NetProfitTtm.Value);
+        Assert.Equal(RatioAbsence.MissingQuarter, ratios.EpsTtm.Reason);
+        Assert.Equal(RatioAbsence.MissingQuarter, ratios.PriceToEarnings.Reason);
+        Assert.Equal(RatioAbsence.MissingQuarter, ratios.ReturnOnEquity.Reason);
+        Assert.NotNull(ratios.PriceToBook.Value);
+    }
+
+    [Fact]
+    public async Task Return_on_equity_needs_equity_at_both_ends_of_the_trailing_year()
+    {
+        var ratios = await new Harness(priorYearEquity: false).ReadAsync(March);
+
+        Assert.Null(ratios.ReturnOnEquity.Value);
+        Assert.Equal(RatioAbsence.EquityNotKnownAtBothEnds, ratios.ReturnOnEquity.Reason);
+        Assert.NotNull(ratios.EpsTtm.Value);
+    }
+
+    [Fact]
     public async Task A_trailing_loss_has_an_EPS_and_no_earnings_multiple()
     {
         var harness = new Harness(quarterProfit: -250_000_000_000m);
@@ -104,7 +160,7 @@ public sealed class FundamentalRatioServiceTests
 
         Assert.True(ratios.EpsTtm.Value < 0m);
         Assert.Null(ratios.PriceToEarnings.Value);
-        Assert.Contains("loss", ratios.PriceToEarnings.Absent, StringComparison.Ordinal);
+        Assert.Equal(RatioAbsence.TrailingLoss, ratios.PriceToEarnings.Reason);
     }
 
     [Fact]
@@ -112,9 +168,149 @@ public sealed class FundamentalRatioServiceTests
     {
         var ratios = await new Harness().ReadAsync(new DateOnly(2023, 3, 2));
 
-        Assert.Null(ratios.PriceToEarnings.Value);
-        Assert.Null(ratios.PriceToBook.Value);
+        Assert.Equal(RatioAbsence.NoClose, ratios.PriceToEarnings.Reason);
+        Assert.Equal(RatioAbsence.NoClose, ratios.PriceToBook.Reason);
+        Assert.Equal(RatioAbsence.NoClose, ratios.DividendYield.Reason);
         Assert.NotNull(ratios.EpsTtm.Value);
+    }
+
+    [Fact]
+    public async Task The_bank_form_reads_its_own_codes()
+    {
+        // Capital 411, equity 500, profit after tax 21 less minority interest 22.
+        var harness = new Harness(template: FinancialTemplate.Bank);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(120_000_000m, ratios.Shares.Value);
+        Assert.Equal(1_000_000_000_000m, ratios.NetProfitTtm.Value);
+        Assert.Equal(75_000m, ratios.BookValuePerShare.Value);
+        Assert.Equal(0.125m, ratios.ReturnOnEquity.Value);
+    }
+
+    [Fact]
+    public async Task An_issuer_with_no_consolidated_values_is_read_on_its_separate_statements()
+    {
+        var ratios = await new Harness(scope: FinancialStatementScope.Separate).ReadAsync(March);
+
+        Assert.Equal(FinancialStatementScope.Separate, ratios.Scope);
+        Assert.Equal(1_000_000_000_000m, ratios.NetProfitTtm.Value);
+    }
+
+    [Fact]
+    public async Task Consolidated_statements_are_read_when_any_are_known_whatever_the_separate_ones_say()
+    {
+        var harness = new Harness();
+        var separate = harness.Report(Q4, new DateOnly(2023, 1, 20), FinancialStatementScope.Separate);
+        harness.Line(separate, FinancialStatement.BalanceSheet, "411a", Q4, PeriodSpan.Instant, 5_000_000_000_000m);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(FinancialStatementScope.Consolidated, ratios.Scope);
+        Assert.Equal(120_000_000m, ratios.Shares.Value);
+    }
+
+    [Fact]
+    public async Task An_action_not_yet_in_the_capital_is_applied_as_registered_late()
+    {
+        // The bonus went ex in February, but 2023Q1's capital still shows
+        // ₫1,000bn: the increase was registered after the quarter closed.
+        var harness = new Harness();
+        var q1 = FiscalQuarter.Create(2023, 1);
+        var report = harness.Report(q1, new DateOnly(2023, 4, 25));
+        harness.Line(report, FinancialStatement.BalanceSheet, "411a", q1, PeriodSpan.Instant, 1_000_000_000_000m);
+        harness.Line(report, FinancialStatement.IncomeStatement, "61", q1, PeriodSpan.Quarter, 250_000_000_000m);
+        harness.Close(new DateOnly(2023, 5, 2), 60_000m);
+
+        var ratios = await harness.ReadAsync(new DateOnly(2023, 5, 2));
+
+        Assert.Equal(q1, ratios.BalanceSheet);
+        Assert.Equal(120_000_000m, ratios.Shares.Value);
+        Assert.Contains("registered late", Assert.Single(ratios.Findings), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_action_already_in_the_capital_is_not_applied_again()
+    {
+        var harness = new Harness();
+        var q1 = FiscalQuarter.Create(2023, 1);
+        var report = harness.Report(q1, new DateOnly(2023, 4, 25));
+        harness.Line(report, FinancialStatement.BalanceSheet, "411a", q1, PeriodSpan.Instant, 1_200_000_000_000m);
+        harness.Line(report, FinancialStatement.IncomeStatement, "61", q1, PeriodSpan.Quarter, 250_000_000_000m);
+        harness.Close(new DateOnly(2023, 5, 2), 60_000m);
+
+        var ratios = await harness.ReadAsync(new DateOnly(2023, 5, 2));
+
+        Assert.Equal(120_000_000m, ratios.Shares.Value);
+        Assert.Empty(ratios.Findings);
+    }
+
+    [Fact]
+    public async Task Capital_that_already_shows_an_action_going_ex_later_does_not_count_it_twice()
+    {
+        // 2022Q4's capital is 1.2 times 2022Q3's with no action between: the
+        // February bonus was registered before it went ex.
+        var harness = new Harness(capitalQ4: 1_200_000_000_000m, capitalQ3: 1_000_000_000_000m);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(120_000_000m, ratios.Shares.Value);
+        Assert.Equal(0, ratios.ActionsApplied);
+        Assert.Contains("not applied twice", Assert.Single(ratios.Findings), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_capital_step_no_action_explains_is_reported_and_changes_nothing()
+    {
+        // A 1.2x action went ex in November, and capital rose 1.15x.
+        var harness = new Harness(capitalQ4: 1_150_000_000_000m, capitalQ3: 1_000_000_000_000m);
+        harness.AddBonus(new DateOnly(2022, 11, 1), 1.2m, new DateOnly(2022, 10, 15));
+        harness.Close(new DateOnly(2023, 2, 10), 60_000m);
+
+        var ratios = await harness.ReadAsync(new DateOnly(2023, 2, 10));
+
+        Assert.Equal(115_000_000m, ratios.Shares.Value);
+        Assert.Contains("Capital moved x1.15", Assert.Single(ratios.Findings), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Reported_EPS_far_from_profit_per_par_share_is_a_finding()
+    {
+        // ₫250bn over 100m shares is ₫2,500 a share; the form says ₫25.
+        var harness = new Harness(reportedEps: 25m);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Contains("in doubt", Assert.Single(ratios.Findings), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Reported_EPS_near_profit_per_par_share_finds_nothing()
+    {
+        // Below profit per share by the bonus and welfare fund, as issuers report it.
+        var ratios = await new Harness(reportedEps: 2_200m).ReadAsync(March);
+
+        Assert.Empty(ratios.Findings);
+    }
+
+    [Fact]
+    public async Task Without_an_action_history_over_the_trailing_year_the_yield_is_absent_not_zero()
+    {
+        var ratios = await new Harness(history: false).ReadAsync(March);
+
+        Assert.Null(ratios.DividendYield.Value);
+        Assert.Equal(RatioAbsence.NoDividendCoverage, ratios.DividendYield.Reason);
+    }
+
+    [Fact]
+    public async Task With_an_action_history_and_no_dividend_the_yield_is_zero()
+    {
+        var harness = new Harness();
+        harness.Close(new DateOnly(2024, 3, 1), 60_000m);
+
+        var ratios = await harness.ReadAsync(new DateOnly(2024, 3, 1));
+
+        Assert.Equal(0m, ratios.DividendYield.Value);
     }
 
     private sealed class Harness
@@ -123,34 +319,87 @@ public sealed class FundamentalRatioServiceTests
         private readonly InMemoryFundamentals _fundamentals = new();
         private readonly FakeBarRepository _bars = new();
         private readonly FakeCorporateActionRepository _actions = new();
+        private readonly FinancialTemplate _template;
+        private readonly FinancialStatementScope _scope;
 
-        public Harness(decimal quarterProfit = 250_000_000_000m, bool bonusAnnounced = true)
+        public Harness(
+            decimal quarterProfit = 250_000_000_000m,
+            bool bonusAnnounced = true,
+            FinancialTemplate template = FinancialTemplate.NonFinancialCircular200,
+            FinancialStatementScope scope = FinancialStatementScope.Consolidated,
+            int? skipQuarter = null,
+            bool priorYearEquity = true,
+            decimal capitalQ4 = 1_000_000_000_000m,
+            decimal? capitalQ3 = null,
+            decimal? reportedEps = null,
+            bool history = true)
         {
-            DateOnly? announced = bonusAnnounced ? new DateOnly(2023, 2, 1) : null;
+            _template = template;
+            _scope = scope;
+            var bank = template == FinancialTemplate.Bank;
 
             for (var quarter = 1; quarter <= 4; quarter++)
             {
+                if (quarter == skipQuarter)
+                {
+                    continue;
+                }
+
                 var period = FiscalQuarter.Create(2022, quarter);
                 var report = Report(period, new DateOnly(2022, quarter * 3, 1).AddMonths(1).AddDays(24));
-                Line(report, FinancialStatement.IncomeStatement, "61", period, PeriodSpan.Quarter, quarterProfit);
+
+                if (bank)
+                {
+                    Line(report, FinancialStatement.IncomeStatement, "21", period, PeriodSpan.Quarter, quarterProfit + 50_000_000_000m);
+                    Line(report, FinancialStatement.IncomeStatement, "22", period, PeriodSpan.Quarter, 50_000_000_000m);
+                }
+                else
+                {
+                    Line(report, FinancialStatement.IncomeStatement, "61", period, PeriodSpan.Quarter, quarterProfit);
+                }
+
+                if (reportedEps is { } eps)
+                {
+                    Line(report, FinancialStatement.IncomeStatement, bank ? "23" : "70", period, PeriodSpan.Quarter, eps);
+                }
+
+                if (quarter == 3 && capitalQ3 is { } third)
+                {
+                    Line(report, FinancialStatement.BalanceSheet, bank ? "411" : "411a", period, PeriodSpan.Instant, third);
+                }
 
                 if (quarter == 4)
                 {
-                    Line(report, FinancialStatement.BalanceSheet, "411a", period, PeriodSpan.Instant, 1_000_000_000_000m);
-                    Line(report, FinancialStatement.BalanceSheet, "400", period, PeriodSpan.Instant, 10_000_000_000_000m);
-                    Line(report, FinancialStatement.BalanceSheet, "429", period, PeriodSpan.Instant, 1_000_000_000_000m);
-                    Line(report, FinancialStatement.BalanceSheet, "400", period.PriorYearEnd, PeriodSpan.Instant, 8_000_000_000_000m);
-                    Line(report, FinancialStatement.BalanceSheet, "429", period.PriorYearEnd, PeriodSpan.Instant, 1_000_000_000_000m);
+                    Line(report, FinancialStatement.BalanceSheet, bank ? "411" : "411a", period, PeriodSpan.Instant, capitalQ4);
+                    Equity(report, period, 10_000_000_000_000m);
+
+                    if (priorYearEquity)
+                    {
+                        Equity(report, period.PriorYearEnd, 8_000_000_000_000m);
+                    }
                 }
             }
 
-            var bonus = Action(CorporateActionType.BonusShares, new DateOnly(2023, 2, 15), ratio: 0.2m, cash: null, announced);
-            _actions.AddAdjustment(PriceAdjustment.For(
-                bonus, AdjustmentFactor.Create(1m / 1.2m, 1.2m), Price.Create(72_000m), DataRules.AdjustmentVersion, Recorded));
+            Bonus = AddBonus(new DateOnly(2023, 2, 15), 1.2m, bonusAnnounced ? new DateOnly(2023, 2, 1) : null);
 
             Action(CorporateActionType.CashDividend, new DateOnly(2022, 10, 3), ratio: null, cash: 1_000m, new DateOnly(2022, 9, 15));
 
+            if (history)
+            {
+                Action(CorporateActionType.CashDividend, new DateOnly(2021, 10, 1), ratio: null, cash: 500m, new DateOnly(2021, 9, 15));
+            }
+
             Close(March, 60_000m);
+        }
+
+        public CorporateAction Bonus { get; }
+
+        public CorporateAction AddBonus(DateOnly exDate, decimal factor, DateOnly? announcedOn)
+        {
+            var bonus = Action(CorporateActionType.BonusShares, exDate, ratio: factor - 1m, cash: null, announcedOn);
+            _actions.AddAdjustment(PriceAdjustment.For(
+                bonus, AdjustmentFactor.Create(1m / factor, factor), Price.Create(72_000m), DataRules.AdjustmentVersion, Recorded));
+            return bonus;
         }
 
         public void Close(DateOnly session, decimal close) =>
@@ -162,6 +411,37 @@ public sealed class FundamentalRatioServiceTests
             new FundamentalRatioService(new FundamentalsReader(_fundamentals), _bars, _actions)
                 .ReadAsync(_instrument, session, TestContext.Current.CancellationToken);
 
+        public FinancialReport Report(
+            FiscalQuarter period,
+            DateOnly disclosedOn,
+            FinancialStatementScope? scope = null,
+            bool isCorrection = false)
+        {
+            var report = FinancialReport.Record(
+                _instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, scope ?? _scope,
+                _template, period, "Báo cáo tài chính", disclosedOn, null,
+                FinancialReportTests.Vietnam, isCorrection, valuesFiled: true, Recorded);
+            _fundamentals.Add(report);
+            return report;
+        }
+
+        public void Line(FinancialReport report, FinancialStatement statement, string code, FiscalQuarter period, PeriodSpan span, decimal value) =>
+            _fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, value, ValueBasis.AsFiled, Ids, Recorded));
+
+        private void Equity(FinancialReport report, FiscalQuarter period, decimal total)
+        {
+            // Bank 500 is equity to the parent; Circular 200 states 400 and
+            // the minorities (429) to take from it.
+            if (_template == FinancialTemplate.Bank)
+            {
+                Line(report, FinancialStatement.BalanceSheet, "500", period, PeriodSpan.Instant, total - 1_000_000_000_000m);
+                return;
+            }
+
+            Line(report, FinancialStatement.BalanceSheet, "400", period, PeriodSpan.Instant, total);
+            Line(report, FinancialStatement.BalanceSheet, "429", period, PeriodSpan.Instant, 1_000_000_000_000m);
+        }
+
         private CorporateAction Action(CorporateActionType type, DateOnly exDate, decimal? ratio, decimal? cash, DateOnly? announcedOn)
         {
             var action = CorporateAction.Record(_instrument, type, exDate, ratio, cash, Ids, Recorded);
@@ -169,18 +449,5 @@ public sealed class FundamentalRatioServiceTests
             _actions.Add(action);
             return action;
         }
-
-        private FinancialReport Report(FiscalQuarter period, DateOnly disclosedOn)
-        {
-            var report = FinancialReport.Record(
-                _instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
-                FinancialTemplate.NonFinancialCircular200, period, "Báo cáo tài chính hợp nhất", disclosedOn, null,
-                FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: true, Recorded);
-            _fundamentals.Add(report);
-            return report;
-        }
-
-        private void Line(FinancialReport report, FinancialStatement statement, string code, FiscalQuarter period, PeriodSpan span, decimal value) =>
-            _fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, value, ValueBasis.AsFiled, Ids, Recorded));
     }
 }

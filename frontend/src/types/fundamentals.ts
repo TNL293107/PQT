@@ -15,6 +15,8 @@ export interface Ratio {
   readonly name: string;
   readonly value: number | null;
   readonly absent: string | null;
+  /** The absence as a code (`NoBalanceSheet`, `MissingQuarter`, `TrailingLoss`, ...), or null. */
+  readonly reason: string | null;
 }
 
 /** An issuer's ratios at a session, and what they were built from. */
@@ -31,4 +33,6 @@ export interface FundamentalRatios {
   readonly actionsApplied: number;
   readonly actionsWithheld: number;
   readonly ratios: readonly Ratio[];
+  /** What the server's share-count checks found, in words; empty when nothing. */
+  readonly findings: readonly string[];
 }

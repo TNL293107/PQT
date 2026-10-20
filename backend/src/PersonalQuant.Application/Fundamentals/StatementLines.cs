@@ -64,6 +64,34 @@ internal sealed class StatementLines
                 .ToDictionary(value => (value.Statement, value.LineCode, value.Period, value.Span), value => value.Value));
     }
 
+    /// <summary>Gets every quarter whose balance sheet states charter capital, oldest first.</summary>
+    /// <returns>The quarters.</returns>
+    public IReadOnlyList<FiscalQuarter> CapitalQuarters() =>
+        [
+            .. _values.Keys
+                .Where(key => key.Item1 == FinancialStatement.BalanceSheet && key.Item4 == PeriodSpan.Instant)
+                .Select(key => key.Item3)
+                .Distinct()
+                .Where(quarter => CharterCapital(quarter) is not null)
+                .Order(),
+        ];
+
+    /// <summary>Gets the basic earnings per share a quarter's own column reports.</summary>
+    /// <param name="quarter">The quarter.</param>
+    /// <returns>The EPS in đồng, or null when not reported.</returns>
+    public decimal? ReportedEps(FiscalQuarter quarter) => Template switch
+    {
+        FinancialTemplate.NonFinancialCircular200 => Income("70", quarter, PeriodSpan.Quarter),
+        FinancialTemplate.Bank => Income("23", quarter, PeriodSpan.Quarter),
+        _ => null,
+    };
+
+    /// <summary>Gets the end date of a quarter.</summary>
+    /// <param name="quarter">The quarter.</param>
+    /// <returns>Its last day.</returns>
+    public static DateOnly QuarterEnd(FiscalQuarter quarter) =>
+        new DateOnly(quarter.Year, quarter.Quarter * 3, 1).AddMonths(1).AddDays(-1);
+
     /// <summary>Gets the latest quarter whose balance sheet states charter capital.</summary>
     /// <returns>The quarter, or null.</returns>
     public FiscalQuarter? LatestBalanceSheet() =>
@@ -168,7 +196,7 @@ internal sealed class StatementLines
 
         if (latest is not { } end)
         {
-            return (RatioValue.Missing("no quarterly profit known"), []);
+            return (RatioValue.Missing(RatioAbsence.NoQuarterlyProfit, "no quarterly profit known"), []);
         }
 
         var quarters = new List<FiscalQuarter>();
@@ -180,7 +208,7 @@ internal sealed class StatementLines
 
             if (QuarterProfit(quarter) is not { } profit)
             {
-                return (RatioValue.Missing($"profit for {quarter} is not known; four consecutive quarters are needed"), []);
+                return (RatioValue.Missing(RatioAbsence.MissingQuarter, $"profit for {quarter} is not known; four consecutive quarters are needed"), []);
             }
 
             quarters.Add(quarter);

@@ -57,6 +57,12 @@ export function FundamentalsView({ ratios }: { readonly ratios: FundamentalRatio
           })}
         </tbody>
       </table>
+
+      {ratios.findings.map((finding) => (
+        <p key={finding} className="out__line out__line--warn">
+          {finding}
+        </p>
+      ))}
     </div>
   );
 }

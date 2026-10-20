@@ -94,6 +94,7 @@ public sealed record DisclosedReportResponse(string Period, string Kind, string 
 /// <param name="ActionsApplied">Share-count actions applied since the balance sheet.</param>
 /// <param name="ActionsWithheld">Actions in the window not yet announced.</param>
 /// <param name="Ratios">Each ratio, known or absent with a reason.</param>
+/// <param name="Findings">What the share-count checks found, in words.</param>
 public sealed record FundamentalRatiosResponse(
     Guid InstrumentId,
     DateOnly Session,
@@ -103,7 +104,8 @@ public sealed record FundamentalRatiosResponse(
     IReadOnlyList<string> ProfitQuarters,
     int ActionsApplied,
     int ActionsWithheld,
-    IReadOnlyList<RatioResponse> Ratios)
+    IReadOnlyList<RatioResponse> Ratios,
+    IReadOnlyList<string> Findings)
 {
     /// <summary>Projects the ratios onto the wire contract.</summary>
     /// <param name="ratios">The ratios.</param>
@@ -131,14 +133,16 @@ public sealed record FundamentalRatiosResponse(
                 Ratio("priceToBook", ratios.PriceToBook),
                 Ratio("returnOnEquity", ratios.ReturnOnEquity),
                 Ratio("dividendYield", ratios.DividendYield),
-            ]);
+            ],
+            ratios.Findings);
 
-        static RatioResponse Ratio(string name, RatioValue value) => new(name, value.Value, value.Absent);
+        static RatioResponse Ratio(string name, RatioValue value) => new(name, value.Value, value.Absent, value.Reason?.ToString());
     }
 }
 
 /// <summary>One ratio.</summary>
 /// <param name="Name">Its name.</param>
 /// <param name="Value">The value, or null.</param>
-/// <param name="Absent">Why there is no value, or null.</param>
-public sealed record RatioResponse(string Name, decimal? Value, string? Absent);
+/// <param name="Absent">Why there is no value, in words, or null.</param>
+/// <param name="Reason">Why there is no value, as a <see cref="RatioAbsence"/> code, or null.</param>
+public sealed record RatioResponse(string Name, decimal? Value, string? Absent, string? Reason);

@@ -13,12 +13,13 @@ const RATIOS: FundamentalRatios = {
   actionsApplied: 1,
   actionsWithheld: 0,
   ratios: [
-    { name: "close", value: 84500, absent: null },
-    { name: "epsTtm", value: 4573.37, absent: null },
-    { name: "priceToEarnings", value: 18.4765, absent: null },
-    { name: "returnOnEquity", value: 0.2658, absent: null },
-    { name: "dividendYield", value: null, absent: "no close on the session" },
+    { name: "close", value: 84500, absent: null, reason: null },
+    { name: "epsTtm", value: 4573.37, absent: null, reason: null },
+    { name: "priceToEarnings", value: 18.4765, absent: null, reason: null },
+    { name: "returnOnEquity", value: 0.2658, absent: null, reason: null },
+    { name: "dividendYield", value: null, absent: "no close on the session", reason: "NoClose" },
   ],
+  findings: [],
 };
 
 function row(label: string): HTMLElement {
@@ -48,5 +49,12 @@ describe("FundamentalsView", () => {
 
     expect(screen.getByText(/Balance sheet 2023Q2/)).toHaveTextContent("2022Q3 2022Q4 2023Q1 2023Q2");
     expect(screen.getByText(/Balance sheet 2023Q2/)).toHaveTextContent("1 applied, 0 withheld");
+  });
+
+  it("prints what the share-count checks found", () => {
+    const finding = "The 1.15x action of 2023-07-05 is not yet in 2023Q2's capital (x1 since 2023Q1); it is applied as registered late.";
+    render(<FundamentalsView ratios={{ ...RATIOS, findings: [finding] }} />);
+
+    expect(screen.getByText(finding)).toBeInTheDocument();
   });
 });
