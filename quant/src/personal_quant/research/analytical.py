@@ -14,7 +14,7 @@ the connection with DuckDB's file system access switched off and its
 configuration locked. Nothing on the connection can read a file — not the
 build, not another — so every row a query sees is a verified one.
 
-Four views:
+Five views:
 
 * ``bars`` — one row per instrument and session. ``session`` is the UTC date
   of ``opened_at_utc``, as the Python loader takes it. Prices are cast from the
@@ -29,6 +29,13 @@ Four views:
 * ``history`` — where each instrument's rows begin, for a build exported with
   history: rows of ``bars`` outside ``membership`` from that session on are
   prices a feature may read, never membership (ADR-025). Empty without history.
+* ``fundamentals`` — one row per instrument and membership session of a build
+  exported with ``--fundamentals`` (ADR-031); empty for one without. The nine
+  values are cast to ``DECIMAL(38,10)``, which rounds a ratio to ten places
+  (the exporter writes them at full decimal precision); shares and profit are
+  whole numbers and are not rounded. Each ``<name>_absent`` column says why a
+  null value is null. ``report_ids`` and ``findings`` stay JSON text.
+  Fundamentals never make an instrument a member: read ``membership`` for that.
 * ``manifest`` — one row naming the build, so every query can be tied to the
   dataset version and content hash it was computed from.
 """
@@ -45,6 +52,7 @@ import pyarrow as pa
 
 from personal_quant.research.datasets import (
     BARS_FILE,
+    FUNDAMENTAL_VALUES,
     LocalDatasetProvider,
     VerifiedBuild,
     read_bars_table,
@@ -75,6 +83,7 @@ _PRICES = ("open", "high", "low", "close")
 _BARS = "verified_bars"
 _MEMBERSHIP = "verified_membership"
 _HISTORY = "verified_history"
+_FUNDAMENTALS = "verified_fundamentals"
 _MANIFEST = "verified_manifest"
 
 _VIEWS = (
@@ -101,6 +110,40 @@ _VIEWS = (
     FROM verified_history
     """,
     """
+    CREATE VIEW fundamentals AS
+    SELECT
+        instrument_id,
+        session,
+        known_as_of_utc,
+        scope,
+        balance_sheet_quarter,
+        report_ids,
+        ttm_first_quarter,
+        ttm_last_quarter,
+        actions_applied,
+        actions_withheld,
+        CAST(close_raw AS DECIMAL(38,10)) AS close_raw,
+        close_raw_absent,
+        CAST(shares AS DECIMAL(38,10)) AS shares,
+        shares_absent,
+        CAST(net_profit_ttm AS DECIMAL(38,10)) AS net_profit_ttm,
+        net_profit_ttm_absent,
+        CAST(eps_ttm AS DECIMAL(38,10)) AS eps_ttm,
+        eps_ttm_absent,
+        CAST(book_value_per_share AS DECIMAL(38,10)) AS book_value_per_share,
+        book_value_per_share_absent,
+        CAST(pe AS DECIMAL(38,10)) AS pe,
+        pe_absent,
+        CAST(pb AS DECIMAL(38,10)) AS pb,
+        pb_absent,
+        CAST(roe AS DECIMAL(38,10)) AS roe,
+        roe_absent,
+        CAST(dividend_yield AS DECIMAL(38,10)) AS dividend_yield,
+        dividend_yield_absent,
+        findings
+    FROM verified_fundamentals
+    """,
+    """
     CREATE VIEW manifest AS
     SELECT *
     FROM verified_manifest
@@ -117,7 +160,8 @@ def connect(
 ) -> duckdb.DuckDBPyConnection:
     """Verify a build and open an in-memory DuckDB connection over it.
 
-    The connection holds the ``bars``, ``membership``, ``history`` and ``manifest`` views
+    The connection holds the ``bars``, ``membership``, ``history``, ``fundamentals`` and
+    ``manifest`` views
     and cannot read or write a file; its configuration is locked, so that
     cannot be undone with ``SET``. Results leave through Python — ``fetchall``,
     ``arrow``, ``df`` — not through ``COPY``. Close it when done.
@@ -152,6 +196,7 @@ def connect(
         connection.register(_BARS, read_bars_table(build.files[BARS_FILE]))
         connection.register(_MEMBERSHIP, _membership_table(build))
         connection.register(_HISTORY, _history_table(build))
+        connection.register(_FUNDAMENTALS, _fundamentals_table(build))
         connection.register(_MANIFEST, _manifest_table(build))
 
         for view in _VIEWS:
@@ -220,6 +265,34 @@ def _history_table(build: VerifiedBuild) -> Any:  # noqa: ANN401 - pyarrow ships
             "history_from": pa.array([start for _, start in started], type=pa.date32()),
         }
     )
+
+
+def _fundamentals_table(build: VerifiedBuild) -> Any:  # noqa: ANN401 - pyarrow ships no types.
+    if build.fundamentals is not None:
+        return build.fundamentals
+
+    # The same columns with no rows, so a query over a build without
+    # fundamentals returns nothing rather than failing on a missing view.
+    text = pa.string()
+    fields = [
+        ("instrument_id", text),
+        ("session", pa.date32()),
+        ("known_as_of_utc", pa.timestamp("us")),
+        ("scope", text),
+        ("balance_sheet_quarter", text),
+        ("report_ids", text),
+        ("ttm_first_quarter", text),
+        ("ttm_last_quarter", text),
+        ("actions_applied", pa.int32()),
+        ("actions_withheld", pa.int32()),
+    ]
+
+    for name in FUNDAMENTAL_VALUES:
+        fields += [(name, text), (f"{name}_absent", text)]
+
+    fields.append(("findings", text))
+
+    return pa.schema(fields).empty_table()
 
 
 def _manifest_table(build: VerifiedBuild) -> Any:  # noqa: ANN401 - pyarrow ships no types.

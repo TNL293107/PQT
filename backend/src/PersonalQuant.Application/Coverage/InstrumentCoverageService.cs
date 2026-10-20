@@ -78,6 +78,20 @@ internal sealed class InstrumentCoverageService(
             ["GVR"] = "IDS fails on every filing page (ADR-029, known gap)",
         };
 
+    /// <summary>
+    /// The same names, as the code a dataset's <c>not_collected</c> carries
+    /// (ADR-031): a capture gap may be fixed, a name out of scope will not be.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> FundamentalsGapCodes =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["SSI"] = "out_of_scope",
+            ["TCX"] = "out_of_scope",
+            ["BVH"] = "out_of_scope",
+            ["STB"] = "ids_capture_gap",
+            ["GVR"] = "ids_capture_gap",
+        };
+
     /// <inheritdoc />
     public async Task<InstrumentCoverage?> DescribeAsync(
         InstrumentId instrumentId,

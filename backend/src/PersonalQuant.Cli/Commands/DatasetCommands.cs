@@ -57,7 +57,7 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         CancellationToken cancellationToken)
     {
         if (!command.Validate(
-                ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy", "history"],
+                ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy", "history", "fundamentals"],
                 out var problem))
         {
             output.Problem(problem);
@@ -146,7 +146,8 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
                 adjusted,
                 knownAsOfUtc,
                 policy,
-                history)
+                history,
+                command.HasFlag("fundamentals"))
             : DatasetRequest.TryCreatePointInTime(
                 code,
                 interval,
@@ -157,7 +158,8 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
                 adjusted,
                 knownAsOfUtc,
                 policy,
-                history);
+                history,
+                command.HasFlag("fundamentals"));
 
         if (!valid || request is null)
         {
@@ -264,6 +266,14 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
                 ? "none: rows only where each instrument was a member"
                 : $"up to {Output.Plural(manifest.HistorySessions, "bar")} before each instrument's first membership session",
             LabelWidth);
+        output.Field(
+            "fundamentals",
+            manifest.Fundamentals is { } fundamentals
+                ? $"ratio version {fundamentals.RatioVersion}, {fundamentals.Source}, cut {fundamentals.Cut}, "
+                    + $"{Output.Plural((int)fundamentals.Rows, "row")}, "
+                    + $"{fundamentals.NotCollected.Count.ToString(CultureInfo.InvariantCulture)} not collected"
+                : "none",
+            LabelWidth);
         output.Field("instruments", manifest.Instruments.Count.ToString(CultureInfo.InvariantCulture), LabelWidth);
         output.Field("rows", manifest.RowCount.ToString(CultureInfo.InvariantCulture), LabelWidth);
         output.Field("built by", manifest.CreatedByCommit ?? "unrecorded build", LabelWidth);
@@ -286,6 +296,22 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         foreach (var source in manifest.Sources)
         {
             output.Line($"{source.Code}: {source.LicenceNote}");
+        }
+
+        if (manifest.Fundamentals is { NotCollected.Count: > 0 } gaps)
+        {
+            output.Blank();
+
+            foreach (var gap in gaps.NotCollected)
+            {
+                var ticker = manifest.Instruments.FirstOrDefault(instrument => instrument.InstrumentId == gap.InstrumentId)?.TickerAtAsOf;
+                output.Line($"{ticker ?? gap.InstrumentId.ToString()}: no fundamentals ({gap.Reason}); no rows.");
+            }
+        }
+
+        if (manifest.Fundamentals is { } held && !string.Equals(held.Source, "none", StringComparison.Ordinal))
+        {
+            output.Line($"{held.Source} (fundamentals): {held.LicenceNote}");
         }
     }
 

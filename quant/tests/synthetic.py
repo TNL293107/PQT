@@ -20,6 +20,7 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from personal_quant.research.datasets import FUNDAMENTAL_VALUES
 from personal_quant.research.manifest import DatasetManifest, content_hash_of
 
 _SATURDAY = 5
@@ -33,6 +34,22 @@ class SyntheticBar:
     session: date
     close: Decimal
     volume: int = 1_000
+
+
+@dataclass(frozen=True)
+class SyntheticFundamentals:
+    """A fundamentals row to write: every value present unless overridden.
+
+    ``values`` maps a value column to its string, or to ``None`` for absent;
+    ``absent`` maps it to its reason. A column in neither is written as
+    ``"1"`` with no reason.
+    """
+
+    instrument_id: str
+    session: date
+    values: Mapping[str, str | None] = field(default_factory=dict)
+    absent: Mapping[str, str | None] = field(default_factory=dict)
+    findings: str = "[]"
 
 
 @dataclass
@@ -53,6 +70,12 @@ class SyntheticDataset:
     history_sessions: int = 0
     history_from: Mapping[str, date | None] | None = None
     window: tuple[date, date] | None = None
+    # Fundamentals, as a schema 4 export with --fundamentals writes them.
+    # None writes a schema 3 build; a list (even empty) writes schema 4 with
+    # fundamentals.parquet, and not_collected names the gaps by reason.
+    fundamentals: list[SyntheticFundamentals] | None = None
+    not_collected: Mapping[str, str] = field(default_factory=dict)
+    ratio_version: int = 1
 
 
 def weekdays(start: date, count: int) -> list[date]:
@@ -158,6 +181,10 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
         "created_at_utc": "2026-10-11T00:00:00+00:00",
         "created_by_commit": None,
     }
+
+    if spec.fundamentals is not None:
+        _write_fundamentals(build, spec, raw)
+
     raw["content_hash"] = content_hash_of(DatasetManifest.from_json(raw))
 
     (build / "manifest.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
@@ -174,3 +201,57 @@ def _history_from(spec: SyntheticDataset, instrument: str, first_row: date | Non
         return None
 
     return first_row.isoformat()
+
+
+def _write_fundamentals(build: Path, spec: SyntheticDataset, raw: dict[str, Any]) -> None:
+    rows = sorted(spec.fundamentals or [], key=lambda row: (row.instrument_id, row.session))
+    columns: dict[str, Any] = {
+        "instrument_id": [row.instrument_id for row in rows],
+        "session": pa.array(
+            [datetime(row.session.year, row.session.month, row.session.day) for row in rows],
+            type=pa.timestamp("ns"),
+        ),
+        "known_as_of_utc": pa.array(
+            [datetime(row.session.year, row.session.month, row.session.day) for row in rows],
+            type=pa.timestamp("ns"),
+        ),
+        "scope": ["consolidated"] * len(rows),
+        "balance_sheet_quarter": ["2026Q2"] * len(rows),
+        "report_ids": ['["r1"]'] * len(rows),
+        "ttm_first_quarter": ["2025Q3"] * len(rows),
+        "ttm_last_quarter": ["2026Q2"] * len(rows),
+        "actions_applied": pa.array([0] * len(rows), type=pa.int32()),
+        "actions_withheld": pa.array([0] * len(rows), type=pa.int32()),
+    }
+
+    for name in FUNDAMENTAL_VALUES:
+        columns[name] = pa.array([row.values.get(name, "1") for row in rows], type=pa.string())
+        columns[f"{name}_absent"] = pa.array(
+            [row.absent.get(name) for row in rows], type=pa.string()
+        )
+
+    columns["findings"] = [row.findings for row in rows]
+    pq.write_table(pa.table(columns), build / "fundamentals.parquet")
+
+    payload = (build / "fundamentals.parquet").read_bytes()
+    raw["schema_version"] = 4
+    raw["files"].append(
+        {
+            "name": "fundamentals.parquet",
+            "row_count": len(rows),
+            "bytes": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+    )
+    raw["row_count"] += len(rows)
+    raw["fundamentals"] = {
+        "ratio_version": spec.ratio_version,
+        "source": "IDS",
+        "licence_note": "Synthetic.",
+        "cut": "session_date_00utc",
+        "rows": len(rows),
+        "not_collected": [
+            {"instrument_id": instrument, "reason": reason}
+            for instrument, reason in sorted(spec.not_collected.items())
+        ],
+    }

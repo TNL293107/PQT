@@ -243,6 +243,13 @@ public sealed class ResearchJobServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<DatasetFile> WriteFundamentalsAsync(
+            string datasetId,
+            int version,
+            IReadOnlyList<DatasetFundamentalsRow> rows,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task WriteManifestAsync(
             DatasetManifest manifest,
             CancellationToken cancellationToken = default) =>

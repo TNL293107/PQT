@@ -89,6 +89,61 @@ internal sealed class ParquetDatasetStore(IOptions<DatasetOptions> options)
     }
 
     /// <inheritdoc />
+    public async Task<DatasetFile> WriteFundamentalsAsync(
+        string datasetId,
+        int version,
+        IReadOnlyList<DatasetFundamentalsRow> rows,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var directory = Build(datasetId, version);
+        System.IO.Directory.CreateDirectory(directory);
+
+        var path = Path.Combine(directory, IDatasetStore.FundamentalsFileName);
+        var schema = FundamentalsSchema();
+        var fields = schema.DataFields;
+
+        await using (var stream = File.Create(path))
+        {
+            await using var writer = await ParquetWriter
+                .CreateAsync(schema, stream, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            using var group = writer.CreateRowGroup();
+
+            // In schema order, for the reason the bars are.
+            await group.WriteAsync(fields[0], rows.Select(row => row.InstrumentId.ToString()).ToArray()).ConfigureAwait(false);
+            await group.WriteAsync<DateTime>(fields[1], rows.Select(row => row.Session.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)).ToArray().AsMemory(), cancellationToken: cancellationToken).ConfigureAwait(false);
+            await group.WriteAsync<DateTime>(fields[2], rows.Select(row => row.KnownAsOfUtc.UtcDateTime).ToArray().AsMemory(), cancellationToken: cancellationToken).ConfigureAwait(false);
+            await group.WriteAsync(fields[3], rows.Select(row => row.Scope!).ToArray()).ConfigureAwait(false);
+            await group.WriteAsync(fields[4], rows.Select(row => row.BalanceSheetQuarter!).ToArray()).ConfigureAwait(false);
+            await group.WriteAsync(fields[5], rows.Select(row => row.ReportIds).ToArray()).ConfigureAwait(false);
+            await group.WriteAsync(fields[6], rows.Select(row => row.TtmFirstQuarter!).ToArray()).ConfigureAwait(false);
+            await group.WriteAsync(fields[7], rows.Select(row => row.TtmLastQuarter!).ToArray()).ConfigureAwait(false);
+            await group.WriteAsync<int>(fields[8], rows.Select(row => row.ActionsApplied).ToArray().AsMemory(), cancellationToken: cancellationToken).ConfigureAwait(false);
+            await group.WriteAsync<int>(fields[9], rows.Select(row => row.ActionsWithheld).ToArray().AsMemory(), cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            for (var index = 0; index < DatasetFundamentalsRow.ValueNames.Count; index++)
+            {
+                var value = index;
+                await group.WriteAsync(fields[10 + (2 * value)], rows.Select(row => row.Values[value].Value is { } number ? Number(number) : null!).ToArray()).ConfigureAwait(false);
+                await group.WriteAsync(fields[11 + (2 * value)], rows.Select(row => row.Values[value].Absent!).ToArray()).ConfigureAwait(false);
+            }
+
+            await group.WriteAsync(fields[^1], rows.Select(row => row.Findings).ToArray()).ConfigureAwait(false);
+        }
+
+        var info = new FileInfo(path);
+
+        return new DatasetFile(
+            IDatasetStore.FundamentalsFileName,
+            rows.Count,
+            info.Length,
+            await HashAsync(path, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <inheritdoc />
     public async Task WriteManifestAsync(
         DatasetManifest manifest,
         CancellationToken cancellationToken = default)
@@ -199,6 +254,40 @@ internal sealed class ParquetDatasetStore(IOptions<DatasetOptions> options)
             new DataField<int>("revision"),
             new DataField<string>("price_factor"),
             new DataField<string>("share_factor"));
+
+    /// <summary>
+    /// The column layout of a dataset's fundamentals (ADR-031).
+    /// </summary>
+    /// <remarks>
+    /// <c>session</c> is the UTC midnight of the session's date, the
+    /// convention <c>opened_at_utc</c> follows for a daily bar, so a reader
+    /// takes the date the same way from both files.
+    /// </remarks>
+    private static ParquetSchema FundamentalsSchema()
+    {
+        var fields = new List<Field>
+        {
+            new DataField<string>("instrument_id"),
+            new DataField<DateTime>("session"),
+            new DataField<DateTime>("known_as_of_utc"),
+            new DataField<string?>("scope"),
+            new DataField<string?>("balance_sheet_quarter"),
+            new DataField<string>("report_ids"),
+            new DataField<string?>("ttm_first_quarter"),
+            new DataField<string?>("ttm_last_quarter"),
+            new DataField<int>("actions_applied"),
+            new DataField<int>("actions_withheld"),
+        };
+
+        foreach (var name in DatasetFundamentalsRow.ValueNames)
+        {
+            fields.Add(new DataField<string?>(name));
+            fields.Add(new DataField<string?>(name + "_absent"));
+        }
+
+        fields.Add(new DataField<string>("findings"));
+        return new ParquetSchema(fields);
+    }
 
     /// <summary>
     /// Writes the columns in schema order.

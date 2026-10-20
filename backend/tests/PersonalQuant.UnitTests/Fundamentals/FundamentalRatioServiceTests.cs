@@ -313,6 +313,126 @@ public sealed class FundamentalRatioServiceTests
         Assert.Equal(0m, ratios.DividendYield.Value);
     }
 
+    [Fact]
+    public async Task A_series_read_equals_one_read_per_session()
+    {
+        var harness = new Harness();
+        harness.Close(new DateOnly(2023, 2, 10), 60_000m);
+        harness.Close(new DateOnly(2024, 3, 1), 61_000m);
+        DateOnly[] sessions = [new(2023, 2, 10), March, new(2023, 3, 2), new(2024, 3, 1)];
+
+        var series = await harness.ReadSeriesAsync(sessions);
+
+        Assert.Equal(sessions, series.Select(ratios => ratios.Session));
+
+        for (var index = 0; index < sessions.Length; index++)
+        {
+            Assert.Equal(Render(await harness.ReadAsync(sessions[index])), Render(series[index]));
+        }
+    }
+
+    /// <summary>Every field of a result, as text, so two results compare by value.</summary>
+    private static string Render(FundamentalRatios ratios) =>
+        string.Join(
+            "|",
+            ratios.Session,
+            ratios.KnownAsOfUtc,
+            ratios.Scope,
+            string.Join(";", new[]
+            {
+                ratios.Close, ratios.Shares, ratios.NetProfitTtm, ratios.EpsTtm, ratios.BookValuePerShare,
+                ratios.PriceToEarnings, ratios.PriceToBook, ratios.ReturnOnEquity, ratios.DividendYield,
+            }.Select(value => $"{value.Value}/{value.Reason}/{value.Absent}")),
+            ratios.BalanceSheet,
+            string.Join(";", ratios.BalanceSheetReports.Select(id => id.Value)),
+            string.Join(";", ratios.ProfitQuarters),
+            ratios.ActionsApplied,
+            ratios.ActionsWithheld,
+            string.Join(";", ratios.Findings));
+
+    [Fact]
+    public async Task A_restatement_changes_the_sessions_after_it_and_none_before()
+    {
+        var harness = new Harness();
+        var correction = harness.Report(Q4, new DateOnly(2023, 4, 20), isCorrection: true);
+        harness.Line(correction, FinancialStatement.IncomeStatement, "61", Q4, PeriodSpan.Quarter, 450_000_000_000m);
+
+        var before = await harness.ReadAsync(new DateOnly(2023, 4, 19));
+        var after = await harness.ReadAsync(new DateOnly(2023, 4, 24));
+
+        Assert.Equal(1_000_000_000_000m, before.NetProfitTtm.Value);
+        Assert.Equal(1_200_000_000_000m, after.NetProfitTtm.Value);
+    }
+
+    [Fact]
+    public async Task An_observation_instant_hides_a_report_filed_after_it()
+    {
+        // Everything else was recorded on 31 March 2023; the correction was
+        // filed on 20 April and recorded the day after.
+        var harness = new Harness(recorded: new DateTimeOffset(2023, 3, 31, 12, 0, 0, TimeSpan.Zero));
+        var correction = harness.Report(
+            Q4, new DateOnly(2023, 4, 20), isCorrection: true, recorded: new DateTimeOffset(2023, 4, 21, 3, 0, 0, TimeSpan.Zero));
+        harness.Line(correction, FinancialStatement.IncomeStatement, "61", Q4, PeriodSpan.Quarter, 450_000_000_000m);
+
+        var session = new DateOnly(2023, 5, 2);
+        var asOfApril = new DateTimeOffset(2023, 4, 15, 0, 0, 0, TimeSpan.Zero);
+        var earlier = await harness.ReadAsync(session, asOfApril);
+        var later = await harness.ReadAsync(session, new DateTimeOffset(2023, 4, 25, 0, 0, 0, TimeSpan.Zero));
+        var current = await harness.ReadAsync(session);
+
+        Assert.Equal(1_000_000_000_000m, earlier.NetProfitTtm.Value);
+        Assert.Equal(asOfApril, earlier.KnownAsOfUtc);
+        Assert.Equal(1_200_000_000_000m, later.NetProfitTtm.Value);
+        Assert.Equal(1_200_000_000_000m, current.NetProfitTtm.Value);
+    }
+
+    [Fact]
+    public async Task An_observation_instant_reads_the_close_as_it_was_recorded()
+    {
+        var harness = new Harness();
+        harness.Close(new DateOnly(2023, 3, 2), 61_000m, recorded: new DateTimeOffset(2023, 3, 2, 9, 0, 0, TimeSpan.Zero));
+
+        var held = await harness.ReadAsync(new DateOnly(2023, 3, 2), new DateTimeOffset(2026, 10, 19, 0, 0, 0, TimeSpan.Zero));
+        var notYet = await harness.ReadAsync(March, new DateTimeOffset(2023, 3, 2, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(61_000m, held.Close.Value);
+        Assert.Equal(RatioAbsence.NoClose, notYet.Close.Reason);
+    }
+
+    [Fact]
+    public async Task An_action_announced_after_the_observation_instant_is_withheld()
+    {
+        var harness = new Harness(recorded: new DateTimeOffset(2023, 1, 31, 0, 0, 0, TimeSpan.Zero));
+        harness.Close(March, 60_000m, recorded: new DateTimeOffset(2023, 3, 1, 9, 0, 0, TimeSpan.Zero));
+
+        // The bonus was announced on 1 February; a dataset observed on 31
+        // January cannot apply it, whatever session it reads.
+        var ratios = await harness.ReadAsync(March, new DateTimeOffset(2023, 1, 31, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Equal((0, 1), (ratios.ActionsApplied, ratios.ActionsWithheld));
+    }
+
+    [Fact]
+    public async Task The_balance_sheet_names_the_reports_that_stated_it()
+    {
+        var harness = new Harness();
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Single(ratios.BalanceSheetReports);
+    }
+
+    [Fact]
+    public async Task An_issuer_with_no_corporate_action_says_its_count_is_not_adjusted()
+    {
+        var ratios = await new Harness(actions: false).ReadAsync(March);
+
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Contains(ratios.Findings, finding => finding.Contains("No corporate action is recorded", StringComparison.Ordinal));
+        Assert.Equal(RatioAbsence.NoDividendCoverage, ratios.DividendYield.Reason);
+    }
+
     private sealed class Harness
     {
         private readonly InstrumentId _instrument = InstrumentId.New();
@@ -321,6 +441,7 @@ public sealed class FundamentalRatioServiceTests
         private readonly FakeCorporateActionRepository _actions = new();
         private readonly FinancialTemplate _template;
         private readonly FinancialStatementScope _scope;
+        private readonly DateTimeOffset _recorded;
 
         public Harness(
             decimal quarterProfit = 250_000_000_000m,
@@ -332,8 +453,11 @@ public sealed class FundamentalRatioServiceTests
             decimal capitalQ4 = 1_000_000_000_000m,
             decimal? capitalQ3 = null,
             decimal? reportedEps = null,
-            bool history = true)
+            bool history = true,
+            bool actions = true,
+            DateTimeOffset? recorded = null)
         {
+            _recorded = recorded ?? Recorded;
             _template = template;
             _scope = scope;
             var bank = template == FinancialTemplate.Bank;
@@ -380,6 +504,14 @@ public sealed class FundamentalRatioServiceTests
                 }
             }
 
+            Close(March, 60_000m);
+
+            if (!actions)
+            {
+                Bonus = null!;
+                return;
+            }
+
             Bonus = AddBonus(new DateOnly(2023, 2, 15), 1.2m, bonusAnnounced ? new DateOnly(2023, 2, 1) : null);
 
             Action(CorporateActionType.CashDividend, new DateOnly(2022, 10, 3), ratio: null, cash: 1_000m, new DateOnly(2022, 9, 15));
@@ -388,8 +520,6 @@ public sealed class FundamentalRatioServiceTests
             {
                 Action(CorporateActionType.CashDividend, new DateOnly(2021, 10, 1), ratio: null, cash: 500m, new DateOnly(2021, 9, 15));
             }
-
-            Close(March, 60_000m);
         }
 
         public CorporateAction Bonus { get; }
@@ -402,31 +532,41 @@ public sealed class FundamentalRatioServiceTests
             return bonus;
         }
 
-        public void Close(DateOnly session, decimal close) =>
-            _bars.AddRange([OhlcvBar.Record(
+        public void Close(DateOnly session, decimal close, DateTimeOffset? recorded = null)
+        {
+            var bar = OhlcvBar.Record(
                 _instrument, BarInterval.OneDay, new DateTimeOffset(session.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
-                Price.Create(close), Price.Create(close), Price.Create(close), Price.Create(close), 1_000, null, Ids, Recorded)]);
+                Price.Create(close), Price.Create(close), Price.Create(close), Price.Create(close), 1_000, null, Ids, recorded ?? _recorded);
+            _bars.AddRange([bar]);
+            _bars.Revisions.Add(BarRevision.Snapshot(bar, recorded ?? _recorded));
+        }
 
-        public Task<FundamentalRatios> ReadAsync(DateOnly session) =>
-            new FundamentalRatioService(new FundamentalsReader(_fundamentals), _bars, _actions)
-                .ReadAsync(_instrument, session, TestContext.Current.CancellationToken);
+        public Task<FundamentalRatios> ReadAsync(DateOnly session, DateTimeOffset? knownAsOf = null) =>
+            Service().ReadAsync(_instrument, session, knownAsOf, TestContext.Current.CancellationToken);
+
+        public Task<IReadOnlyList<FundamentalRatios>> ReadSeriesAsync(IReadOnlyList<DateOnly> sessions, DateTimeOffset? knownAsOf = null) =>
+            Service().ReadSeriesAsync(_instrument, sessions, knownAsOf, TestContext.Current.CancellationToken);
+
+        private FundamentalRatioService Service() =>
+            new(new FundamentalsReader(_fundamentals), _bars, _actions);
 
         public FinancialReport Report(
             FiscalQuarter period,
             DateOnly disclosedOn,
             FinancialStatementScope? scope = null,
-            bool isCorrection = false)
+            bool isCorrection = false,
+            DateTimeOffset? recorded = null)
         {
             var report = FinancialReport.Record(
                 _instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, scope ?? _scope,
                 _template, period, "Báo cáo tài chính", disclosedOn, null,
-                FinancialReportTests.Vietnam, isCorrection, valuesFiled: true, Recorded);
+                FinancialReportTests.Vietnam, isCorrection, valuesFiled: true, recorded ?? _recorded);
             _fundamentals.Add(report);
             return report;
         }
 
         public void Line(FinancialReport report, FinancialStatement statement, string code, FiscalQuarter period, PeriodSpan span, decimal value) =>
-            _fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, value, ValueBasis.AsFiled, Ids, Recorded));
+            _fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, value, ValueBasis.AsFiled, Ids, report.RecordedAtUtc));
 
         private void Equity(FinancialReport report, FiscalQuarter period, decimal total)
         {

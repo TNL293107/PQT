@@ -123,7 +123,7 @@ internal static class FundamentalsEndpoints
             session = DateOnly.FromDateTime(last.OpenedAtUtc.UtcDateTime);
         }
 
-        var read = await ratios.ReadAsync(id, session.Value, cancellationToken).ConfigureAwait(false);
+        var read = await ratios.ReadAsync(id, session.Value, cancellationToken: cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(FundamentalRatiosResponse.From(read));
     }
 

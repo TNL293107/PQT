@@ -73,7 +73,8 @@ public sealed record DatasetRequest
         bool adjusted,
         DateTimeOffset? knownAsOfUtc,
         AnnouncementPolicy announcementPolicy,
-        int historySessions)
+        int historySessions,
+        bool fundamentals)
     {
         UniverseCode = universeCode;
         Membership = membership;
@@ -85,6 +86,7 @@ public sealed record DatasetRequest
         KnownAsOfUtc = knownAsOfUtc;
         AnnouncementPolicy = announcementPolicy;
         HistorySessions = historySessions;
+        Fundamentals = fundamentals;
     }
 
     /// <summary>Gets the universe the instrument set comes from.</summary>
@@ -139,6 +141,12 @@ public sealed record DatasetRequest
     public int HistorySessions { get; }
 
     /// <summary>
+    /// Gets whether the export also writes each membership session's
+    /// point-in-time ratios to <c>fundamentals.parquet</c> (ADR-031).
+    /// </summary>
+    public bool Fundamentals { get; }
+
+    /// <summary>
     /// Gets the identifier these parameters name.
     /// </summary>
     /// <remarks>
@@ -162,6 +170,7 @@ public sealed record DatasetRequest
     /// <param name="knownAsOfUtc">The observation instant, or null.</param>
     /// <param name="announcementPolicy">What to do with an unknown announcement date.</param>
     /// <param name="historySessions">Bars to write before each instrument's first membership session.</param>
+    /// <param name="fundamentals">Whether to write each membership session's ratios too.</param>
     /// <returns><see langword="true"/> when the request is usable.</returns>
     public static bool TryCreatePointInTime(
         UniverseCode universeCode,
@@ -173,7 +182,8 @@ public sealed record DatasetRequest
         bool adjusted = true,
         DateTimeOffset? knownAsOfUtc = null,
         AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict,
-        int historySessions = 0)
+        int historySessions = 0,
+        bool fundamentals = false)
     {
         request = null;
 
@@ -192,7 +202,8 @@ public sealed record DatasetRequest
             adjusted,
             knownAsOfUtc?.ToUniversalTime(),
             announcementPolicy,
-            historySessions);
+            historySessions,
+            fundamentals);
         return true;
     }
 
@@ -211,6 +222,7 @@ public sealed record DatasetRequest
     /// <param name="knownAsOfUtc">The observation instant, or null.</param>
     /// <param name="announcementPolicy">What to do with an unknown announcement date.</param>
     /// <param name="historySessions">Bars to write before the window starts.</param>
+    /// <param name="fundamentals">Whether to write each session's ratios too.</param>
     /// <returns><see langword="true"/> when the request is usable.</returns>
     public static bool TryCreate(
         UniverseCode universeCode,
@@ -223,7 +235,8 @@ public sealed record DatasetRequest
         bool adjusted = true,
         DateTimeOffset? knownAsOfUtc = null,
         AnnouncementPolicy announcementPolicy = AnnouncementPolicy.Strict,
-        int historySessions = 0)
+        int historySessions = 0,
+        bool fundamentals = false)
     {
         request = null;
 
@@ -253,7 +266,8 @@ public sealed record DatasetRequest
             adjusted,
             knownAsOfUtc?.ToUniversalTime(),
             announcementPolicy,
-            historySessions);
+            historySessions,
+            fundamentals);
         problem = null;
         return true;
     }
@@ -355,6 +369,14 @@ public static class DatasetIdentity
             canonical += string.Create(CultureInfo.InvariantCulture, $"|history:{request.HistorySessions}");
         }
 
+        // The same again for fundamentals (ADR-031): a dataset with them is a
+        // different dataset from the same window without them, and every
+        // request made before them keeps its identifier.
+        if (request.Fundamentals)
+        {
+            canonical += "|fundamentals";
+        }
+
         return Digest(canonical)[..IdLength];
     }
 
@@ -379,6 +401,9 @@ public static class DatasetIdentity
         // keep verifying byte-for-byte; the defaults it reads back with are
         // not facts it ever recorded.
         var withHistory = manifest.SchemaVersion >= DatasetManifest.HistorySchemaVersion;
+
+        // Version 4's fundamentals object likewise (ADR-031).
+        var withFundamentals = manifest.SchemaVersion >= DatasetManifest.FundamentalsSchemaVersion;
 
         // Deliberately excludes DatasetVersion along with the two timestamps.
         // Version says which build this is, not what the data is, so including
@@ -408,6 +433,11 @@ public static class DatasetIdentity
         if (withHistory)
         {
             builder.Append(manifest.HistorySessions).Append('|');
+        }
+
+        if (withFundamentals)
+        {
+            AppendFundamentals(builder, manifest.Fundamentals);
         }
 
         foreach (var instrument in manifest.Instruments)
@@ -461,6 +491,36 @@ public static class DatasetIdentity
         }
 
         return Digest(builder.ToString());
+    }
+
+    /// <summary>
+    /// Renders the fundamentals object in a fixed order: the ratio version,
+    /// the source, the cut, the rows, and each instrument not collected with
+    /// its reason, ordered by id. Its licence note is not rendered, as no
+    /// source's note is: it records the deployment's terms, not the data.
+    /// </summary>
+    private static void AppendFundamentals(StringBuilder builder, DatasetFundamentals? fundamentals)
+    {
+        builder.Append("fundamentals:");
+
+        if (fundamentals is null)
+        {
+            builder.Append("none|");
+            return;
+        }
+
+        builder
+            .Append(fundamentals.RatioVersion.ToString(CultureInfo.InvariantCulture)).Append(',')
+            .Append(fundamentals.Source).Append(',')
+            .Append(fundamentals.Cut).Append(',')
+            .Append(fundamentals.Rows.ToString(CultureInfo.InvariantCulture)).Append(',');
+
+        foreach (var gap in fundamentals.NotCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal))
+        {
+            builder.Append(gap.InstrumentId).Append('~').Append(gap.Reason).Append(';');
+        }
+
+        builder.Append('|');
     }
 
     private static string Format(DateOnly date) =>

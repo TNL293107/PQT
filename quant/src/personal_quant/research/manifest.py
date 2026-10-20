@@ -16,6 +16,12 @@ Schema 3 adds history (ADR-025): ``history_sessions``, each instrument's
 ``history_from`` and each spell's ``removal_announced_on``. They enter the hash
 only from schema 3, so a schema 1 or 2 manifest hashes exactly as it was
 written; read from one, they are zero and ``None``.
+
+Schema 4 adds ``fundamentals`` (ADR-031): what ``fundamentals.parquet`` holds,
+or null when the export carried none. It enters the hash from schema 4 only,
+except its licence note, which no source's note does. A ``ratio_version`` this
+reader does not know is refused: the ratios would be read under rules it
+cannot name.
 """
 
 from __future__ import annotations
@@ -29,10 +35,12 @@ from typing import Any, Literal
 
 __all__ = [
     "DatasetFile",
+    "DatasetFundamentals",
     "DatasetInstrument",
     "DatasetManifest",
     "DatasetSpell",
     "Membership",
+    "NotCollected",
     "UnsupportedManifestError",
     "content_hash_of",
     "dotnet_round_trip",
@@ -40,10 +48,22 @@ __all__ = [
 
 Membership = Literal["as_of", "point_in_time"]
 
-SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4})
 
 HISTORY_SCHEMA_VERSION = 3
 """The first schema whose manifests carry history and removal announcements."""
+
+FUNDAMENTALS_SCHEMA_VERSION = 4
+"""The first schema whose manifests carry the fundamentals object."""
+
+SUPPORTED_RATIO_VERSIONS = frozenset({1})
+"""The ratio rules this reader can name: ADR-030 with its two checks is 1."""
+
+SESSION_CUT = "session_date_00utc"
+"""The cut every fundamentals row is read at (ADR-031)."""
+
+GAP_REASONS = frozenset({"ids_capture_gap", "out_of_scope", "not_imported"})
+"""Why an exported instrument has no fundamentals."""
 
 # The manifest spells policies the way the API and CLI do; the hash uses the
 # C# enum name, which is what StringBuilder.Append(enum) writes.
@@ -118,6 +138,32 @@ class DatasetFile:
 
 
 @dataclass(frozen=True, slots=True)
+class NotCollected:
+    """An exported instrument with no report held at all, and why.
+
+    ``ids_capture_gap`` may be fixed; ``out_of_scope`` will not be;
+    ``not_imported`` means nobody imported it, or not by the observation
+    instant. It has no fundamentals rows, which is a different fact from a
+    name whose ratios are all absent.
+    """
+
+    instrument_id: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetFundamentals:
+    """What ``fundamentals.parquet`` holds (schema 4, ADR-031)."""
+
+    ratio_version: int
+    source: str
+    licence_note: str
+    cut: str
+    rows: int
+    not_collected: tuple[NotCollected, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetManifest:
     """What a dataset build is, as its manifest states it."""
 
@@ -142,6 +188,7 @@ class DatasetManifest:
     sources: tuple[str, ...]
     files: tuple[DatasetFile, ...]
     history_sessions: int = 0
+    fundamentals: DatasetFundamentals | None = None
 
     @staticmethod
     def from_json(raw: Mapping[str, Any]) -> DatasetManifest:
@@ -154,9 +201,9 @@ class DatasetManifest:
             The manifest.
 
         Raises:
-            UnsupportedManifestError: The schema version or a policy is not one
-                this reader knows. A reader that guessed which fields mean what
-                would load a dataset it cannot describe.
+            UnsupportedManifestError: The schema version, a policy or the ratio
+                version is not one this reader knows. A reader that guessed
+                which fields mean what would load a dataset it cannot describe.
         """
         version = int(raw["schema_version"])
 
@@ -203,6 +250,13 @@ class DatasetManifest:
             files=tuple(_file(item) for item in raw["files"]),
             history_sessions=(
                 _count(raw["history_sessions"], "history_sessions") if with_history else 0
+            ),
+            # Read only from schema 4, for the reason history is read only
+            # from schema 3: an older hash does not cover it.
+            fundamentals=(
+                _fundamentals(raw["fundamentals"])
+                if version >= FUNDAMENTALS_SCHEMA_VERSION
+                else None
             ),
         )
 
@@ -261,6 +315,10 @@ def content_hash_of(manifest: DatasetManifest) -> str:
     if with_history:
         canonical += f"{manifest.history_sessions}|"
 
+    # Schema 4 only, likewise.
+    if manifest.schema_version >= FUNDAMENTALS_SCHEMA_VERSION:
+        canonical += _fundamentals_part(manifest.fundamentals)
+
     canonical += "".join(
         _instrument_part(instrument, with_history) for instrument in manifest.instruments
     )
@@ -317,6 +375,60 @@ def _instrument_part(instrument: DatasetInstrument, with_history: bool) -> str:
         rendered += ";"
 
     return rendered
+
+
+def _fundamentals_part(fundamentals: DatasetFundamentals | None) -> str:
+    if fundamentals is None:
+        return "fundamentals:none|"
+
+    rendered = (
+        f"fundamentals:{fundamentals.ratio_version},{fundamentals.source},"
+        f"{fundamentals.cut},{fundamentals.rows},"
+    )
+
+    # Ordered by id, as the exporter renders them, whatever order the file holds.
+    for gap in sorted(fundamentals.not_collected, key=lambda gap: gap.instrument_id):
+        rendered += f"{gap.instrument_id}~{gap.reason};"
+
+    return rendered + "|"
+
+
+def _fundamentals(raw: Mapping[str, Any] | None) -> DatasetFundamentals | None:
+    if raw is None:
+        return None
+
+    ratio_version = _count(raw["ratio_version"], "fundamentals.ratio_version")
+
+    if ratio_version not in SUPPORTED_RATIO_VERSIONS:
+        raise UnsupportedManifestError(
+            f"Ratio version {ratio_version} is not one this reader knows "
+            f"({sorted(SUPPORTED_RATIO_VERSIONS)}); the ratios were computed under rules "
+            "it cannot name."
+        )
+
+    cut = str(raw["cut"])
+
+    if cut != SESSION_CUT:
+        raise UnsupportedManifestError(f"Fundamentals cut '{cut}' is not known.")
+
+    gaps: list[NotCollected] = []
+
+    for item in raw["not_collected"]:
+        reason = str(item["reason"])
+
+        if reason not in GAP_REASONS:
+            raise UnsupportedManifestError(f"Not-collected reason '{reason}' is not known.")
+
+        gaps.append(NotCollected(instrument_id=str(item["instrument_id"]), reason=reason))
+
+    return DatasetFundamentals(
+        ratio_version=ratio_version,
+        source=str(raw["source"]),
+        licence_note=str(raw["licence_note"]),
+        cut=cut,
+        rows=_count(raw["rows"], "fundamentals.rows"),
+        not_collected=tuple(gaps),
+    )
 
 
 def _announcement(value: date | None) -> str:

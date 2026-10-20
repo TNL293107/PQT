@@ -1,7 +1,11 @@
 using System.Globalization;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PersonalQuant.Application.Abstractions;
+using PersonalQuant.Application.Coverage;
 using PersonalQuant.Application.Diagnostics;
+using PersonalQuant.Application.Fundamentals;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Universes;
@@ -34,6 +38,8 @@ namespace PersonalQuant.Application.Datasets;
 /// <param name="marketData">Reads the series, through the one query path.</param>
 /// <param name="store">Where datasets are written and read back.</param>
 /// <param name="licences">What may be done with each source's rows.</param>
+/// <param name="statements">Tells a name with reports from one with none (ADR-031).</param>
+/// <param name="ratios">Computes each session's ratios, the one computation the surfaces use.</param>
 /// <param name="build">Identifies the build that produced the export.</param>
 /// <param name="clock">Supplies the creation instant.</param>
 /// <param name="logger">Logger for export telemetry.</param>
@@ -43,6 +49,8 @@ internal sealed class DatasetExportService(
     IMarketDataQueryService marketData,
     IDatasetStore store,
     IDatasetLicenceRegistry licences,
+    IFundamentalsReader statements,
+    IFundamentalRatioService ratios,
     IBuildIdentity build,
     IClock clock,
     ILogger<DatasetExportService> logger) : IDatasetExportService
@@ -66,6 +74,7 @@ internal sealed class DatasetExportService(
         var sources = new SortedSet<string>(StringComparer.Ordinal);
         var withoutBars = 0;
         var historyRows = 0;
+        var ranges = new List<(InstrumentId Instrument, string Ticker, IReadOnlyList<(DateOnly From, DateOnly To)> Membership)>();
 
         foreach (var (instrumentId, spells) in plan.Members)
         {
@@ -86,6 +95,8 @@ internal sealed class DatasetExportService(
 
             var read = await ReadInstrumentAsync(request, instrumentId, spells, rows, sources, cancellationToken)
                 .ConfigureAwait(false);
+
+            ranges.Add((instrumentId, detail.Ticker.Value, [.. Ranges(request, spells)]));
 
             members.Add(new DatasetInstrument(
                 instrumentId.Value,
@@ -128,7 +139,21 @@ internal sealed class DatasetExportService(
             .WriteBarsAsync(request.DatasetId, version, rows, cancellationToken)
             .ConfigureAwait(false);
 
-        var manifest = Describe(request, version, members, sources, file);
+        List<DatasetFile> files = [file];
+        DatasetFundamentals? fundamentals = null;
+
+        if (request.Fundamentals)
+        {
+            var (fundamentalRows, described) = await ReadFundamentalsAsync(request, ranges, rows, cancellationToken)
+                .ConfigureAwait(false);
+
+            files.Add(await store
+                .WriteFundamentalsAsync(request.DatasetId, version, fundamentalRows, cancellationToken)
+                .ConfigureAwait(false));
+            fundamentals = described;
+        }
+
+        var manifest = Describe(request, version, members, sources, files, fundamentals);
 
         await store.WriteManifestAsync(manifest, cancellationToken).ConfigureAwait(false);
 
@@ -518,7 +543,8 @@ internal sealed class DatasetExportService(
         int version,
         IReadOnlyList<DatasetInstrument> members,
         IEnumerable<string> sources,
-        DatasetFile file)
+        IReadOnlyList<DatasetFile> files,
+        DatasetFundamentals? fundamentals)
     {
         var manifest = new DatasetManifest(
             request.DatasetId,
@@ -540,14 +566,132 @@ internal sealed class DatasetExportService(
             DataRules.ValidationVersion,
             DataRules.AdjustmentVersion,
             [.. sources.Select(code => new DatasetSource(code, licences.NoteFor(code)))],
-            [file],
+            files,
             clock.UtcNow,
             build.Commit,
             request.Membership,
-            request.HistorySessions);
+            request.HistorySessions,
+            fundamentals);
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
     }
+
+    /// <summary>
+    /// Reads each exported instrument's ratios at each of its membership
+    /// sessions (ADR-031).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A session is a date some exported bar opened on within the window, so
+    /// a name suspended on a day the market traded still has a row, with its
+    /// close absent. History rows are prices a lookback reads, not sessions
+    /// anything is scored on, and get none.
+    /// </para>
+    /// <para>
+    /// A name with no report held at all has no rows and is listed as not
+    /// collected, with why: a gap is a different fact from a name whose
+    /// ratios are all absent for a quarter.
+    /// </para>
+    /// </remarks>
+    private async Task<(IReadOnlyList<DatasetFundamentalsRow> Rows, DatasetFundamentals Described)> ReadFundamentalsAsync(
+        DatasetRequest request,
+        IReadOnlyList<(InstrumentId Instrument, string Ticker, IReadOnlyList<(DateOnly From, DateOnly To)> Membership)> ranges,
+        IReadOnlyList<DatasetBar> bars,
+        CancellationToken cancellationToken)
+    {
+        var sessions = bars
+            .Select(Session)
+            .Where(session => request.FromDate <= session && session <= request.ToDate)
+            .Distinct()
+            .Order()
+            .ToList();
+
+        var rows = new List<DatasetFundamentalsRow>();
+        var notCollected = new List<DatasetNotCollected>();
+        var sources = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var (instrumentId, ticker, membership) in ranges.OrderBy(range => range.Instrument.Value))
+        {
+            var held = await statements
+                .LoadAsync(instrumentId, request.KnownAsOfUtc, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!held.HasReports)
+            {
+                notCollected.Add(new DatasetNotCollected(
+                    instrumentId.Value,
+                    InstrumentCoverageService.FundamentalsGapCodes.TryGetValue(ticker, out var code) ? code : NotImported));
+                continue;
+            }
+
+            sources.UnionWith(held.Sources);
+
+            var own = sessions.Where(session => membership.Any(range => range.From <= session && session <= range.To)).ToList();
+            var read = await ratios
+                .ReadSeriesAsync(instrumentId, own, request.KnownAsOfUtc, cancellationToken)
+                .ConfigureAwait(false);
+
+            rows.AddRange(read.Select(Row));
+        }
+
+        var described = new DatasetFundamentals(
+            FundamentalRatioService.RatioVersion,
+            sources.Count == 0 ? "none" : string.Join('+', sources),
+            sources.Count == 0 ? IDatasetLicenceRegistry.UnstatedNote : string.Join(" ", sources.Select(licences.NoteFor).Distinct(StringComparer.Ordinal)),
+            DatasetFundamentals.SessionCut,
+            rows.Count,
+            [.. notCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal)]);
+
+        return (rows, described);
+    }
+
+    /// <summary>The code for a name nobody has imported fundamentals for yet.</summary>
+    private const string NotImported = "not_imported";
+
+    /// <summary>
+    /// The two JSON columns are written compact, with text as it is rather
+    /// than escaped, so a reader in either language sees the same string.
+    /// </summary>
+    private static readonly JsonSerializerOptions ArrayJson = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = false,
+    };
+
+    private static DatasetFundamentalsRow Row(FundamentalRatios ratios) =>
+        new(
+            ratios.InstrumentId.Value,
+            ratios.Session,
+            ratios.KnownAsOfUtc,
+            ratios.Scope switch
+            {
+                Domain.Fundamentals.FinancialStatementScope.Consolidated => "consolidated",
+                Domain.Fundamentals.FinancialStatementScope.Separate => "separate",
+                _ => null,
+            },
+            ratios.BalanceSheet?.ToString(),
+            JsonSerializer.Serialize(ratios.BalanceSheetReports.Select(id => id.Value.ToString()).ToList(), ArrayJson),
+            ratios.ProfitQuarters.Count > 0 ? ratios.ProfitQuarters[0].ToString() : null,
+            ratios.ProfitQuarters.Count > 0 ? ratios.ProfitQuarters[^1].ToString() : null,
+            ratios.ActionsApplied,
+            ratios.ActionsWithheld,
+            [.. new[]
+            {
+                ratios.Close,
+                ratios.Shares,
+                ratios.NetProfitTtm,
+                ratios.EpsTtm,
+                ratios.BookValuePerShare,
+                ratios.PriceToEarnings,
+                ratios.PriceToBook,
+                ratios.ReturnOnEquity,
+                ratios.DividendYield,
+            }.Select(value => (value.Value, value.Value is null ? AbsenceCode(value.Reason) : null))],
+            JsonSerializer.Serialize(ratios.Findings.Order(StringComparer.Ordinal).ToList(), ArrayJson));
+
+    /// <summary>The <see cref="RatioAbsence"/> code in snake_case, as the file carries it.</summary>
+    internal static string AbsenceCode(RatioAbsence? reason) =>
+        JsonNamingPolicy.SnakeCaseLower.ConvertName((reason ?? RatioAbsence.Unspecified).ToString());
 
     /// <summary>
     /// How many days one read may cover without exceeding the query bound.

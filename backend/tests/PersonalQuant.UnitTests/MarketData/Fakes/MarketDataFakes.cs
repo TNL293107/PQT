@@ -190,7 +190,9 @@ internal sealed class FakeBarRepository : IBarRepository
                     revision.InstrumentId == query.InstrumentId
                     && revision.Interval == query.Interval
                     && query.KnownAsOfUtc is { } asOf
-                    && revision.WasKnownAt(asOf))
+                    && revision.WasKnownAt(asOf)
+                    && (query.FromUtc is not { } from || revision.OpenedAtUtc >= from)
+                    && (query.ToUtc is not { } to || revision.OpenedAtUtc < to))
                 .OrderBy(revision => revision.OpenedAtUtc)
                 .TakeLast(query.Limit)]);
 

@@ -29,6 +29,26 @@ public interface IFundamentalsReader
         DateTimeOffset knownAsOfUtc,
         DateTimeOffset? observedAsOfUtc = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads an issuer's reports and lines once, to be read at many instants.
+    /// </summary>
+    /// <remarks>
+    /// A read of each session of a dataset would otherwise load the same
+    /// rows again for every session. <see cref="FundamentalsHistory.Read"/>
+    /// at an instant equals <see cref="ReadAsync"/> at it.
+    /// </remarks>
+    /// <param name="instrumentId">The issuer's instrument.</param>
+    /// <param name="observedAsOfUtc">
+    /// The instant this system's knowledge is read at, as for
+    /// <see cref="ReadAsync"/>; null reads what PQT holds now.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The loaded history.</returns>
+    Task<FundamentalsHistory> LoadAsync(
+        InstrumentId instrumentId,
+        DateTimeOffset? observedAsOfUtc = null,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>An issuer's statement values as known at an instant.</summary>
@@ -114,15 +134,100 @@ public sealed class FundamentalsReader(IFundamentalsRepository fundamentals) : I
         DateTimeOffset? observedAsOfUtc = null,
         CancellationToken cancellationToken = default)
     {
+        RequireUtc(knownAsOfUtc, observedAsOfUtc);
+
+        var history = await LoadAsync(instrumentId, observedAsOfUtc, cancellationToken).ConfigureAwait(false);
+        return history.Read(scope, knownAsOfUtc);
+    }
+
+    /// <inheritdoc />
+    public async Task<FundamentalsHistory> LoadAsync(
+        InstrumentId instrumentId,
+        DateTimeOffset? observedAsOfUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        RequireUtc(DateTimeOffset.UnixEpoch, observedAsOfUtc);
+
+        var held = (await fundamentals.ListReportsAsync([instrumentId], cancellationToken).ConfigureAwait(false))
+            .Where(report => observedAsOfUtc is not { } observed || report.RecordedAtUtc <= observed)
+            .ToList();
+
+        var lines = (await fundamentals
+                .ListLinesAsync([.. held.Where(report => report.ValuesFiled).Select(report => report.Id)], cancellationToken)
+                .ConfigureAwait(false))
+            .Where(line => ReadAt(line, observedAsOfUtc))
+            .ToLookup(line => line.ReportId);
+
+        return new FundamentalsHistory(instrumentId, observedAsOfUtc, held, lines);
+    }
+
+    private static void RequireUtc(DateTimeOffset knownAsOfUtc, DateTimeOffset? observedAsOfUtc)
+    {
         if (knownAsOfUtc.Offset != TimeSpan.Zero || observedAsOfUtc is { Offset.Ticks: not 0 })
         {
             throw new ArgumentException("As-of instants must be UTC.", nameof(knownAsOfUtc));
         }
+    }
 
-        var held = (await fundamentals.ListReportsAsync([instrumentId], cancellationToken).ConfigureAwait(false))
-            .Where(report => report.Scope == scope)
-            .Where(report => observedAsOfUtc is not { } observed || report.RecordedAtUtc <= observed)
-            .ToList();
+    /// <summary>Whether a reading is the one held at the observation instant, or now.</summary>
+    private static bool ReadAt(StatementLine line, DateTimeOffset? observedAsOfUtc) =>
+        observedAsOfUtc is not { } observed
+            ? line.IsCurrent
+            : line.ObservedFromUtc <= observed && (line.ObservedToUtc is not { } to || observed < to);
+}
+
+/// <summary>
+/// An issuer's reports and lines as this system held them at one instant,
+/// to be read at any market instant (ADR-029; ADR-031).
+/// </summary>
+/// <remarks>
+/// The market cut of <see cref="FundamentalsReader"/>, applied in memory:
+/// a report is admitted once its <see cref="FinancialReport.KnownFromUtc"/>
+/// has passed, and the latest one known states each value.
+/// </remarks>
+public sealed class FundamentalsHistory
+{
+    private readonly IReadOnlyList<FinancialReport> _held;
+
+    private readonly ILookup<FinancialReportId, StatementLine> _lines;
+
+    internal FundamentalsHistory(
+        InstrumentId instrumentId,
+        DateTimeOffset? observedAsOfUtc,
+        IReadOnlyList<FinancialReport> held,
+        ILookup<FinancialReportId, StatementLine> lines)
+    {
+        InstrumentId = instrumentId;
+        ObservedAsOfUtc = observedAsOfUtc;
+        _held = held;
+        _lines = lines;
+    }
+
+    /// <summary>Gets the issuer's instrument.</summary>
+    public InstrumentId InstrumentId { get; }
+
+    /// <summary>Gets the system-knowledge instant, or null for now.</summary>
+    public DateTimeOffset? ObservedAsOfUtc { get; }
+
+    /// <summary>Gets whether any report is held at all, of either scope.</summary>
+    public bool HasReports => _held.Count > 0;
+
+    /// <summary>Gets the provider codes of the reports held, in ordinal order.</summary>
+    public IReadOnlyList<string> Sources =>
+        [.. _held.Select(report => report.Source.Value).Distinct().Order(StringComparer.Ordinal)];
+
+    /// <summary>Reads every value of one scope known at an instant.</summary>
+    /// <param name="scope">Separate or consolidated; the two are never mixed.</param>
+    /// <param name="knownAsOfUtc">The market-knowledge instant, inclusive.</param>
+    /// <returns>The values, one per line and period, and what was withheld.</returns>
+    public FundamentalsAsOf Read(FinancialStatementScope scope, DateTimeOffset knownAsOfUtc)
+    {
+        if (knownAsOfUtc.Offset != TimeSpan.Zero)
+        {
+            throw new ArgumentException("As-of instants must be UTC.", nameof(knownAsOfUtc));
+        }
+
+        var held = _held.Where(report => report.Scope == scope).ToList();
 
         // Oldest first, so a later report overwrites an earlier one per key.
         var known = held
@@ -133,17 +238,11 @@ public sealed class FundamentalsReader(IFundamentalsRepository fundamentals) : I
             .ThenBy(report => report.Id.Value)
             .ToList();
 
-        var lines = (await fundamentals
-                .ListLinesAsync([.. known.Where(report => report.ValuesFiled).Select(report => report.Id)], cancellationToken)
-                .ConfigureAwait(false))
-            .Where(line => ReadAt(line, observedAsOfUtc))
-            .ToLookup(line => line.ReportId);
-
         var served = new Dictionary<(FinancialTemplate, FinancialStatement, string, FiscalQuarter, PeriodSpan), FundamentalValue>();
 
         foreach (var report in known.Where(report => report.ValuesFiled))
         {
-            foreach (var line in lines[report.Id])
+            foreach (var line in _lines[report.Id])
             {
                 var key = (report.Template, line.Statement, line.LineCode, line.Period, line.Span);
                 var restated = served.TryGetValue(key, out var earlier) && (earlier.Restated || earlier.Value != line.Value);
@@ -164,10 +263,10 @@ public sealed class FundamentalsReader(IFundamentalsRepository fundamentals) : I
         }
 
         return new FundamentalsAsOf(
-            instrumentId,
+            InstrumentId,
             scope,
             knownAsOfUtc,
-            observedAsOfUtc,
+            ObservedAsOfUtc,
             [.. served.Values
                 .OrderBy(value => value.Statement)
                 .ThenBy(value => value.Period)
@@ -177,10 +276,4 @@ public sealed class FundamentalsReader(IFundamentalsRepository fundamentals) : I
             known.Count,
             held.Count - known.Count);
     }
-
-    /// <summary>Whether a reading is the one held at the observation instant, or now.</summary>
-    private static bool ReadAt(StatementLine line, DateTimeOffset? observedAsOfUtc) =>
-        observedAsOfUtc is not { } observed
-            ? line.IsCurrent
-            : line.ObservedFromUtc <= observed && (line.ObservedToUtc is not { } to || observed < to);
 }

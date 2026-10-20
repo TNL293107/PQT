@@ -27,21 +27,26 @@ namespace PersonalQuant.UnitTests.Datasets;
 /// them would fail every dataset already on disk.
 /// </para>
 /// <para>
-/// The version 3 fixture is built below and written by this test when
-/// <c>PQT_WRITE_GOLDEN=1</c>; otherwise the test asserts the committed file is
-/// exactly what this build would write. It carries no prices, so committing it
-/// redistributes nothing.
+/// The version 3 fixture was written by this test's version 3 build and is
+/// now held like the two before it, by its hash. The version 4 fixture is
+/// built below and written by this test when <c>PQT_WRITE_GOLDEN=1</c>;
+/// otherwise the test asserts the committed file is exactly what this build
+/// would write. Neither carries prices, so committing them redistributes
+/// nothing.
 /// </para>
 /// </remarks>
 public sealed class DatasetManifestGoldenTests
 {
     private const string GoldenV3 = "v3-history.json";
 
+    private const string GoldenV4 = "v4-fundamentals.json";
+
     [Theory]
     [InlineData("v1-as-of.json")]
     [InlineData("v2-point-in-time.json")]
     [InlineData("v2-known-as-of.json")]
     [InlineData(GoldenV3)]
+    [InlineData(GoldenV4)]
     public void A_committed_manifest_hashes_to_the_content_hash_it_records(string name)
     {
         var manifest = Read(name);
@@ -50,11 +55,11 @@ public sealed class DatasetManifestGoldenTests
     }
 
     [Fact]
-    public void The_version_three_fixture_is_exactly_what_this_build_writes()
+    public void The_version_four_fixture_is_exactly_what_this_build_writes()
     {
         var written = JsonSerializer.Serialize(GoldenManifest(), ParquetDatasetStore.ManifestJson)
             .ReplaceLineEndings("\n") + "\n";
-        var path = Path.Combine(FixtureDirectory(), GoldenV3);
+        var path = Path.Combine(FixtureDirectory(), GoldenV4);
 
         if (string.Equals(Environment.GetEnvironmentVariable("PQT_WRITE_GOLDEN"), "1", StringComparison.Ordinal))
         {
@@ -83,12 +88,51 @@ public sealed class DatasetManifestGoldenTests
     }
 
     [Fact]
+    public void The_version_four_fixture_covers_every_shape_the_fundamentals_object_can_take()
+    {
+        var manifest = Read(GoldenV4);
+        var fundamentals = manifest.Fundamentals!;
+
+        Assert.Equal(4, manifest.SchemaVersion);
+        Assert.Equal(2, manifest.Files.Count);
+        Assert.Equal(manifest.Files[1].RowCount, fundamentals.Rows);
+        Assert.Equal(
+            ["ids_capture_gap", "not_imported", "out_of_scope"],
+            fundamentals.NotCollected.Select(gap => gap.Reason).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_version_four_manifest_hashes_its_fundamentals_and_a_version_three_one_does_not()
+    {
+        var manifest = GoldenManifest();
+        var fundamentals = manifest.Fundamentals!;
+
+        Assert.NotEqual(
+            DatasetIdentity.ContentHashOf(manifest),
+            DatasetIdentity.ContentHashOf(manifest with { Fundamentals = null }));
+        Assert.NotEqual(
+            DatasetIdentity.ContentHashOf(manifest),
+            DatasetIdentity.ContentHashOf(manifest with { Fundamentals = fundamentals with { NotCollected = fundamentals.NotCollected.Skip(1).ToList() } }));
+
+        // The licence note records the deployment's terms, not the data.
+        Assert.Equal(
+            DatasetIdentity.ContentHashOf(manifest),
+            DatasetIdentity.ContentHashOf(manifest with { Fundamentals = fundamentals with { LicenceNote = "changed" } }));
+
+        var asVersionThree = Read(GoldenV3);
+
+        Assert.Equal(
+            DatasetIdentity.ContentHashOf(asVersionThree),
+            DatasetIdentity.ContentHashOf(asVersionThree with { Fundamentals = fundamentals }));
+    }
+
+    [Fact]
     public void A_version_three_manifest_hashes_its_history_and_a_version_two_one_does_not()
     {
         // The new fields enter the hash only from version 3, so a version 2
         // manifest read back with their defaults hashes as it always did, and a
         // version 3 one cannot have them edited without failing verification.
-        var manifest = GoldenManifest();
+        var manifest = Read(GoldenV3);
 
         Assert.NotEqual(
             DatasetIdentity.ContentHashOf(manifest),
@@ -102,8 +146,11 @@ public sealed class DatasetManifestGoldenTests
     }
 
     /// <summary>
-    /// A point-in-time VN30 manifest with 253 sessions of history, built from a
-    /// real request so its identifier is the one the export would derive.
+    /// A point-in-time VN30 manifest with 253 sessions of history and
+    /// fundamentals, built from a real request so its identifier is the one
+    /// the export would derive. Its instruments are those of the version 3
+    /// fixture; two of them are not collected, for two different reasons, and
+    /// a third has no rows because it has no bars and no report.
     /// </summary>
     private static DatasetManifest GoldenManifest()
     {
@@ -118,7 +165,8 @@ public sealed class DatasetManifestGoldenTests
             out var request,
             out var problem,
             knownAsOfUtc: new DateTimeOffset(2026, 9, 18, 3, 4, 5, 500, TimeSpan.Zero),
-            historySessions: 253),
+            historySessions: 253,
+            fundamentals: true),
             problem);
 
         var manifest = new DatasetManifest(
@@ -184,11 +232,25 @@ public sealed class DatasetManifestGoldenTests
             1,
             2,
             [new DatasetSource("CAFEF", IDatasetLicenceRegistry.UnstatedNote)],
-            [new DatasetFile(IDatasetStore.BarsFileName, 1_265, 41_000, new string('5', 64))],
-            new DateTimeOffset(2026, 10, 11, 0, 0, 0, TimeSpan.Zero),
+            [
+                new DatasetFile(IDatasetStore.BarsFileName, 1_265, 41_000, new string('5', 64)),
+                new DatasetFile(IDatasetStore.FundamentalsFileName, 160, 23_000, new string('6', 64)),
+            ],
+            new DateTimeOffset(2026, 10, 20, 0, 0, 0, TimeSpan.Zero),
             null,
             request.Membership,
-            request.HistorySessions);
+            request.HistorySessions,
+            new DatasetFundamentals(
+                1,
+                "IDS",
+                IDatasetLicenceRegistry.UnstatedNote,
+                DatasetFundamentals.SessionCut,
+                160,
+                [
+                    new DatasetNotCollected(Guid.Parse("2b3c4d5e-6f70-4b8c-9dae-bf0011223344"), "ids_capture_gap"),
+                    new DatasetNotCollected(Guid.Parse("3c4d5e6f-7081-4c9d-aebf-c01122334455"), "out_of_scope"),
+                    new DatasetNotCollected(Guid.Parse("4d5e6f70-8192-4dae-bfc0-d12233445566"), "not_imported"),
+                ]));
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
     }

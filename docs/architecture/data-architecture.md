@@ -348,10 +348,11 @@ data is often impossible and never free.
 
 **Status: implemented.** The decision, the alternatives and what it costs are in
 [ADR-023](decisions/ADR-023-canonical-dataset-contract.md), and membership in
-[ADR-024](decisions/ADR-024-point-in-time-dataset-membership.md), and history rows
-in [ADR-025](decisions/ADR-025-dataset-history-rows.md); the manifest is governed
-by [`../schemas/dataset-manifest-v3.schema.json`](../schemas/dataset-manifest-v3.schema.json)
-(version 1 and 2 manifests stay readable and verify as written), and a test holds
+[ADR-024](decisions/ADR-024-point-in-time-dataset-membership.md), history rows
+in [ADR-025](decisions/ADR-025-dataset-history-rows.md), and fundamentals in
+[ADR-031](decisions/ADR-031-fundamentals-in-the-dataset.md); the manifest is governed
+by [`../schemas/dataset-manifest-v4.schema.json`](../schemas/dataset-manifest-v4.schema.json)
+(version 1 to 3 manifests stay readable and verify as written), and a test holds
 the two to each other so neither can move alone.
 
 The dataset PQT owns. **No third-party research framework may become the

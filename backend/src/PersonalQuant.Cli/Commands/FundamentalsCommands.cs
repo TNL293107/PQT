@@ -269,7 +269,7 @@ internal sealed class FundamentalsCommands(
             return ExitCode.Refused;
         }
 
-        var ratios = await ratioService.Value.ReadAsync(instrument.InstrumentId, session, cancellationToken).ConfigureAwait(false);
+        var ratios = await ratioService.Value.ReadAsync(instrument.InstrumentId, session, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         output.Field("session", session.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 22);
         output.Field("statements", ratios.Scope?.ToString() ?? "none known", 22);

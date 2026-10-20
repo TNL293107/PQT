@@ -156,6 +156,10 @@ public sealed record DatasetSpell(
 /// first membership session, or zero. Absent before schema version 3, which
 /// never wrote history, so an older manifest reads as zero.
 /// </param>
+/// <param name="Fundamentals">
+/// What <c>fundamentals.parquet</c> holds, or null when the export carried no
+/// fundamentals. Absent before schema version 4 (ADR-031).
+/// </param>
 public sealed record DatasetManifest(
     string DatasetId,
     int DatasetVersion,
@@ -178,7 +182,8 @@ public sealed record DatasetManifest(
     DateTimeOffset CreatedAtUtc,
     string? CreatedByCommit,
     DatasetMembership Membership = DatasetMembership.AsOf,
-    int HistorySessions = 0)
+    int HistorySessions = 0,
+    DatasetFundamentals? Fundamentals = null)
 {
     /// <summary>
     /// The manifest shape this build writes and knows how to read.
@@ -200,14 +205,25 @@ public sealed record DatasetManifest(
     /// may then precede a spell or fill the gap between two, as data rather
     /// than membership. See ADR-025.
     /// </para>
+    /// <para>
+    /// Version 4: <c>fundamentals</c>, the object describing
+    /// <c>fundamentals.parquet</c>, or null when the export carried none.
+    /// See ADR-031.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = HistorySchemaVersion;
+    public const int CurrentSchemaVersion = FundamentalsSchemaVersion;
 
     /// <summary>
     /// The first schema version whose manifests carry history and removal
     /// announcements, and hash them.
     /// </summary>
     public const int HistorySchemaVersion = 3;
+
+    /// <summary>
+    /// The first schema version whose manifests carry the fundamentals
+    /// object, and hash it.
+    /// </summary>
+    public const int FundamentalsSchemaVersion = 4;
 
     /// <summary>Gets the total rows across every file.</summary>
     public long RowCount => Files.Sum(file => file.RowCount);
@@ -227,3 +243,44 @@ public sealed record DatasetManifest(
 /// What the deployment records about redistributing this source's data.
 /// </param>
 public sealed record DatasetSource(string Code, string LicenceNote);
+
+/// <summary>
+/// What a dataset's <c>fundamentals.parquet</c> holds, and what it does not
+/// (ADR-031).
+/// </summary>
+/// <param name="RatioVersion">
+/// The rules the ratios were computed under; ADR-030 is 1. A reader that does
+/// not know the version refuses the build.
+/// </param>
+/// <param name="Source">The provider code the statements came from.</param>
+/// <param name="LicenceNote">What the deployment records about redistributing that source.</param>
+/// <param name="Cut">
+/// When a row's statements and actions were read: <c>session_date_00utc</c>,
+/// 07:00 in Hanoi before the session opened, bounded by the dataset's
+/// observation instant when it has one.
+/// </param>
+/// <param name="Rows">Rows in the file.</param>
+/// <param name="NotCollected">
+/// The exported instruments with no report held at all, each with why. They
+/// have no rows: a gap is not a name whose ratios are all absent.
+/// </param>
+public sealed record DatasetFundamentals(
+    int RatioVersion,
+    string Source,
+    string LicenceNote,
+    string Cut,
+    long Rows,
+    IReadOnlyList<DatasetNotCollected> NotCollected)
+{
+    /// <summary>The cut every row is read at.</summary>
+    public const string SessionCut = "session_date_00utc";
+}
+
+/// <summary>An exported instrument with no fundamentals, and why.</summary>
+/// <param name="InstrumentId">The canonical identifier.</param>
+/// <param name="Reason">
+/// <c>ids_capture_gap</c> when the provider failed on its filings and it may
+/// be fixed; <c>out_of_scope</c> for a securities firm or insurer outside the
+/// first import; <c>not_imported</c> for a name nobody has imported yet.
+/// </param>
+public sealed record DatasetNotCollected(Guid InstrumentId, string Reason);

@@ -19,6 +19,16 @@ membership session. Those are data a feature may read and never membership —
 :meth:`CanonicalDataset.members_on` still reads only the spells — and a row
 outside those bounds is refused like any other.
 
+A schema 4 build may carry ``fundamentals.parquet`` (ADR-031): one row of
+point-in-time ratios per instrument and membership session. It is held to the
+manifest too. A row on a session its instrument was not a member, a row for an
+instrument the manifest lists as not collected, a value present beside the
+reason it is absent (or absent with no reason), and a file the manifest's
+``fundamentals`` object and ``files`` disagree about are all refused. A
+``ratio_version`` the reader does not know is refused when the manifest is read.
+Fundamentals never make an instrument a member: :meth:`CanonicalDataset.members_on`
+reads only the spells.
+
 :meth:`LocalDatasetProvider.verify` does all of that once and hands back what it
 checked, as a :class:`VerifiedBuild`. Every reader is built on it —
 :meth:`LocalDatasetProvider.open` for Python,
@@ -59,11 +69,26 @@ __all__ = [
     "LocalDatasetProvider",
     "VerifiedBuild",
     "read_bars_table",
+    "read_fundamentals_table",
     "require_daily",
 ]
 
 MANIFEST_FILE = "manifest.json"
 BARS_FILE = "bars.parquet"
+FUNDAMENTALS_FILE = "fundamentals.parquet"
+
+FUNDAMENTAL_VALUES = (
+    "close_raw",
+    "shares",
+    "net_profit_ttm",
+    "eps_ttm",
+    "book_value_per_share",
+    "pe",
+    "pb",
+    "roe",
+    "dividend_yield",
+)
+"""The value columns of ``fundamentals.parquet``, each beside its ``_absent`` reason."""
 
 _BUILD = re.compile(r"v(?P<version>[1-9][0-9]*)")
 _COLUMNS = ["instrument_id", "opened_at_utc", "open", "high", "low", "close", "volume"]
@@ -86,11 +111,15 @@ class VerifiedBuild:
         manifest: The manifest, its content hash recomputed and matched.
         files: Each data file the manifest names, by name, as it was hashed.
         bars: The rows of ``bars.parquet``, already held to the manifest.
+        fundamentals: The rows of ``fundamentals.parquet`` as a
+            ``pyarrow.Table`` from :func:`read_fundamentals_table`, already held
+            to the manifest; ``None`` when the build carries none.
     """
 
     manifest: DatasetManifest
     files: Mapping[str, bytes]
     bars: tuple[Bar, ...]
+    fundamentals: Any = None
 
 
 def require_daily(manifest: DatasetManifest) -> None:
@@ -270,7 +299,13 @@ class LocalDatasetProvider:
         bars = _read_bars(payloads[BARS_FILE])
         _verify_rows(manifest, bars)
 
-        return VerifiedBuild(manifest, MappingProxyType(payloads), tuple(bars))
+        fundamentals = None
+
+        if manifest.fundamentals is not None:
+            fundamentals = read_fundamentals_table(payloads[FUNDAMENTALS_FILE])
+            _verify_fundamentals(manifest, fundamentals)
+
+        return VerifiedBuild(manifest, MappingProxyType(payloads), tuple(bars), fundamentals)
 
 
 def _verify_files(build: Path, manifest: DatasetManifest) -> dict[str, bytes]:
@@ -280,8 +315,22 @@ def _verify_files(build: Path, manifest: DatasetManifest) -> dict[str, bytes]:
                 f"'{file.name}' is not a file name inside the build directory."
             )
 
-    if BARS_FILE not in {file.name for file in manifest.files}:
+    names = {file.name for file in manifest.files}
+
+    if BARS_FILE not in names:
         raise DatasetIntegrityError(f"The manifest of {build} names no {BARS_FILE}.")
+
+    # The object and the file are one claim made twice; either without the
+    # other is a build whose fundamentals cannot be described.
+    if (manifest.fundamentals is not None) != (FUNDAMENTALS_FILE in names):
+        raise DatasetIntegrityError(
+            f"The manifest of {build} "
+            + (
+                f"describes fundamentals but names no {FUNDAMENTALS_FILE}."
+                if manifest.fundamentals is not None
+                else f"names {FUNDAMENTALS_FILE} but describes no fundamentals."
+            )
+        )
 
     payloads: dict[str, bytes] = {}
 
@@ -402,6 +451,100 @@ def _verify_rows(manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
             )
 
 
+def _verify_fundamentals(manifest: DatasetManifest, table: Any) -> None:  # noqa: ANN401
+    described = manifest.fundamentals
+    assert described is not None  # noqa: S101 - only called when it is.
+
+    recorded = next(file.row_count for file in manifest.files if file.name == FUNDAMENTALS_FILE)
+
+    if table.num_rows != recorded or table.num_rows != described.rows:
+        raise DatasetIntegrityError(
+            f"{FUNDAMENTALS_FILE} holds {table.num_rows} rows; the manifest records "
+            f"{recorded} in files and {described.rows} in fundamentals."
+        )
+
+    listed = {instrument.instrument_id: instrument for instrument in manifest.instruments}
+    gaps = {gap.instrument_id for gap in described.not_collected}
+
+    for gap in gaps:
+        if gap not in listed:
+            raise DatasetIntegrityError(
+                f"{gap} is listed as not collected but is not an exported instrument."
+            )
+
+    columns = table.to_pydict()
+    seen: set[tuple[str, date]] = set()
+
+    for index, (instrument_id, session) in enumerate(
+        zip(columns["instrument_id"], columns["session"], strict=True)
+    ):
+        key = (str(instrument_id), session)
+        instrument = listed.get(key[0])
+
+        if instrument is None:
+            raise DatasetIntegrityError(
+                f"A fundamentals row names {instrument_id}, which the manifest does not list."
+            )
+
+        if key[0] in gaps:
+            raise DatasetIntegrityError(
+                f"{instrument_id} has a fundamentals row for {session} but is listed as not "
+                "collected."
+            )
+
+        if key in seen:
+            raise DatasetIntegrityError(f"{instrument_id} has two fundamentals rows for {session}.")
+
+        seen.add(key)
+
+        if not _member_on(manifest, instrument, session):
+            raise DatasetIntegrityError(
+                f"{instrument_id} has a fundamentals row for {session}, a session it was not "
+                "a member on."
+            )
+
+        for name in FUNDAMENTAL_VALUES:
+            value, absent = columns[name][index], columns[f"{name}_absent"][index]
+
+            if (value is None) == (absent is None):
+                raise DatasetIntegrityError(
+                    f"{instrument_id} on {session}: {name} is "
+                    + (
+                        f"present and also absent ({absent})."
+                        if value is not None
+                        else "absent with no reason."
+                    )
+                )
+
+        for name in ("report_ids", "findings"):
+            if not _string_list(columns[name][index]):
+                raise DatasetIntegrityError(
+                    f"{instrument_id} on {session}: {name} is not a JSON array of strings."
+                )
+
+
+def _member_on(manifest: DatasetManifest, instrument: DatasetInstrument, session: date) -> bool:
+    if not manifest.from_date <= session <= manifest.to_date:
+        return False
+
+    if manifest.membership == "as_of":
+        return True
+
+    return any(spell.includes(session) for spell in instrument.spells or ())
+
+
+def _string_list(text: object) -> bool:
+    if not isinstance(text, str):
+        return False
+
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return False
+
+    return isinstance(parsed, list) and all(isinstance(item, str) for item in parsed)
+
+
 def _first_membership(manifest: DatasetManifest, instrument: DatasetInstrument) -> date:
     if manifest.membership == "as_of" or not instrument.spells:
         return manifest.from_date
@@ -454,6 +597,31 @@ def read_bars_table(payload: bytes) -> Any:  # noqa: ANN401 - pyarrow ships no t
         opened = opened.cast(pa.timestamp(opened.type.unit))
 
     return table.set_column(_COLUMNS.index("opened_at_utc"), "session", opened.cast(pa.date32()))
+
+
+def read_fundamentals_table(payload: bytes) -> Any:  # noqa: ANN401 - pyarrow ships no types.
+    """Read ``fundamentals.parquet`` into Arrow, its session as a date.
+
+    The session is written as the UTC midnight of its date, as a daily bar's
+    ``opened_at_utc`` is, and is taken here the way :func:`read_bars_table`
+    takes it. Every value stays the exporter's string.
+
+    Args:
+        payload: The verified bytes of ``fundamentals.parquet``.
+
+    Returns:
+        A ``pyarrow.Table`` with every column of the file and ``session`` as
+        ``date32``.
+    """
+    table = pq.read_table(pa.BufferReader(payload))
+    session = table.column("session")
+
+    if session.type.tz is not None:
+        session = session.cast(pa.timestamp(session.type.unit))
+
+    return table.set_column(
+        table.schema.get_field_index("session"), "session", session.cast(pa.date32())
+    )
 
 
 def _read_bars(payload: bytes) -> list[Bar]:

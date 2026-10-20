@@ -13,11 +13,31 @@ public interface IFundamentalRatioService
     /// <summary>Computes the ratios as they could be known when a session opened.</summary>
     /// <param name="instrumentId">The issuer's instrument.</param>
     /// <param name="session">The session; its close prices the ratios.</param>
+    /// <param name="knownAsOfUtc">
+    /// A dataset's observation instant (ADR-031), or null for what PQT holds
+    /// now. Statements and actions are then read at the earlier of it and the
+    /// session's 00:00 UTC, and only what this system had recorded by it is
+    /// read, the close included.
+    /// </param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The ratios, each known or absent with a reason.</returns>
     Task<FundamentalRatios> ReadAsync(
         InstrumentId instrumentId,
         DateOnly session,
+        DateTimeOffset? knownAsOfUtc = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Computes the ratios at many sessions, loading the issuer's rows once.</summary>
+    /// <remarks>Each result equals <see cref="ReadAsync"/> for its session.</remarks>
+    /// <param name="instrumentId">The issuer's instrument.</param>
+    /// <param name="sessions">The sessions, in the order the results are wanted.</param>
+    /// <param name="knownAsOfUtc">The observation instant, as for <see cref="ReadAsync"/>.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>One result per session, in the same order.</returns>
+    Task<IReadOnlyList<FundamentalRatios>> ReadSeriesAsync(
+        InstrumentId instrumentId,
+        IReadOnlyList<DateOnly> sessions,
+        DateTimeOffset? knownAsOfUtc = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -92,6 +112,7 @@ public sealed record RatioValue(decimal? Value, string? Absent, RatioAbsence? Re
 /// <param name="ReturnOnEquity">Trailing profit over average equity to the parent.</param>
 /// <param name="DividendYield">Trailing cash dividends per share over the close.</param>
 /// <param name="BalanceSheet">The quarter whose balance sheet was used.</param>
+/// <param name="BalanceSheetReports">The reports that stated that balance sheet's values, ordered by id.</param>
 /// <param name="ProfitQuarters">The four quarters summed, oldest first.</param>
 /// <param name="ActionsApplied">Share-count actions applied to the balance sheet's count.</param>
 /// <param name="ActionsWithheld">Actions in the window not yet announced, or never dated.</param>
@@ -111,6 +132,7 @@ public sealed record FundamentalRatios(
     RatioValue ReturnOnEquity,
     RatioValue DividendYield,
     FiscalQuarter? BalanceSheet,
+    IReadOnlyList<FinancialReportId> BalanceSheetReports,
     IReadOnlyList<FiscalQuarter> ProfitQuarters,
     int ActionsApplied,
     int ActionsWithheld,
@@ -141,6 +163,13 @@ public sealed class FundamentalRatioService(
     IBarRepository bars,
     ICorporateActionRepository actions) : IFundamentalRatioService
 {
+    /// <summary>
+    /// The rules the ratios are computed under, as a dataset records them
+    /// (ADR-031). ADR-030 with its two checks is 1; a change to how any ratio
+    /// is computed is a new version.
+    /// </summary>
+    public const int RatioVersion = 1;
+
     /// <summary>The par value of a Vietnamese common share, in đồng.</summary>
     public const decimal ParValue = 10_000m;
 
@@ -164,31 +193,78 @@ public sealed class FundamentalRatioService(
     public async Task<FundamentalRatios> ReadAsync(
         InstrumentId instrumentId,
         DateOnly session,
+        DateTimeOffset? knownAsOfUtc = null,
+        CancellationToken cancellationToken = default) =>
+        (await ReadSeriesAsync(instrumentId, [session], knownAsOfUtc, cancellationToken).ConfigureAwait(false))[0];
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<FundamentalRatios>> ReadSeriesAsync(
+        InstrumentId instrumentId,
+        IReadOnlyList<DateOnly> sessions,
+        DateTimeOffset? knownAsOfUtc = null,
         CancellationToken cancellationToken = default)
     {
-        // Known before the session opened: 00:00 UTC is 07:00 in Hanoi, the
-        // cut dataset export uses for --known-as-of.
-        var knownAsOf = new DateTimeOffset(session.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        ArgumentNullException.ThrowIfNull(sessions);
 
-        var consolidated = await fundamentals.ReadAsync(
-            instrumentId, FinancialStatementScope.Consolidated, knownAsOf, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var statements = consolidated.Values.Count > 0
-            ? consolidated
-            : await fundamentals.ReadAsync(
-                instrumentId, FinancialStatementScope.Separate, knownAsOf, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (knownAsOfUtc is { Offset.Ticks: not 0 })
+        {
+            throw new ArgumentException("The observation instant must be UTC.", nameof(knownAsOfUtc));
+        }
 
-        var close = await CloseAsync(instrumentId, session, cancellationToken).ConfigureAwait(false);
+        var history = await fundamentals.LoadAsync(instrumentId, knownAsOfUtc, cancellationToken).ConfigureAwait(false);
         var corporateActions = await actions.ListAsync(instrumentId, cancellationToken).ConfigureAwait(false);
         var cancelled = corporateActions.Where(action => action.IsCancelled).Select(action => action.Id).ToHashSet();
         var adjustments = (await actions.ListAdjustmentsAsync(instrumentId, cancellationToken).ConfigureAwait(false))
             .Where(adjustment => !cancelled.Contains(adjustment.CorporateActionId))
             .ToList();
 
+        var results = new List<FundamentalRatios>(sessions.Count);
+
+        foreach (var session in sessions)
+        {
+            var close = await CloseAsync(instrumentId, session, knownAsOfUtc, cancellationToken).ConfigureAwait(false);
+            results.Add(Compute(instrumentId, session, knownAsOfUtc, history, corporateActions, adjustments, close));
+        }
+
+        return results;
+    }
+
+    private static FundamentalRatios Compute(
+        InstrumentId instrumentId,
+        DateOnly session,
+        DateTimeOffset? knownAsOfUtc,
+        FundamentalsHistory history,
+        IReadOnlyList<CorporateAction> corporateActions,
+        IReadOnlyList<PriceAdjustment> adjustments,
+        RatioValue close)
+    {
+        // Known before the session opened: 00:00 UTC is 07:00 in Hanoi. A
+        // dataset's observation instant bounds it, so a dataset reproduced for
+        // a past date cannot see a report filed after it (ADR-031).
+        var opened = new DateTimeOffset(session.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var bounded = knownAsOfUtc is { } observed && observed < opened;
+        var knownAsOf = bounded ? knownAsOfUtc!.Value : opened;
+
+        // Actions are dated, not timed; one announced on the session's day
+        // counts, as before, unless the observation instant falls earlier.
+        var announcedBy = bounded ? DateOnly.FromDateTime(knownAsOf.UtcDateTime) : session;
+
+        var consolidated = history.Read(FinancialStatementScope.Consolidated, knownAsOf);
+        var statements = consolidated.Values.Count > 0
+            ? consolidated
+            : history.Read(FinancialStatementScope.Separate, knownAsOf);
+
         var findings = new List<string>();
+
+        if (corporateActions.Count == 0)
+        {
+            findings.Add("No corporate action is recorded for this issuer; the share count is not adjusted.");
+        }
+
         var lines = StatementLines.From(statements.Values, statements.Scope);
         var balance = lines.LatestBalanceSheet();
 
-        var (shares, applied, withheld) = SharesAt(lines, balance, adjustments, session, findings);
+        var (shares, applied, withheld) = SharesAt(lines, balance, adjustments, session, announcedBy, findings);
         var (profit, quarters) = lines.TrailingProfit();
         CheckPar(lines, quarters, findings);
 
@@ -210,7 +286,15 @@ public sealed class FundamentalRatioService(
             : bookValue.Carried();
 
         var returnOnEquity = ReturnOnEquity(lines, profit, quarters);
-        var dividendYield = DividendYield(corporateActions, adjustments, session, close);
+        var dividendYield = DividendYield(corporateActions, adjustments, session, announcedBy, close);
+
+        IReadOnlyList<FinancialReportId> balanceReports = balance is { } sheet
+            ? [.. statements.Values
+                .Where(value => value.Statement == FinancialStatement.BalanceSheet && value.Period == sheet && value.Template == lines.Template)
+                .Select(value => value.ReportId)
+                .Distinct()
+                .OrderBy(id => id.Value)]
+            : [];
 
         return new FundamentalRatios(
             instrumentId,
@@ -227,19 +311,43 @@ public sealed class FundamentalRatioService(
             returnOnEquity,
             dividendYield,
             balance,
+            balanceReports,
             quarters,
             applied,
             withheld,
             findings);
     }
 
-    private async Task<RatioValue> CloseAsync(InstrumentId instrumentId, DateOnly session, CancellationToken cancellationToken)
+    private async Task<RatioValue> CloseAsync(
+        InstrumentId instrumentId,
+        DateOnly session,
+        DateTimeOffset? knownAsOfUtc,
+        CancellationToken cancellationToken)
     {
+        var opened = new DateTimeOffset(session.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var next = new DateTimeOffset(session.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var bar = await bars.FindLastBeforeAsync(instrumentId, BarInterval.OneDay, next, cancellationToken).ConfigureAwait(false);
+        Price? close;
 
-        return bar is not null && DateOnly.FromDateTime(bar.OpenedAtUtc.UtcDateTime) == session
-            ? RatioValue.Known(bar.Close.Value)
+        if (knownAsOfUtc is { } observed)
+        {
+            // The close as this system held it then, as the dataset's bars are
+            // read: a bar recorded later is absent, not filled from today's.
+            if (!BarQuery.TryCreate(instrumentId, BarInterval.OneDay, opened, next, 1, out var query, out var problem, adjusted: false, knownAsOfUtc: observed))
+            {
+                throw new InvalidOperationException($"A close read produced an invalid bar query: {problem}");
+            }
+
+            close = (await bars.QueryAsOfAsync(query, cancellationToken).ConfigureAwait(false))
+                .LastOrDefault(revision => DateOnly.FromDateTime(revision.OpenedAtUtc.UtcDateTime) == session)?.Close;
+        }
+        else
+        {
+            var bar = await bars.FindLastBeforeAsync(instrumentId, BarInterval.OneDay, next, cancellationToken).ConfigureAwait(false);
+            close = bar is not null && DateOnly.FromDateTime(bar.OpenedAtUtc.UtcDateTime) == session ? bar.Close : null;
+        }
+
+        return close is { } price
+            ? RatioValue.Known(price.Value)
             : RatioValue.Missing(RatioAbsence.NoClose, "no close on the session");
     }
 
@@ -265,6 +373,7 @@ public sealed class FundamentalRatioService(
         FiscalQuarter? balance,
         IReadOnlyList<PriceAdjustment> adjustments,
         DateOnly session,
+        DateOnly announcedBy,
         List<string> findings)
     {
         if (balance is not { } quarter)
@@ -280,7 +389,7 @@ public sealed class FundamentalRatioService(
         var balanceEnd = StatementLines.QuarterEnd(quarter);
         var capitalQuarters = lines.CapitalQuarters();
 
-        bool Announced(PriceAdjustment adjustment) => adjustment.AnnouncedOn is { } announced && announced <= session;
+        bool Announced(PriceAdjustment adjustment) => adjustment.AnnouncedOn is { } announced && announced <= announcedBy;
 
         var shareActions = adjustments
             .Where(adjustment => adjustment.Factor.Shares != 1m && adjustment.ExDate <= session && Announced(adjustment))
@@ -418,6 +527,7 @@ public sealed class FundamentalRatioService(
         IReadOnlyList<CorporateAction> corporateActions,
         IReadOnlyList<PriceAdjustment> adjustments,
         DateOnly session,
+        DateOnly announcedBy,
         RatioValue close)
     {
         if (close.Value is not { } price || price <= 0m)
@@ -447,14 +557,14 @@ public sealed class FundamentalRatioService(
             && !action.IsCancelled
             && action.ExDate > from
             && action.ExDate <= session
-            && action.AnnouncedOn is { } announced && announced <= session
+            && action.AnnouncedOn is { } announced && announced <= announcedBy
             && action.CashAmount is > 0m))
         {
             // Stated on today's share basis: a bonus issue after the dividend
             // means today's share received less per share than the headline.
             var since = adjustments
                 .Where(adjustment => adjustment.ExDate > dividend.ExDate && adjustment.ExDate <= session
-                    && adjustment.AnnouncedOn is { } known && known <= session)
+                    && adjustment.AnnouncedOn is { } known && known <= announcedBy)
                 .Aggregate(1m, (factor, adjustment) => factor * adjustment.Factor.Shares);
 
             perShare += dividend.CashAmount!.Value / since;

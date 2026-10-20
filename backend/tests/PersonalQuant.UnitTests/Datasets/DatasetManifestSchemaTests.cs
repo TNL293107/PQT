@@ -109,6 +109,34 @@ public sealed class DatasetManifestSchemaTests
         Assert.Equal(declared.Order(StringComparer.Ordinal), written.Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public void The_fundamentals_object_carries_exactly_the_properties_the_schema_declares()
+    {
+        var fundamentals = Schema().GetProperty("properties").GetProperty("fundamentals");
+        var gap = fundamentals.GetProperty("properties").GetProperty("not_collected").GetProperty("items");
+
+        var written = Written().GetProperty("fundamentals");
+
+        Assert.Equal(
+            Names(fundamentals.GetProperty("properties")).Order(StringComparer.Ordinal),
+            Names(written).Order(StringComparer.Ordinal));
+        Assert.Equal(
+            Names(gap.GetProperty("properties")).Order(StringComparer.Ordinal),
+            Names(written.GetProperty("not_collected")[0]).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void The_cut_and_the_gap_reasons_are_written_in_the_spelling_the_schema_accepts()
+    {
+        var fundamentals = Schema().GetProperty("properties").GetProperty("fundamentals").GetProperty("properties");
+        var reasons = fundamentals
+            .GetProperty("not_collected").GetProperty("items").GetProperty("properties").GetProperty("reason").GetProperty("enum")
+            .EnumerateArray().Select(entry => entry.GetString()).ToList();
+
+        Assert.Equal(DatasetFundamentals.SessionCut, fundamentals.GetProperty("cut").GetProperty("const").GetString());
+        Assert.Contains(Written().GetProperty("fundamentals").GetProperty("not_collected")[0].GetProperty("reason").GetString(), reasons);
+    }
+
     [Theory]
     [InlineData(false, "as_of")]
     [InlineData(true, "point_in_time")]
@@ -229,7 +257,14 @@ public sealed class DatasetManifestSchemaTests
             new DateTimeOffset(2026, 9, 6, 0, 0, 0, TimeSpan.Zero),
             null,
             pointInTime ? DatasetMembership.PointInTime : DatasetMembership.AsOf,
-            253);
+            253,
+            new DatasetFundamentals(
+                1,
+                "IDS",
+                IDatasetLicenceRegistry.UnstatedNote,
+                DatasetFundamentals.SessionCut,
+                5,
+                [new DatasetNotCollected(Guid.Empty, "ids_capture_gap")]));
 
         return manifest;
     }
@@ -249,7 +284,7 @@ public sealed class DatasetManifestSchemaTests
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "docs", "schemas", "dataset-manifest-v3.schema.json");
+                directory.FullName, "docs", "schemas", "dataset-manifest-v4.schema.json");
 
             if (File.Exists(candidate))
             {
@@ -260,6 +295,6 @@ public sealed class DatasetManifestSchemaTests
         }
 
         throw new FileNotFoundException(
-            "dataset-manifest-v3.schema.json was not found above the test binary.");
+            "dataset-manifest-v4.schema.json was not found above the test binary.");
     }
 }

@@ -3,15 +3,19 @@ using Microsoft.Extensions.Options;
 using Parquet;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Datasets;
+using PersonalQuant.Application.Fundamentals;
 using PersonalQuant.Application.Instruments;
 using PersonalQuant.Application.MarketData;
 using PersonalQuant.Application.Universes;
 using PersonalQuant.Domain.Currencies;
 using PersonalQuant.Domain.Exchanges;
+using PersonalQuant.Domain.Fundamentals;
 using PersonalQuant.Domain.Instruments;
 using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Domain.Universes;
 using PersonalQuant.Infrastructure.Datasets;
+using PersonalQuant.UnitTests.CorporateActions.Fakes;
+using PersonalQuant.UnitTests.Fundamentals;
 using PersonalQuant.UnitTests.MarketData.Fakes;
 
 namespace PersonalQuant.UnitTests.Datasets;
@@ -595,6 +599,103 @@ public sealed class DatasetExportServiceTests : IDisposable
         Assert.Equal(DatasetMembership.PointInTime, pointInTime.Membership);
     }
 
+    [Fact]
+    public async Task An_export_without_fundamentals_writes_a_version_4_manifest_with_none()
+    {
+        var manifest = (await new Harness(root).ExportAsync()).Manifest!;
+
+        Assert.Equal(DatasetManifest.FundamentalsSchemaVersion, manifest.SchemaVersion);
+        Assert.Null(manifest.Fundamentals);
+        Assert.Equal([IDatasetStore.BarsFileName], manifest.Files.Select(file => file.Name));
+    }
+
+    [Fact]
+    public void A_request_with_fundamentals_names_its_own_dataset_and_keeps_the_others_names()
+    {
+        Assert.True(DatasetRequest.TryCreate(
+            Vn30, To, BarInterval.OneDay, From, To, out var request, out var problem, fundamentals: true), problem);
+
+        var canonical = "VN30|2026-08-07|OneDay|2026-08-03|2026-08-07|adjusted|current|Strict|fundamentals";
+        var expected = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical)))[..16];
+
+        Assert.Equal(expected, request.DatasetId);
+    }
+
+    [Fact]
+    public async Task An_export_with_fundamentals_writes_one_row_per_membership_session_and_verifies()
+    {
+        var harness = new Harness(root);
+        var report = harness.FileReport(harness.InstrumentId);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+
+        Assert.Equal([IDatasetStore.BarsFileName, IDatasetStore.FundamentalsFileName], manifest.Files.Select(file => file.Name));
+        Assert.Equal(5, manifest.Files[1].RowCount);
+
+        var fundamentals = manifest.Fundamentals!;
+        Assert.Equal((1, "IDS", "session_date_00utc", 5L), (fundamentals.RatioVersion, fundamentals.Source, fundamentals.Cut, fundamentals.Rows));
+        Assert.Empty(fundamentals.NotCollected);
+        Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+
+        var columns = await harness.ColumnsAsync(manifest, IDatasetStore.FundamentalsFileName);
+
+        Assert.Equal(10 + (2 * DatasetFundamentalsRow.ValueNames.Count) + 1, columns.Count);
+        Assert.All(columns["scope"], scope => Assert.Equal("consolidated", scope));
+        Assert.All(columns["balance_sheet_quarter"], quarter => Assert.Equal("2026Q2", quarter));
+        Assert.All(columns["report_ids"], ids => Assert.Equal($"[\"{report.Id.Value}\"]", ids));
+        Assert.All(columns["shares"], shares => Assert.Equal("100000000", shares));
+        Assert.All(columns["shares_absent"], Assert.Null);
+
+        // No close is recorded in the bar store, and one quarter of profit is
+        // not a trailing year: absent, with the codes, never zero.
+        Assert.All(columns["close_raw"], Assert.Null);
+        Assert.All(columns["close_raw_absent"], code => Assert.Equal("no_close", code));
+        Assert.All(columns["eps_ttm_absent"], code => Assert.Equal("missing_quarter", code));
+        Assert.All(columns["findings"], findings => Assert.StartsWith("[\"No corporate action is recorded", findings));
+    }
+
+    [Fact]
+    public async Task A_name_with_no_report_has_no_rows_and_is_listed_as_not_collected()
+    {
+        var harness = new Harness(root);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+
+        var gap = Assert.Single(manifest.Fundamentals!.NotCollected);
+        Assert.Equal((harness.InstrumentId.Value, "not_imported"), (gap.InstrumentId, gap.Reason));
+        Assert.Equal(0, manifest.Fundamentals.Rows);
+        Assert.Equal("none", manifest.Fundamentals.Source);
+    }
+
+    [Fact]
+    public async Task A_report_recorded_after_the_observation_instant_is_not_in_the_dataset()
+    {
+        var harness = new Harness(root);
+        harness.FileReport(harness.InstrumentId);
+
+        // The report was recorded on 31 July; a dataset observed the day
+        // before holds nothing of it.
+        var manifest = (await harness.ExportAsync(
+            pointInTime: true, fundamentals: true, knownAsOf: new DateTimeOffset(2026, 7, 30, 0, 0, 0, TimeSpan.Zero))).Manifest;
+
+        Assert.NotNull(manifest);
+        Assert.Equal("not_imported", Assert.Single(manifest.Fundamentals!.NotCollected).Reason);
+    }
+
+    [Fact]
+    public async Task Changing_the_fundamentals_object_breaks_the_content_hash()
+    {
+        var harness = new Harness(root);
+        harness.FileReport(harness.InstrumentId);
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+
+        var edited = manifest with { Fundamentals = manifest.Fundamentals! with { RatioVersion = 2 } };
+
+        Assert.Equal(manifest.ContentHash, DatasetIdentity.ContentHashOf(manifest));
+        Assert.NotEqual(manifest.ContentHash, DatasetIdentity.ContentHashOf(edited));
+    }
+
     private static UniverseSpell Spell(
         InstrumentId id,
         DateOnly from,
@@ -628,6 +729,8 @@ public sealed class DatasetExportServiceTests : IDisposable
                 new FakeSeries(storeBars, seriesFrom ?? From),
                 store,
                 store,
+                new FundamentalsReader(Fundamentals),
+                new FundamentalRatioService(new FundamentalsReader(Fundamentals), Bars, new FakeCorporateActionRepository()),
                 new FakeBuild(),
                 new FakeClock(Now),
                 NullLogger<DatasetExportService>.Instance);
@@ -637,19 +740,61 @@ public sealed class DatasetExportServiceTests : IDisposable
 
         public string Root { get; }
 
+        /// <summary>The statements the ratios are read from; empty unless a test files some.</summary>
+        public InMemoryFundamentals Fundamentals { get; } = new();
+
+        /// <summary>The closes the ratios are priced at; empty unless a test records some.</summary>
+        public FakeBarRepository Bars { get; } = new();
+
+        /// <summary>
+        /// Files a quarterly report for 2026Q2 on the Circular 200 form:
+        /// ₫1,000bn of capital, ₫10,000bn of equity and ₫250bn of profit to
+        /// the parent, disclosed on 30 July 2026.
+        /// </summary>
+        public FinancialReport FileReport(InstrumentId instrument)
+        {
+            var recorded = new DateTimeOffset(2026, 7, 31, 0, 0, 0, TimeSpan.Zero);
+            var quarter = FiscalQuarter.Create(2026, 2);
+            var report = FinancialReport.Record(
+                instrument, SourceCode.Create("IDS"), $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly,
+                FinancialStatementScope.Consolidated, FinancialTemplate.NonFinancialCircular200, quarter,
+                "Báo cáo tài chính", new DateOnly(2026, 7, 30), null, FinancialReportTests.Vietnam,
+                isCorrection: false, valuesFiled: true, recorded);
+            Fundamentals.Add(report);
+
+            foreach (var (statement, code, span, value) in new[]
+            {
+                (FinancialStatement.BalanceSheet, "411a", PeriodSpan.Instant, 1_000_000_000_000m),
+                (FinancialStatement.BalanceSheet, "400", PeriodSpan.Instant, 10_000_000_000_000m),
+                (FinancialStatement.IncomeStatement, "61", PeriodSpan.Quarter, 250_000_000_000m),
+            })
+            {
+                Fundamentals.Add(StatementLine.Observe(
+                    report, statement, code, quarter, span, value, ValueBasis.AsFiled, SourceCode.Create("IDS"), recorded));
+            }
+
+            return report;
+        }
+
         /// <summary>A second security, for tests where a review swaps one name for another.</summary>
         public InstrumentId Joiner { get; } = InstrumentId.New();
 
-        public Task<DatasetExport> ExportAsync(bool pointInTime = false, int history = 0)
+        public Task<DatasetExport> ExportAsync(
+            bool pointInTime = false,
+            int history = 0,
+            bool fundamentals = false,
+            DateTimeOffset? knownAsOf = null)
         {
             DatasetRequest? request;
             string? problem;
 
             var valid = pointInTime
                 ? DatasetRequest.TryCreatePointInTime(
-                    Vn30, BarInterval.OneDay, From, To, out request, out problem, historySessions: history)
+                    Vn30, BarInterval.OneDay, From, To, out request, out problem, knownAsOfUtc: knownAsOf,
+                    historySessions: history, fundamentals: fundamentals)
                 : DatasetRequest.TryCreate(
-                    Vn30, To, BarInterval.OneDay, From, To, out request, out problem, historySessions: history);
+                    Vn30, To, BarInterval.OneDay, From, To, out request, out problem, knownAsOfUtc: knownAsOf,
+                    historySessions: history, fundamentals: fundamentals);
 
             Assert.True(valid, problem);
 
@@ -658,6 +803,36 @@ public sealed class DatasetExportServiceTests : IDisposable
 
         public Task<DatasetVerification> VerifyAsync(string datasetId, int version) =>
             service.VerifyAsync(datasetId, version, TestContext.Current.CancellationToken);
+
+        /// <summary>Reads back every string column of a file the build wrote, by name.</summary>
+        public async Task<IReadOnlyDictionary<string, string?[]>> ColumnsAsync(DatasetManifest manifest, string fileName)
+        {
+            var path = Path.Combine(Root, manifest.DatasetId, $"v{manifest.DatasetVersion}", fileName);
+
+            await using var stream = File.OpenRead(path);
+            await using var reader = await ParquetReader.CreateAsync(
+                stream, cancellationToken: TestContext.Current.CancellationToken);
+            using var group = reader.OpenRowGroupReader(0);
+
+            var columns = new Dictionary<string, string?[]>(StringComparer.Ordinal);
+
+            foreach (var field in reader.Schema.DataFields)
+            {
+                // The string columns are what ADR-031 decides; the dates and
+                // counts are held by name only.
+                if (field.ClrType != typeof(string))
+                {
+                    columns[field.Name] = [];
+                    continue;
+                }
+
+                var values = new string?[group.RowCount];
+                await group.ReadAsync(field, values.AsMemory(), cancellationToken: TestContext.Current.CancellationToken);
+                columns[field.Name] = values;
+            }
+
+            return columns;
+        }
 
         /// <summary>Reads back the session of every row the build wrote, in file order.</summary>
         public async Task<IReadOnlyList<DateOnly>> SessionsAsync(DatasetManifest manifest)

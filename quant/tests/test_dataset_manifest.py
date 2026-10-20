@@ -1,10 +1,10 @@
 """The manifest reader agrees with the .NET exporter that wrote it.
 
 The schema 1 and 2 fixtures are manifests ``pqt dataset export`` actually
-produced; the schema 3 one is written by the .NET unit test
+produced; the schema 3 and 4 ones were written by the .NET unit test
 ``DatasetManifestGoldenTests`` through the exporter's own serialiser and
-``ContentHashOf``, and that test fails if the committed file drifts from what
-.NET would write. None carries prices. If Python computed a content hash that
+``ContentHashOf``, and that test fails if the committed schema 4 file drifts
+from what .NET would write. None carries prices. If Python computed a content hash that
 differed from the one .NET recorded, every real dataset would fail to load — or
 worse, a reader that skipped the check would load one whose manifest had been
 edited.
@@ -46,6 +46,8 @@ def _raw(name: str) -> dict[str, Any]:
         # Schema 3 with history: a non-null history_from and a null one, an
         # announced removal and an unannounced one, as .NET rendered them.
         "v3-history.json",
+        # Schema 4 with fundamentals: a not-collected name for each reason.
+        "v4-fundamentals.json",
     ],
 )
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:
@@ -99,10 +101,118 @@ def test_an_edited_spell_no_longer_matches_its_hash() -> None:
 
 
 def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
-    raw = _raw("v3-history.json")
-    raw["schema_version"] = 4
+    raw = _raw("v4-fundamentals.json")
+    raw["schema_version"] = 5
 
-    with pytest.raises(UnsupportedManifestError, match="schema version 4"):
+    with pytest.raises(UnsupportedManifestError, match="schema version 5"):
+        DatasetManifest.from_json(raw)
+
+
+def test_a_schema_4_manifest_carries_its_fundamentals() -> None:
+    manifest = DatasetManifest.from_json(_raw("v4-fundamentals.json"))
+    fundamentals = manifest.fundamentals
+
+    assert fundamentals is not None
+    assert (fundamentals.ratio_version, fundamentals.source, fundamentals.cut) == (
+        1,
+        "IDS",
+        "session_date_00utc",
+    )
+    assert fundamentals.rows == 160
+    assert [gap.reason for gap in fundamentals.not_collected] == [
+        "ids_capture_gap",
+        "out_of_scope",
+        "not_imported",
+    ]
+
+
+def test_a_schema_4_manifest_without_fundamentals_hashes_none() -> None:
+    raw = _raw("v4-fundamentals.json")
+    raw["fundamentals"] = None
+    manifest = DatasetManifest.from_json(raw)
+
+    assert manifest.fundamentals is None
+    assert content_hash_of(manifest) != manifest.content_hash
+
+
+def test_a_schema_3_manifest_reads_with_no_fundamentals() -> None:
+    # Added by hand to an older manifest, the object is not read: the hash
+    # written then does not cover it.
+    raw = _raw("v3-history.json")
+    raw["fundamentals"] = _raw("v4-fundamentals.json")["fundamentals"]
+
+    manifest = DatasetManifest.from_json(raw)
+
+    assert manifest.fundamentals is None
+    assert content_hash_of(manifest) == manifest.content_hash
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda raw: raw["fundamentals"].__setitem__("rows", 161),
+        lambda raw: raw["fundamentals"].__setitem__("source", "VNDIRECT"),
+        lambda raw: raw["fundamentals"]["not_collected"].pop(0),
+        lambda raw: raw["fundamentals"]["not_collected"][1].__setitem__("reason", "not_imported"),
+    ],
+)
+def test_an_edited_fundamentals_claim_no_longer_matches_its_hash(
+    edit: Callable[[dict[str, Any]], None],
+) -> None:
+    raw = _raw("v4-fundamentals.json")
+    edit(raw)
+
+    manifest = DatasetManifest.from_json(raw)
+
+    assert content_hash_of(manifest) != manifest.content_hash
+
+
+def test_the_licence_note_is_not_part_of_the_hash() -> None:
+    raw = _raw("v4-fundamentals.json")
+    raw["fundamentals"]["licence_note"] = "Changed by the deployment."
+
+    manifest = DatasetManifest.from_json(raw)
+
+    assert content_hash_of(manifest) == manifest.content_hash
+
+
+def test_the_order_not_collected_is_written_in_does_not_change_the_hash() -> None:
+    raw = _raw("v4-fundamentals.json")
+    raw["fundamentals"]["not_collected"].reverse()
+
+    manifest = DatasetManifest.from_json(raw)
+
+    assert content_hash_of(manifest) == manifest.content_hash
+
+
+def test_an_unknown_ratio_version_is_refused() -> None:
+    raw = _raw("v4-fundamentals.json")
+    raw["fundamentals"]["ratio_version"] = 2
+
+    with pytest.raises(UnsupportedManifestError, match="Ratio version 2"):
+        DatasetManifest.from_json(raw)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        (("cut",), "session_close", "cut"),
+        (("not_collected", 0, "reason"), "delisted", "delisted"),
+        (("rows",), -1, "rows"),
+    ],
+)
+def test_a_fundamentals_field_this_reader_does_not_know_is_refused(
+    path: tuple[str | int, ...], value: object, message: str
+) -> None:
+    raw = _raw("v4-fundamentals.json")
+    target: Any = raw["fundamentals"]
+
+    for key in path[:-1]:
+        target = target[key]
+
+    target[path[-1]] = value
+
+    with pytest.raises(UnsupportedManifestError, match=message):
         DatasetManifest.from_json(raw)
 
 
