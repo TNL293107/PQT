@@ -39,6 +39,7 @@ public interface IFundamentalsImportService
 /// <param name="Late">Filings recorded after their deadline.</param>
 /// <param name="Rejections">Filings refused, with the reason.</param>
 /// <param name="Withheld">Filings recorded with their values withheld, because their form is another filing's.</param>
+/// <param name="Dropped">Lines dropped as implausible from filings otherwise read.</param>
 public sealed record FundamentalsImportReport(
     SourceCode Provider,
     int FilingsRead,
@@ -49,7 +50,8 @@ public sealed record FundamentalsImportReport(
     int LinesRestated,
     IReadOnlyList<LateFiling> Late,
     IReadOnlyList<FilingRejection> Rejections,
-    IReadOnlyList<FilingRejection> Withheld);
+    IReadOnlyList<FilingRejection> Withheld,
+    IReadOnlyList<FilingRejection> Dropped);
 
 /// <summary>
 /// Records disclosed financial reports and the values they state (ADR-029,
@@ -147,7 +149,8 @@ public sealed class FundamentalsImportService(
             run.LinesRestated,
             run.Late,
             run.Rejections,
-            run.Withheld);
+            run.Withheld,
+            run.Dropped);
 
         ApplicationLog.FundamentalsImported(
             logger, source.Code.Value, report.FilingsRead, report.ReportsRecorded, report.ReportsWithoutValues,
@@ -186,6 +189,13 @@ public sealed class FundamentalsImportService(
         {
             run.Rejections.Add(read.Refused!);
             return;
+        }
+
+        // Reported only where the values are recorded: a withheld form's
+        // lines are dropped anyway.
+        foreach (var line in withheld is null ? normalised.Dropped ?? [] : [])
+        {
+            run.Dropped.Add(new FilingRejection(filing.Reference, filing.Ticker, FilingRejectionReason.ImplausibleLine, line));
         }
 
         var now = clock.UtcNow;
@@ -404,6 +414,8 @@ public sealed class FundamentalsImportService(
         public List<FilingRejection> Rejections { get; } = [];
 
         public List<FilingRejection> Withheld { get; } = [];
+
+        public List<FilingRejection> Dropped { get; } = [];
 
         public List<LateFiling> Late { get; } = [];
 

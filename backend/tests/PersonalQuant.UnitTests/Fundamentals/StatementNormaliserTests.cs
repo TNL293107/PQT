@@ -172,6 +172,34 @@ public sealed class StatementNormaliserTests
     }
 
     [Fact]
+    public void The_unit_is_read_from_total_capital_when_the_common_share_line_is_wrong()
+    {
+        // VNM 2025: 411 is ₫20,900bn, 411a a stray ₫157.9bn.
+        var tables = new[]
+        {
+            Filings.Balance(("270", "5,000", "4,500"), ("440", "5,000", "4,500"), ("411", "20,899,554,450,000", ""), ("411a", "157,903,902,450", "")),
+        };
+
+        Assert.Equal(1m, Normalise(Filings.Quarterly(tables: tables)).Unit);
+    }
+
+    [Fact]
+    public void Earnings_per_share_stated_a_million_times_over_is_dropped_and_said_so()
+    {
+        var tables = new[]
+        {
+            Filings.Balance(("270", "5,000", "4,500"), ("440", "5,000", "4,500")),
+            new ProviderStatementTable("KQKD", Filings.IncomeColumns, [Filings.Row("10", "1,000", "", "", ""), Filings.Row("70", "1,057,000,000", "", "", "")]),
+        };
+
+        var normalised = Normalise(Filings.Quarterly(tables: tables));
+
+        Assert.DoesNotContain(normalised.Values, value => value.LineCode == "70");
+        Assert.Contains(normalised.Values, value => value.LineCode == "10");
+        Assert.Contains("1057000000", Assert.Single(normalised.Dropped!), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Charter_capital_that_fits_no_unit_refuses_the_filing() =>
         Assert.Equal(
             FilingRejectionReason.UnknownUnit,

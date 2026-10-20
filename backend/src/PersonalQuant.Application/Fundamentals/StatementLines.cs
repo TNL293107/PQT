@@ -13,7 +13,8 @@ namespace PersonalQuant.Application.Fundamentals;
 /// the form does not carry is absent, never zero.
 /// </para>
 /// <para>
-/// Circular 200: charter capital 411a (411 when the split is not filed),
+/// Circular 200: charter capital 411a (411 when the split is not filed or
+/// does not add up),
 /// equity 400 less non-controlling interest 429, profit to the parent 61 (60
 /// on separate statements, which have no 61). Bank: charter capital 411,
 /// equity 500, profit after tax 21 less minority interest 22.
@@ -72,15 +73,46 @@ internal sealed class StatementLines
             .OrderBy(quarter => quarter)
             .LastOrDefault();
 
-    /// <summary>Gets the charter capital at a quarter end.</summary>
+    /// <summary>Gets the common-share capital at a quarter end.</summary>
+    /// <remarks>
+    /// <para>
+    /// Circular 200 splits contributed capital (411) into common shares with
+    /// votes (411a) and preferred shares (411b). Common shares are what a
+    /// per-share ratio counts, so 411a is read when the split adds up: MSN and
+    /// VIC carry preferred shares, and 411 would count them.
+    /// </para>
+    /// <para>
+    /// A split that does not add up is not trusted. VNM's 2025 forms state
+    /// 411a as ₫157.9bn under a 411 of ₫20,900bn, with no preferred shares, so
+    /// 411 is read. With preferred shares and a split that does not add up,
+    /// nothing is read: the common count cannot be told.
+    /// </para>
+    /// </remarks>
     /// <param name="quarter">The quarter.</param>
     /// <returns>The capital in đồng, or null.</returns>
-    public decimal? CharterCapital(FiscalQuarter quarter) => Template switch
+    public decimal? CharterCapital(FiscalQuarter quarter)
     {
-        FinancialTemplate.NonFinancialCircular200 => Balance("411a", quarter) ?? Balance("411", quarter),
-        FinancialTemplate.Bank => Balance("411", quarter),
-        _ => null,
-    };
+        if (Template == FinancialTemplate.Bank)
+        {
+            return Balance("411", quarter);
+        }
+
+        if (Template != FinancialTemplate.NonFinancialCircular200)
+        {
+            return null;
+        }
+
+        var total = Balance("411", quarter);
+        var common = Balance("411a", quarter);
+        var preferred = Balance("411b", quarter) ?? 0m;
+
+        if (common is { } shares && (total is null || shares + preferred == total))
+        {
+            return shares;
+        }
+
+        return total is { } all && preferred == 0m ? all : null;
+    }
 
     /// <summary>Gets equity attributable to the parent at a quarter end.</summary>
     /// <param name="quarter">The quarter.</param>

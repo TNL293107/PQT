@@ -41,6 +41,9 @@ public enum FilingRejectionReason
     /// values withheld.
     /// </summary>
     RepeatedForm = 10,
+
+    /// <summary>A line stating an implausible value was dropped; the rest of the filing was read.</summary>
+    ImplausibleLine = 11,
 }
 
 /// <summary>A filing that was not recorded, and why.</summary>

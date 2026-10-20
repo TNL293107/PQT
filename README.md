@@ -105,7 +105,7 @@ first import is 33 VN30 names; securities firms and insurers wait.
 | 6.2 | Domain model: reports with `known_from_utc`, statement lines with an append-only reading history | ✅ `financial_reports`, `statement_lines` |
 | 6.3 | Provider and import pipeline: IDS collector, normaliser, `pqt fundamentals import` | ✅ FPT 2022: 12 reports, 3,728 lines, idempotent on re-read |
 | 6.4 | As-of read: `IFundamentalsReader`, `pqt fundamentals as-of` | ✅ a later filing and a later restatement are absent; FPT FY2021 read live before and after its audit |
-| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ✅ 2026-10-19: 1,602 filings; re-imported 2026-10-20 after sprint 7 B0 (IDS shows one form per issuer and period; typed units): 1,574 reports (740 with values, 687 withheld as another filing's form), 235,577 lines; 28 refused and listed (LPB states no scope; issuers' wrong fiscal years; VNM capital fits no unit); known IDS gaps: STB, GVR, and HPG's consolidated 2022Q2 and 2022 half year (ADR-029) |
+| 6.5 | Real import: 33 VN30 names, from fiscal 2022 | ✅ 2026-10-19: 1,602 filings; re-imported 2026-10-20 after sprint 7 B0 (IDS shows one form per issuer and period; typed units): 1,580 reports (743 with values, 690 withheld as another filing's form), 236,398 lines; 22 refused and listed (LPB states no scope; issuers' wrong fiscal years); known IDS gaps: STB, GVR, HPG's consolidated 2022Q2 and 2022 half year, VNM's 2025Q2 and half year (ADR-029) |
 
 Sprint 7 work drafted ahead of the room's plan agreement; it is a proposal until the plan is agreed (operator, 2026-10-18):
 

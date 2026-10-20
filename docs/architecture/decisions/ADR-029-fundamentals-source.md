@@ -510,22 +510,47 @@ is now read from charter capital:
 - every amount is scaled to đồng;
 - EPS (70 and 71, bank 23) is typed in đồng by everyone and is left as typed.
 
-A form whose capital fits no unit is refused (`UnknownUnit`): six VNM filings
-from 2025 state ₫157.9bn, a hundredth of VNM's capital. EPS lines typed a
-million times too large remain on some bank forms (VCB, VIB, TCB, BID, LPB). No ratio reads them, and
-the par check of ADR-030 will report them.
+The unit is read from the total contributed capital (411), or from 411a when
+411 is not filed. VNM's 2025 forms show why the total comes first: they
+state 411a as ₫157.9bn, a hundredth of the ₫20,900bn total. A form whose
+capital fits no unit is refused (`UnknownUnit`).
+
+The share count reads common shares (411a) only when 411a and the preferred
+shares (411b) add up to 411. MSN and VIC hold preferred shares, so for them
+411 alone would overcount. When the lines do not add up and there are no
+preferred shares, the count reads 411. When they do not add up and there are
+preferred shares, the count is absent.
+
+**Earnings per share above ₫1,000,000 is dropped and listed.** No Vietnamese
+share earns that much, yet some forms state EPS that is a million times too
+large, or state an amount in đồng. The import dropped 111 such lines: VCB 38,
+VIB 32, GAS 20, LPB 14, BID, TCB and VRE 2 each, and SSB 1. The rest of each
+filing is read.
+
+**The shared form is the consolidated one where it can be told.** In 26 of
+the 30 names, the shared form has a line only a consolidated statement
+fills: profit to the parent (61), non-controlling interest (429), or a bank's
+minority interest. ACB, SHB, SSB and VIB have no minority interest, so their
+forms cannot be told apart this way. They are taken as consolidated like the
+rest, and checking them against the PDFs is on the backlog.
 
 Re-import of 2026-10-20, after purging the three tables:
 
 | | Before | After |
 | --- | --- | --- |
-| Reports | 1,580 | 1,574 |
-| Reports with values | 1,433 | 740 |
-| Statement lines | 456,079 | 235,577 |
-| Values withheld | — | 683 shared, 4 repeated |
-| Refused | 22 | 28 (the six VNM filings) |
+| Reports | 1,580 | 1,580 |
+| Reports with values | 1,433 | 743 |
+| Statement lines | 456,079 | 236,398 |
+| Values withheld | — | 686 shared, 4 repeated |
+| Lines dropped | — | 111 |
+| Refused | 22 | 22 |
 
-FPT on 2023-08-01 reads as before: P/E 18.48, P/B 4.44, ROE 26.58%.
+FPT on 2023-08-01 reads as before: P/E 18.48, P/B 4.44, ROE 26.58%. VNM on
+2025-09-03 counts 2,090m shares.
+
+**Known gap: VNM's 2025 second quarter and half year.** No VNM filing from
+June to September 2025 was listed, so neither report was collected. This is
+a gap like HPG's.
 
 ## Consequences
 

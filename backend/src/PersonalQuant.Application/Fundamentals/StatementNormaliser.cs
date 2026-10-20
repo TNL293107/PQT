@@ -21,7 +21,12 @@ internal sealed record NormalisedValue(
 /// <param name="Template">The form the values were filed on.</param>
 /// <param name="Values">The values in đồng; empty when the form was left empty.</param>
 /// <param name="Unit">The đồng in one unit the issuer typed: 1, or 1,000,000 for a form typed in millions.</param>
-internal sealed record NormalisedFiling(FinancialTemplate Template, IReadOnlyList<NormalisedValue> Values, decimal Unit = 1m);
+/// <param name="Dropped">Lines dropped as implausible, each described.</param>
+internal sealed record NormalisedFiling(
+    FinancialTemplate Template,
+    IReadOnlyList<NormalisedValue> Values,
+    decimal Unit = 1m,
+    IReadOnlyList<string>? Dropped = null);
 
 /// <summary>
 /// Turns a filing's tables into values, each in its period and span.
@@ -65,6 +70,9 @@ internal static class StatementNormaliser
 
     /// <summary>The most charter capital, in đồng, the unit check accepts.</summary>
     internal const decimal MaximumCharterCapital = 1_000_000_000_000_000m;
+
+    /// <summary>The most earnings per share, in đồng, a form is believed to state.</summary>
+    internal const decimal MaximumEarningsPerShare = 1_000_000m;
 
     private static readonly decimal[] Units = [1m, 1_000m, 1_000_000m];
     private const NumberStyles CellStyle =
@@ -178,28 +186,36 @@ internal static class StatementNormaliser
             return null;
         }
 
-        if (UnitOf(template.Value, values, classification.Period) is not { } unit)
+        if (UnitOf(values, classification.Period) is not { } unit)
         {
             rejection = new FilingRejection(
                 filing.Reference,
                 filing.Ticker,
                 FilingRejectionReason.UnknownUnit,
-                $"Charter capital is stated as {CharterCapital(template.Value, values, classification.Period)}, which is no "
+                $"Charter capital is stated as {CharterCapital(values, classification.Period)}, which is no "
                     + "plausible amount in đồng, thousands or millions.");
             return null;
         }
 
+        // Earnings per share is typed in đồng, and no Vietnamese share earns
+        // a million of them. Some bank forms carry it a million times over
+        // (VCB, VIB, TCB, BID, LPB); such a line is dropped, and said so.
+        var dropped = values
+            .Where(pair => IsPerShare(template.Value, pair.Key.Item1, pair.Key.Item2) && Math.Abs(pair.Value) > MaximumEarningsPerShare)
+            .ToList();
+
         return new NormalisedFiling(
             template.Value,
             [
-                .. values.Select(pair => new NormalisedValue(
+                .. values.Except(dropped).Select(pair => new NormalisedValue(
                     pair.Key.Item1,
                     pair.Key.Item2,
                     pair.Key.Item3,
                     pair.Key.Item4,
                     IsPerShare(template.Value, pair.Key.Item1, pair.Key.Item2) ? pair.Value : pair.Value * unit)),
             ],
-            unit);
+            unit,
+            [.. dropped.Select(pair => $"{pair.Key.Item1} line {pair.Key.Item2} for {pair.Key.Item3} {pair.Key.Item4} states {pair.Value} per share.")]);
     }
 
     /// <summary>Whether a line is stated per share, in đồng whatever the form's unit.</summary>
@@ -215,13 +231,12 @@ internal static class StatementNormaliser
         };
 
     private static decimal? UnitOf(
-        FinancialTemplate template,
         Dictionary<(FinancialStatement, string, FiscalQuarter, PeriodSpan), decimal> values,
         FiscalQuarter period)
     {
         // A form with no capital, an empty one above all, has nothing to scale
         // or nothing to check it by, and is taken as typed.
-        if (CharterCapital(template, values, period) is not { } capital)
+        if (CharterCapital(values, period) is not { } capital)
         {
             return 1m;
         }
@@ -234,7 +249,6 @@ internal static class StatementNormaliser
     }
 
     private static decimal? CharterCapital(
-        FinancialTemplate template,
         Dictionary<(FinancialStatement, string, FiscalQuarter, PeriodSpan), decimal> values,
         FiscalQuarter period)
     {
@@ -243,7 +257,9 @@ internal static class StatementNormaliser
                 ? value
                 : null;
 
-        return template == FinancialTemplate.Bank ? Line("411") : Line("411a") ?? Line("411");
+        // The total first: it is the line issuers fill most carefully, and
+        // VNM's 2025 forms carry a 411a a hundredth of it.
+        return Line("411") ?? Line("411a");
     }
 
     private static FinancialStatement StatementOf(string tab) => tab.Trim().ToUpperInvariant() switch
