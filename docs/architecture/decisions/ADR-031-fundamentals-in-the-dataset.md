@@ -1,6 +1,6 @@
 # ADR-031: Fundamentals in the canonical dataset
 
-**Status:** Proposed · **Date:** 2026-10-20 · **Phase:** Sprint 7, item 7.3 (Phase 6)
+**Status:** Accepted · **Date:** 2026-10-20 · **Phase:** Sprint 7, item 7.3 (Phase 6)
 
 ## Context
 
