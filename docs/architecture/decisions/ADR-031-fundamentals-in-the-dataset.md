@@ -1,6 +1,6 @@
 # ADR-031: Fundamentals in the canonical dataset
 
-**Status:** Proposed (on hold for the `scope` column until the importer hotfix is decided) · **Date:** 2026-10-20 · **Phase:** Sprint 7, item 7.3 (Phase 6)
+**Status:** Proposed · **Date:** 2026-10-20 · **Phase:** Sprint 7, item 7.3 (Phase 6)
 
 ## Context
 
@@ -69,9 +69,14 @@ ADR-030's item B, returned by the service in place of a free-text reason, and
 is the set this column holds. A reader never sees a zero standing in for
 "unknown".
 
-*Scope is held open:* the `scope` column is only meaningful once the importer
-hotfix on the duplicated separate/consolidated forms is decided (ADR-029
-follow-up). Until then this ADR does not fix what `scope` may contain.
+**Scope.** IDS shows one form for a separate and a consolidated filing of the
+same period (ADR-029, correction of 2026-10-20), and the importer keeps values
+for the consolidated one only. So the export reads **consolidated** statements
+and falls back to **separate** only for a name with no consolidated values
+(LPB, and TPB for some periods). `scope` is `consolidated` or `separate` and is
+never mixed inside one ratio's inputs; null when no statement is known. A
+separate report whose form was identical to the consolidated one carries no
+values and is never a source.
 
 **4. The manifest is schema version 4.** It adds a top-level
 `fundamentals` object, or null when the export carried none:

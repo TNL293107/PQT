@@ -58,8 +58,22 @@ holds 52 filings, shows Held; its two missing consolidated filings are recorded
 in 7.4 and ADR-029, and no per-period coverage is added), and the backlog
 below listed rather than hidden.
 
+## B0 result (Dev, `606e3df`, `f184d69`; accepted by Lead 2026-10-20)
+
+1,580 reports, 743 with values, 236,398 lines, 22 refused; 686 withheld as
+shared form, 4 as repeated form. Share count rule: 411a when 411a + 411b = 411
+or 411 is absent, else 411 when 411b = 0 (VNM's 411a is wrong), else absent.
+Units are inferred from charter capital, not by ticker. FPT on 2023-08-01 is
+unchanged (P/E 18.48, P/B 4.44, ROE 26.58%).
+
 ## Backlog found, not in Sprint 7 scope unless the Moderator adds it
 
+- VNM has no 2025 Q2 or half-year filing (no files June–September 2025), the
+  same kind of gap as HPG's two.
+- ACB, SHB, SSB, VIB: shared forms cannot be told to be consolidated by their
+  lines (no minority interests); check against the PDF.
+- 111 EPS lines above ₫1,000,000 dropped (VCB 38, VIB 32, GAS 20, LPB 14,
+  BID/TCB/VRE 2 each, SSB 1).
 - ACB lifted capital 15% in 2023 Q2 with no matching corporate action.
 - MBB has two charter-capital values for 2022 Q4 and 2023 Q4.
 - ACB 2022 Q1–Q3 forms on IDS carry no values (no trailing EPS then).
