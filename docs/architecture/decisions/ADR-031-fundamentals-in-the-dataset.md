@@ -56,8 +56,10 @@ this item.
 `balance_sheet_quarter`, `report_ids` (the reports behind the balance sheet),
 `ttm_first_quarter`, `ttm_last_quarter`, `actions_applied`, `actions_withheld`,
 `close_raw`, `shares`, `net_profit_ttm`, `eps_ttm`, `book_value_per_share`,
-`pe`, `pb`, `roe`, `dividend_yield`, and `findings` (a list of strings: the
-results of the charter-capital and par checks of ADR-030). These carry what
+`pe`, `pb`, `roe`, `dividend_yield`, and `findings` (the results of the
+charter-capital and par checks of ADR-030, written as a JSON array of strings
+in one string column, like every other column; compact, stable order, so both
+languages produce the same text). These carry what
 ADR-030 promises, that each ratio names the report, the quarters and the
 actions it used. Every number is written as a string, as ADR-023 decided for
 prices, and a value that is absent is null. For each ratio a companion
