@@ -86,7 +86,8 @@ values and is never a source.
 licence note ADR-029 records), `cut` (`session_date_00utc`), `rows`, and
 `not_collected`, the instrument ids with no report held at all, each with a
 reason: `ids_capture_gap` (STB, GVR) or `out_of_scope` (securities firms and
-the insurer, such as SSI, TCX and BVH). A reader can then tell a gap that may be
+the insurer, such as SSI, TCX and BVH). A third code, `not_imported`, marks any
+other name with no report held (added in review, Sprint 7 C). A reader can then tell a gap that may be
 fixed from a name outside the first import's scope. `fundamentals.parquet` is listed in `files` with its hash, like
 `bars.parquet`. The contract is
 `docs/schemas/dataset-manifest-v4.schema.json`.
