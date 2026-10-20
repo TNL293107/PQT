@@ -39,6 +39,7 @@ reasoning at the time is preserved.
 | [028](ADR-028-venue-history.md)                             | Venue history — judging each session by the venue it traded on | Accepted |
 | [029](ADR-029-fundamentals-source.md)                        | Fundamentals source — the disclosure record says when, the filing says what | Accepted |
 | [030](ADR-030-point-in-time-ratios.md)                      | Point-in-time ratios and the share count behind them | Proposed |
+| [031](ADR-031-fundamentals-in-the-dataset.md)               | Fundamentals in the canonical dataset (manifest v4) | Proposed |
 
 ## Format
 
