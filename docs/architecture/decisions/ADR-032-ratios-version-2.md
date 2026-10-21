@@ -1,6 +1,6 @@
 # ADR-032: Ratios version 2 — capital steps without an action, and dividend coverage that is recorded
 
-**Status:** Proposed (Dev agreed with four edits, applied) · **Date:** 2026-10-21 · **Phase:** Sprint 8, items 8.1 and 8.4 (Phase 6)
+**Status:** Accepted (Dev agreed with four edits, applied) · **Date:** 2026-10-21 · **Phase:** Sprint 8, items 8.1 and 8.4 (Phase 6)
 
 Supersedes the dividend-yield coverage rule and the "step with no action is not
 checked" sentence of [ADR-030](ADR-030-point-in-time-ratios.md). The rest of
