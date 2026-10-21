@@ -34,7 +34,7 @@ cross-sectional, as momentum is) and states:
 - `name` and `version`; the version changes with the computation, and both are
   recorded with every run (U9).
 - `lookback`, in market sessions of the dataset, counting the as-of session.
-- `inputs`: the dataset columns it reads (`close`, `volume`, and the
+- `inputs`: the dataset columns it reads (`close`, `turnover`, and the
   fundamentals columns by name).
 - `absence`: the rule that leaves an instrument out of the result, in one
   sentence. **Absent stays absent: an instrument without a value is not in the
@@ -69,7 +69,7 @@ session).
 | `momentum_12_1` | adjusted close | return from 252 to 21 sessions ago (exists, v1) | fewer than 252 sessions of history |
 | `momentum_6_1` | adjusted close | return from 126 to 21 sessions ago | fewer than 126 sessions |
 | `volatility_60` | adjusted close | standard deviation of daily log returns over 60 sessions | a missing close in the window |
-| `liquidity_20` | close, volume | median over 20 sessions of close × volume | a missing bar in the window |
+| `liquidity_20` | turnover | median over 20 sessions of the traded value (VND) of the bar | a missing bar in the window |
 | `size` | `shares`, `close_raw` | shares × raw close (market capitalisation) | either is absent |
 | `value_ep` | `eps_ttm`, `close_raw` | EPS (TTM) ÷ raw close, so a loss is a negative number, not a missing one | EPS or close absent |
 | `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close | book value absent (`equity_not_positive` is carried as the reason) |
@@ -88,12 +88,13 @@ Decisions inside the table:
   bases in one expression.
 - **Dividend yield is not a feature in v1.** Only eight names carry a coverage
   record (ADR-032), so it is absent almost everywhere.
-- **`liquidity_20` volume basis.** The bar's `volume` is checked against the
-  adjusted close before the feature is frozen: if volume is not on the same
-  share basis as the close, the feature uses the traded value the dataset
-  carries instead, or is dropped from v1. Dev settles this by reading one
-  adjusted instrument across a bonus issue; the answer goes in this ADR's
-  amendment, not in the feature's code.
+- **`liquidity_20` reads turnover.** Checked 2026-10-21 on FPT across its 1.15
+  bonus: the dataset's `volume` is adjusted by the cumulative share factor like
+  the close (raw 1,328,101 → 2,510,220 on 2023-07-04 → 07-05; dataset
+  2,019,876 → 3,319,766), so it is consistent within a build. Turnover (VND
+  traded) is basis-free and comparable across names, so the feature reads it.
+  It is in `bars.parquet` but not yet in the Python `Bar` or the DuckDB `bars`
+  view; adding it is a small reader change in sprint 9.
 
 ### 4. How a feature is shown to be point-in-time
 
@@ -156,5 +157,6 @@ significance number.
   features read the dataset's version and refuse version 1 for value.
 - Sprint 10 adds the transforms and the evaluation on top; nothing here changes
   when those arrive.
-- Open for Dev, before freezing: the volume basis of `liquidity_20`, and whether
-  `History.fundamentals` should also expose the report ids for a run record.
+- `History.fundamentals` does not copy report ids into the run record: the run
+  pins the dataset id and content hash, the hash pins `fundamentals.parquet`,
+  and its rows carry `report_ids` (Dev, 2026-10-21).
