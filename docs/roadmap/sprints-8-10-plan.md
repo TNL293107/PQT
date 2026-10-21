@@ -1,4 +1,4 @@
-# Sprints 8–10 plan — DRAFT v3, not approved
+# Sprints 8–10 plan — v4, APPROVED by Lead, Dev and the Moderator on 2026-10-21
 
 Requested by the Moderator on 2026-10-21. Lead and Dev planned it together
 (Dev's draft is the base for sprints 8–10; Lead edited). It needs a "yes" from
@@ -63,10 +63,11 @@ rules stay (pause 3, at most two collectors, no code edits during a collection).
 
 ## Sprint 9 — longer window and Phase 7 foundations
 
-- **9.1 Longer point-in-time window.** VN30 membership before 2024-08-05 from
-  HOSE review announcements (2022 → 2024) and a bar backfill 2022-01 →
-  2023-07, with entitlements checked first. About 1.4 years becomes about 3.5.
-  If a source is not licensable, the window stays and the limit is stated.
+- **9.1 Window stated, not widened (Moderator, 2026-10-21).** VN30 stays as it
+  is: membership from 2024-08-05, bars from 2023-07-03. The usable window
+  (about 2024-08 → now, roughly 26 monthly rebalances) is stated in the
+  labelled-dataset spec and in every factor report as a limit. Sprint 9 has
+  room as a result; Dev and Lead may pull the optional items forward.
 - **9.2 Declarative labelled dataset (ADR, Lead).** Request spec: universe,
   as-of, window, frequency, features with versions, forward-return label
   (horizon, close t → close t+h, raw or adjusted). Resolves to a manifest
@@ -107,21 +108,18 @@ Sprint ends green (all suites, reviews, docs); real data never committed;
 commits carry no Co-Authored-By; push and merge `main` only on the Moderator's
 say-so; the operator declares a phase complete.
 
-## Questions for the Moderator
+## Moderator decisions (2026-10-21)
 
-1. **Corporate actions (8.4):** the eight names only, the full cash-dividend
-   sweep for 26 names, or neither (dividend yield absent everywhere)? Lead and
-   Dev recommend the eight names now, and a sweep only if dividend yield is to
-   be a factor input (the yield exported today is understated).
-2. Declare Phase 6 complete at the end of sprint 8 (this plan) or now, with the
-   backlog carried?
-3. (Dev's question (b).) Widen VN30 history, or state the narrow window
-   (about 2024-08 → now, roughly 26 monthly rebalances) as a limit? Is sourcing VN30 membership before 2024-08 and bars before 2023-07 (9.1)
-   acceptable in effort and licence? It decides how meaningful Phase 7 is.
-4. Where does the UI/UX phase go (proposal above)?
+1. Plan approved.
+2. Corporate actions: the eight names only; dividend yield is absent
+   (`dividend_history_incomplete`) for every name not swept.
+3. VN30 as it is; no widening of history.
+4. Sprint 8 starts now; Phase 6 is declared at the end of sprint 8.
+5. The UI/UX phase (with the flaky `Console.test.tsx`) goes after Phase 7 and
+   before Phase 8.
 
 ## Agreement
 
 - [x] Lead
 - [x] Dev (ticked on v3, 8.4 wording agreed)
-- [ ] Moderator
+- [x] Moderator (2026-10-21)
