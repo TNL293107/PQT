@@ -634,7 +634,7 @@ public sealed class DatasetExportServiceTests : IDisposable
         Assert.Equal(5, manifest.Files[1].RowCount);
 
         var fundamentals = manifest.Fundamentals!;
-        Assert.Equal((1, "IDS", "session_date_00utc", 5L), (fundamentals.RatioVersion, fundamentals.Source, fundamentals.Cut, fundamentals.Rows));
+        Assert.Equal((FundamentalRatioService.RatioVersion, "IDS", "session_date_00utc", 5L), (fundamentals.RatioVersion, fundamentals.Source, fundamentals.Cut, fundamentals.Rows));
         Assert.Empty(fundamentals.NotCollected);
         Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
 
@@ -690,7 +690,7 @@ public sealed class DatasetExportServiceTests : IDisposable
         harness.FileReport(harness.InstrumentId);
         var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
 
-        var edited = manifest with { Fundamentals = manifest.Fundamentals! with { RatioVersion = 2 } };
+        var edited = manifest with { Fundamentals = manifest.Fundamentals! with { RatioVersion = manifest.Fundamentals.RatioVersion + 1 } };
 
         Assert.Equal(manifest.ContentHash, DatasetIdentity.ContentHashOf(manifest));
         Assert.NotEqual(manifest.ContentHash, DatasetIdentity.ContentHashOf(edited));
@@ -730,7 +730,7 @@ public sealed class DatasetExportServiceTests : IDisposable
                 store,
                 store,
                 new FundamentalsReader(Fundamentals),
-                new FundamentalRatioService(new FundamentalsReader(Fundamentals), Bars, new FakeCorporateActionRepository()),
+                new FundamentalRatioService(new FundamentalsReader(Fundamentals), Bars, new FakeCorporateActionRepository(), new FakeCorporateActionCoverageRepository()),
                 new FakeBuild(),
                 new FakeClock(Now),
                 NullLogger<DatasetExportService>.Instance);

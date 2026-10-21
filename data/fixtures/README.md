@@ -12,6 +12,7 @@ that did may be added. The rules in [`../README.md`](../README.md) apply.
 | [`trading-calendar.csv`](trading-calendar.csv) | [trading calendar](../schemas/trading-calendar-csv.md) | the file calendar source, for completeness scoring |
 | [`market-data/`](market-data/) | [market data CSV](../schemas/market-data-csv.md) | the file market data source, for bar ingestion |
 | [`corporate-actions.csv`](corporate-actions.csv) | [corporate action CSV](../schemas/corporate-action-csv.md) | the file corporate action source, for adjusted prices |
+| [`corporate-action-coverage.csv`](corporate-action-coverage.csv) | `ticker,complete_from,swept_on,source` | which issuers' actions were swept in full, for dividend yield ([ADR-032](../../docs/architecture/decisions/ADR-032-ratios-version-2.md)) |
 | [`universes/`](universes/) | [universe CSV](../schemas/universe-csv.md) | the file universe source, for point-in-time constituent sets |
 | [`venue-history.csv`](venue-history.csv) | `symbol,exchange,effective_from,effective_to` | the file venue history source, for judging each session on its own venue |
 | [`instruments-fpt.csv`](instruments-fpt.csv) | [instrument symbol list](../schemas/instrument-csv.md) | the single-ticker list U3's first real ingest runs against |
@@ -254,6 +255,27 @@ Two transcription choices to know about:
 - **Issues from owners' equity are `BonusShares`** (GAS, SAB, TCB, FPT 2024),
   and payouts from retained profit are `StockDividend`. The two adjust prices
   identically.
+
+### The eight names swept in full (sprint 8)
+
+The rows above were sourced to explain price-band breaches, so a cash dividend
+too small to breach (1–5%) is mostly missing for every name. BCM, MSN, MWG,
+PLX, POW, VNM, VPL and VRE had no action at all. Sprint 8 read **every**
+entitlement notice VSDC lists for those eight, record dates 2023-04-01 →
+2026-12-31, on 2026-10-21, and added 24 rows:
+- cash dividends for BCM (3), MWG (5), PLX (4), VNM (8) and VRE (1);
+- POW's rights issue, stock dividend and bonus of 2025-12-10;
+- none for MSN, and none for VPL since its listing.
+
+Notice by notice, the sources are in
+[`sources/entitlements-eight-names.md`](sources/entitlements-eight-names.md).
+
+[`corporate-action-coverage.csv`](corporate-action-coverage.csv) records that
+sweep: one row per name, saying every action with an ex-date from
+`complete_from` to `swept_on` is in the file (ADR-032). A dividend yield is read
+only inside that stretch. Every other name has no row, so its yield is absent as
+`dividend_history_incomplete` rather than understated. The `source` column is
+last because it may hold commas.
 
 ## Venue history
 

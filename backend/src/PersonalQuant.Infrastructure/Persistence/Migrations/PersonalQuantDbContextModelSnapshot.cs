@@ -183,6 +183,47 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                     b.ToTable("corporate_actions", "quant");
                 });
 
+            modelBuilder.Entity("PersonalQuant.Domain.CorporateActions.CorporateActionCoverage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("CompleteFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("complete_from");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("source");
+
+                    b.Property<DateOnly>("SweptOn")
+                        .HasColumnType("date")
+                        .HasColumnName("swept_on");
+
+                    b.HasKey("Id")
+                        .HasName("pk_corporate_action_coverage");
+
+                    b.HasIndex("InstrumentId", "SweptOn")
+                        .IsUnique()
+                        .HasDatabaseName("ux_corporate_action_coverage_instrument_swept_on");
+
+                    b.ToTable("corporate_action_coverage", "quant", t =>
+                        {
+                            t.HasCheckConstraint("ck_corporate_action_coverage_interval", "swept_on >= complete_from");
+                        });
+                });
+
             modelBuilder.Entity("PersonalQuant.Domain.CorporateActions.PriceAdjustment", b =>
                 {
                     b.Property<Guid>("CorporateActionId")
@@ -1747,6 +1788,16 @@ namespace PersonalQuant.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_corporate_actions_instrument");
+                });
+
+            modelBuilder.Entity("PersonalQuant.Domain.CorporateActions.CorporateActionCoverage", b =>
+                {
+                    b.HasOne("PersonalQuant.Domain.Instruments.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_corporate_action_coverage_instrument");
                 });
 
             modelBuilder.Entity("PersonalQuant.Domain.CorporateActions.PriceAdjustment", b =>

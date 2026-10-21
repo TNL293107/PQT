@@ -63,6 +63,9 @@ public sealed class PersonalQuantDbContext(DbContextOptions<PersonalQuantDbConte
     /// <summary>Gets the factors those actions imply.</summary>
     public DbSet<PriceAdjustment> PriceAdjustments => Set<PriceAdjustment>();
 
+    /// <summary>Gets the sweeps that vouch for an issuer's actions over a stretch of ex-dates (ADR-032).</summary>
+    public DbSet<CorporateActionCoverage> CorporateActionCoverage => Set<CorporateActionCoverage>();
+
     /// <summary>Gets the venues' scheduled closures.</summary>
     public DbSet<TradingHoliday> TradingHolidays => Set<TradingHoliday>();
 

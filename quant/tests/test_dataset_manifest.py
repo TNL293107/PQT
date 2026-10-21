@@ -187,9 +187,9 @@ def test_the_order_not_collected_is_written_in_does_not_change_the_hash() -> Non
 
 def test_an_unknown_ratio_version_is_refused() -> None:
     raw = _raw("v4-fundamentals.json")
-    raw["fundamentals"]["ratio_version"] = 2
+    raw["fundamentals"]["ratio_version"] = 3
 
-    with pytest.raises(UnsupportedManifestError, match="Ratio version 2"):
+    with pytest.raises(UnsupportedManifestError, match="Ratio version 3"):
         DatasetManifest.from_json(raw)
 
 

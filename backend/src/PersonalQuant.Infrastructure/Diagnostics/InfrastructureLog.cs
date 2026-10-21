@@ -194,6 +194,27 @@ internal static partial class InfrastructureLog
         int rejected);
 
     [LoggerMessage(
+        EventId = 1153,
+        Level = LogLevel.Information,
+        Message = "Corporate action coverage import from {Source} recorded {Recorded} sweep(s), {AlreadyHeld} already held, rejected {Rejected}.")]
+    public static partial void CorporateActionCoverageImportCompleted(
+        ILogger logger,
+        string source,
+        int recorded,
+        int alreadyHeld,
+        int rejected);
+
+    [LoggerMessage(
+        EventId = 1154,
+        Level = LogLevel.Warning,
+        Message = "Corporate action coverage line {LineNumber} ({Symbol}) was not recorded: {Reason}")]
+    public static partial void CorporateActionCoverageRejected(
+        ILogger logger,
+        int lineNumber,
+        string symbol,
+        string reason);
+
+    [LoggerMessage(
         EventId = 1125,
         Level = LogLevel.Information,
         Message = "Venue history import from {Source} recorded {Recorded} instrument(s), {Unchanged} unchanged, re-judged {Rejudged} breach(es) on their own venue, rejected {Rejected}.")]

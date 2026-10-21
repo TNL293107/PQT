@@ -123,6 +123,18 @@ public sealed class MarketDataOptions : IValidatableObject
     public string CorporateActionPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the CSV of corporate action sweeps — which issuers' notices
+    /// were read in full, over which ex-dates — or an empty string to leave it
+    /// unregistered (ADR-032).
+    /// </summary>
+    /// <remarks>
+    /// With no source, no issuer has a coverage record, and every dividend
+    /// yield is absent as <c>dividend_history_incomplete</c>: a history nobody
+    /// swept cannot say that nothing was paid.
+    /// </remarks>
+    public string CorporateActionCoveragePath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the CSV of the venues instruments traded on over time, or
     /// an empty string to leave it unregistered.
     /// </summary>

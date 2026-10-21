@@ -71,8 +71,17 @@ public enum RatioAbsence
     /// <summary>Equity is not known at both ends of the trailing year.</summary>
     EquityNotKnownAtBothEnds = 8,
 
-    /// <summary>The corporate action history does not reach back over the trailing year.</summary>
+    /// <summary>
+    /// The corporate action history does not reach back over the trailing year
+    /// (ratio version 1 only; ADR-032 replaced the test with a recorded sweep).
+    /// </summary>
     NoDividendCoverage = 9,
+
+    /// <summary>
+    /// No recorded sweep vouches for every action of the issuer over the
+    /// trailing year, so "nothing paid" cannot be told from "not recorded" (ADR-032).
+    /// </summary>
+    DividendHistoryIncomplete = 10,
 }
 
 /// <summary>One ratio: a value, or the reason there is none.</summary>
@@ -158,17 +167,20 @@ public sealed record FundamentalRatios(
 /// <param name="fundamentals">The point-in-time statement read.</param>
 /// <param name="bars">The session's close.</param>
 /// <param name="actions">Share-count factors and cash dividends.</param>
+/// <param name="coverage">The sweeps that say over which ex-dates an issuer's actions are complete.</param>
 public sealed class FundamentalRatioService(
     IFundamentalsReader fundamentals,
     IBarRepository bars,
-    ICorporateActionRepository actions) : IFundamentalRatioService
+    ICorporateActionRepository actions,
+    ICorporateActionCoverageRepository coverage) : IFundamentalRatioService
 {
     /// <summary>
     /// The rules the ratios are computed under, as a dataset records them
-    /// (ADR-031). ADR-030 with its two checks is 1; a change to how any ratio
-    /// is computed is a new version.
+    /// (ADR-031). ADR-030 with its two checks is 1. Version 2 (ADR-032) adds
+    /// the finding for a capital step with no action, and reads dividend
+    /// coverage from a recorded sweep instead of the earliest action.
     /// </summary>
-    public const int RatioVersion = 1;
+    public const int RatioVersion = 2;
 
     /// <summary>The par value of a Vietnamese common share, in đồng.</summary>
     public const decimal ParValue = 10_000m;
@@ -213,6 +225,11 @@ public sealed class FundamentalRatioService(
 
         var history = await fundamentals.LoadAsync(instrumentId, knownAsOfUtc, cancellationToken).ConfigureAwait(false);
         var corporateActions = await actions.ListAsync(instrumentId, cancellationToken).ConfigureAwait(false);
+
+        // A sweep recorded after the observation instant was not known then.
+        var sweeps = (await coverage.ListAsync(instrumentId, cancellationToken).ConfigureAwait(false))
+            .Where(sweep => knownAsOfUtc is not { } observed || sweep.RecordedAtUtc <= observed)
+            .ToList();
         var cancelled = corporateActions.Where(action => action.IsCancelled).Select(action => action.Id).ToHashSet();
         var adjustments = (await actions.ListAdjustmentsAsync(instrumentId, cancellationToken).ConfigureAwait(false))
             .Where(adjustment => !cancelled.Contains(adjustment.CorporateActionId))
@@ -223,7 +240,7 @@ public sealed class FundamentalRatioService(
         foreach (var session in sessions)
         {
             var close = await CloseAsync(instrumentId, session, knownAsOfUtc, cancellationToken).ConfigureAwait(false);
-            results.Add(Compute(instrumentId, session, knownAsOfUtc, history, corporateActions, adjustments, close));
+            results.Add(Compute(instrumentId, session, knownAsOfUtc, history, corporateActions, adjustments, sweeps, close));
         }
 
         return results;
@@ -236,6 +253,7 @@ public sealed class FundamentalRatioService(
         FundamentalsHistory history,
         IReadOnlyList<CorporateAction> corporateActions,
         IReadOnlyList<PriceAdjustment> adjustments,
+        IReadOnlyList<CorporateActionCoverage> sweeps,
         RatioValue close)
     {
         // Known before the session opened: 00:00 UTC is 07:00 in Hanoi. A
@@ -264,7 +282,12 @@ public sealed class FundamentalRatioService(
         var lines = StatementLines.From(statements.Values, statements.Scope);
         var balance = lines.LatestBalanceSheet();
 
-        var (shares, applied, withheld) = SharesAt(lines, balance, adjustments, session, announcedBy, findings);
+        var (shares, applied, withheld, registeredEarly) = SharesAt(lines, balance, adjustments, session, announcedBy, findings);
+
+        if (!registeredEarly)
+        {
+            CheckUnexplainedStep(lines, balance, adjustments, session, announcedBy, findings);
+        }
         var (profit, quarters) = lines.TrailingProfit();
         CheckPar(lines, quarters, findings);
 
@@ -286,7 +309,7 @@ public sealed class FundamentalRatioService(
             : bookValue.Carried();
 
         var returnOnEquity = ReturnOnEquity(lines, profit, quarters);
-        var dividendYield = DividendYield(corporateActions, adjustments, session, announcedBy, close);
+        var dividendYield = DividendYield(corporateActions, adjustments, sweeps, session, announcedBy, close);
 
         IReadOnlyList<FinancialReportId> balanceReports = balance is { } sheet
             ? [.. statements.Values
@@ -368,7 +391,7 @@ public sealed class FundamentalRatioService(
     /// <item><description>a step that matches no action is reported and changes nothing.</description></item>
     /// </list>
     /// </remarks>
-    private static (RatioValue Shares, int Applied, int Withheld) SharesAt(
+    private static (RatioValue Shares, int Applied, int Withheld, bool RegisteredEarly) SharesAt(
         StatementLines lines,
         FiscalQuarter? balance,
         IReadOnlyList<PriceAdjustment> adjustments,
@@ -378,12 +401,12 @@ public sealed class FundamentalRatioService(
     {
         if (balance is not { } quarter)
         {
-            return (RatioValue.Missing(RatioAbsence.NoBalanceSheet, "no balance sheet known"), 0, 0);
+            return (RatioValue.Missing(RatioAbsence.NoBalanceSheet, "no balance sheet known"), 0, 0, false);
         }
 
         if (lines.CharterCapital(quarter) is not { } capital || capital <= 0m)
         {
-            return (RatioValue.Missing(RatioAbsence.NoCharterCapital, "the balance sheet states no usable charter capital"), 0, 0);
+            return (RatioValue.Missing(RatioAbsence.NoCharterCapital, "the balance sheet states no usable charter capital"), 0, 0, false);
         }
 
         var balanceEnd = StatementLines.QuarterEnd(quarter);
@@ -401,6 +424,7 @@ public sealed class FundamentalRatioService(
 
         var window = adjustments.Where(adjustment => adjustment.ExDate > balanceEnd && adjustment.ExDate <= session).ToList();
         var applied = new List<PriceAdjustment>();
+        var registeredEarly = false;
 
         // After the balance sheet: applied, unless its capital already shows them.
         var previous = capitalQuarters
@@ -419,6 +443,7 @@ public sealed class FundamentalRatioService(
                     findings.Add(
                         $"The {action.Factor.Shares:0.####}x action of {action.ExDate:yyyy-MM-dd} is already in {quarter}'s capital "
                             + $"(x{step:0.####} since {prior}); it is not applied twice.");
+                    registeredEarly = true;
                     continue;
                 }
             }
@@ -463,7 +488,75 @@ public sealed class FundamentalRatioService(
         }
 
         var shares = applied.Aggregate(capital / ParValue, (count, action) => count * action.Factor.Shares);
-        return (RatioValue.Known(decimal.Round(shares, 0)), applied.Count, window.Count(adjustment => !Announced(adjustment)));
+        return (RatioValue.Known(decimal.Round(shares, 0)), applied.Count, window.Count(adjustment => !Announced(adjustment)), registeredEarly);
+    }
+
+    /// <summary>
+    /// Reports a charter-capital step that no announced action can explain (ADR-032).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ADR-030 checks a step only against an action near it. A step with no
+    /// action at all, such as ACB's 15% in 2023Q2, changed every per-share
+    /// figure without a word. This compares the latest balance sheet with the
+    /// one before it that states capital, and when they differ by more than
+    /// <see cref="StepTolerance"/> and no share action announced by the session
+    /// went ex between the two quarter ends, says so.
+    /// </para>
+    /// <para>
+    /// A finding only: the count is the balance sheet's, which is probably
+    /// right, and no action is invented to explain it. A step with an action
+    /// near it, or one an action going ex later was registered early into, is
+    /// left to ADR-030's checks, so no step is reported twice.
+    /// </para>
+    /// </remarks>
+    private static void CheckUnexplainedStep(
+        StatementLines lines,
+        FiscalQuarter? balance,
+        IReadOnlyList<PriceAdjustment> adjustments,
+        DateOnly session,
+        DateOnly announcedBy,
+        List<string> findings)
+    {
+        if (balance is not { } quarter || lines.CharterCapital(quarter) is not ({ } capital and > 0m))
+        {
+            return;
+        }
+
+        var previous = lines.CapitalQuarters()
+            .Select(candidate => (FiscalQuarter?)candidate)
+            .LastOrDefault(candidate => candidate!.Value.CompareTo(quarter) < 0);
+
+        if (previous is not { } prior || lines.CharterCapital(prior) is not ({ } before and > 0m))
+        {
+            return;
+        }
+
+        var step = capital / before;
+
+        if (Math.Abs(step - 1m) <= StepTolerance)
+        {
+            return;
+        }
+
+        var priorEnd = StatementLines.QuarterEnd(prior);
+        var balanceEnd = StatementLines.QuarterEnd(quarter);
+
+        var near = adjustments.Any(adjustment =>
+            adjustment.Factor.Shares != 1m
+            && adjustment.ExDate > priorEnd
+            && adjustment.ExDate <= balanceEnd
+            && adjustment.ExDate <= session
+            && adjustment.AnnouncedOn is { } announced && announced <= announcedBy);
+
+        if (near)
+        {
+            return;
+        }
+
+        findings.Add(
+            $"Capital stepped {(step - 1m) * 100m:+0.0;-0.0}% between {prior} and {quarter} "
+                + $"(₫{before:N0} → ₫{capital:N0}) with no corporate action that explains it; the share count is the balance sheet's.");
     }
 
     /// <summary>Checks the share count's par against the EPS the issuer reports (ADR-030).</summary>
@@ -526,6 +619,7 @@ public sealed class FundamentalRatioService(
     private static RatioValue DividendYield(
         IReadOnlyList<CorporateAction> corporateActions,
         IReadOnlyList<PriceAdjustment> adjustments,
+        IReadOnlyList<CorporateActionCoverage> sweeps,
         DateOnly session,
         DateOnly announcedBy,
         RatioValue close)
@@ -537,17 +631,15 @@ public sealed class FundamentalRatioService(
 
         var from = session.AddDays(-365);
 
-        // A zero yield is a statement that nothing was paid, which only a
-        // history reaching over the whole year can make.
-        if (corporateActions.Count == 0)
-        {
-            return RatioValue.Missing(RatioAbsence.NoDividendCoverage, "no corporate action is recorded for this issuer");
-        }
-
-        if (corporateActions.Min(action => action.ExDate) is var first && first > from)
+        // A zero yield is a statement that nothing was paid, which only a sweep
+        // of every notice over the whole trailing year can make (ADR-032).
+        if (!sweeps.Any(sweep => sweep.Covers(from, session)))
         {
             return RatioValue.Missing(
-                RatioAbsence.NoDividendCoverage, $"the corporate action history starts on {first:yyyy-MM-dd}, inside the trailing year");
+                RatioAbsence.DividendHistoryIncomplete,
+                sweeps.Count == 0
+                    ? "no sweep of this issuer's corporate actions is recorded"
+                    : $"no recorded sweep covers every action from {from:yyyy-MM-dd} to {session:yyyy-MM-dd}");
         }
 
         var perShare = 0m;

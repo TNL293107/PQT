@@ -107,11 +107,34 @@ def test_a_row_for_an_instrument_not_collected_is_refused(tmp_path: Path) -> Non
 def test_an_unknown_ratio_version_is_refused(tmp_path: Path) -> None:
     build = write_dataset(tmp_path, _spec())
     raw = json.loads((build / "manifest.json").read_text(encoding="utf-8"))
-    raw["fundamentals"]["ratio_version"] = 2
+    raw["fundamentals"]["ratio_version"] = 3
     (build / "manifest.json").write_text(json.dumps(raw), encoding="utf-8")
 
-    with pytest.raises(UnsupportedManifestError, match="Ratio version 2"):
+    with pytest.raises(UnsupportedManifestError, match="Ratio version 3"):
         LocalDatasetProvider(tmp_path).verify(DATASET)
+
+
+@pytest.mark.parametrize("ratio_version", [1, 2])
+def test_both_known_ratio_versions_verify(tmp_path: Path, ratio_version: int) -> None:
+    # Version 1 (ADR-030) builds stay on disk and verify; version 2 (ADR-032)
+    # adds dividend_history_incomplete to the absence codes.
+    spec = _spec(
+        fundamentals=[
+            SyntheticFundamentals(
+                "aaa",
+                SESSIONS[0],
+                values={"dividend_yield": None},
+                absent={"dividend_yield": "dividend_history_incomplete"},
+            )
+        ]
+    )
+    spec.ratio_version = ratio_version
+    write_dataset(tmp_path, spec)
+
+    build = LocalDatasetProvider(tmp_path).verify(DATASET)
+
+    assert build.manifest.fundamentals is not None
+    assert build.manifest.fundamentals.ratio_version == ratio_version
 
 
 def test_a_value_present_beside_its_absence_reason_is_refused(tmp_path: Path) -> None:

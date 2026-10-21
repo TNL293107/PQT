@@ -109,3 +109,20 @@ internal sealed class FakeQualityRepository : IDataQualityRepository
 
     public void Add(DataQualityIssue issue) => _issues.Add(issue);
 }
+
+/// <summary>An in-memory record of corporate action sweeps.</summary>
+internal sealed class FakeCorporateActionCoverageRepository : ICorporateActionCoverageRepository
+{
+    private readonly List<CorporateActionCoverage> _records = [];
+
+    /// <summary>Gets every record staged.</summary>
+    public IReadOnlyList<CorporateActionCoverage> Records => _records;
+
+    public Task<IReadOnlyList<CorporateActionCoverage>> ListAsync(
+        InstrumentId instrumentId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CorporateActionCoverage>>(
+            [.. _records.Where(record => record.InstrumentId == instrumentId)]);
+
+    public void Add(CorporateActionCoverage coverage) => _records.Add(coverage);
+}

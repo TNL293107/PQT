@@ -131,6 +131,7 @@ services:
       MarketData__TradingCalendarPath: ${MARKET_DATA_CALENDAR:-/app/data/fixtures/trading-calendar.csv}
       MarketData__TradingCalendarCoveragePath: ${MARKET_DATA_CALENDAR_COVERAGE:-/app/data/fixtures/trading-calendar-coverage.csv}
       MarketData__CorporateActionPath: ${MARKET_DATA_CORPORATE_ACTIONS:-/app/data/fixtures/corporate-actions.csv}
+      MarketData__CorporateActionCoveragePath: ${MARKET_DATA_CORPORATE_ACTION_COVERAGE:-/app/data/fixtures/corporate-action-coverage.csv}
       MarketData__VenueHistoryPath: ${MARKET_DATA_VENUE_HISTORY:-/app/data/fixtures/venue-history.csv}
       # Filings written by tools/ids-collector (ADR-029). Empty leaves the IDS
       # fundamentals provider unregistered; the collector's output directory,

@@ -107,6 +107,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IIngestionJournal, IngestionJournalRepository>();
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
         services.AddScoped<ICorporateActionRepository, CorporateActionRepository>();
+        services.AddScoped<ICorporateActionCoverageRepository, CorporateActionCoverageRepository>();
         services.AddScoped<IUniverseRepository, UniverseRepository>();
         services.AddScoped<Application.Coverage.ICoverageRepository, CoverageRepository>();
         services.AddScoped<Application.Research.IResearchJobRepository, ResearchJobRepository>();
@@ -237,6 +238,14 @@ public static class InfrastructureServiceCollectionExtensions
 
             services.AddSingleton<ICorporateActionProvider>(
                 _ => new FileCorporateActionProvider(path));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.CorporateActionCoveragePath))
+        {
+            var path = options.CorporateActionCoveragePath;
+
+            services.AddSingleton<ICorporateActionCoverageProvider>(
+                _ => new CorporateActions.FileCorporateActionCoverageProvider(path));
         }
 
         if (!string.IsNullOrWhiteSpace(options.VenueHistoryPath))

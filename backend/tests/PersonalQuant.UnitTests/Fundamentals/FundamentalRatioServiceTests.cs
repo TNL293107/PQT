@@ -294,16 +294,144 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
-    public async Task Without_an_action_history_over_the_trailing_year_the_yield_is_absent_not_zero()
+    public async Task Without_a_sweep_the_yield_is_absent_not_zero()
     {
-        var ratios = await new Harness(history: false).ReadAsync(March);
+        var ratios = await new Harness(swept: false).ReadAsync(March);
 
         Assert.Null(ratios.DividendYield.Value);
-        Assert.Equal(RatioAbsence.NoDividendCoverage, ratios.DividendYield.Reason);
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, ratios.DividendYield.Reason);
     }
 
     [Fact]
-    public async Task With_an_action_history_and_no_dividend_the_yield_is_zero()
+    public async Task A_recorded_action_history_is_not_coverage()
+    {
+        // The issuer has actions back to 2021, which ADR-030's proxy took as
+        // coverage. Without a sweep, it is not.
+        var ratios = await new Harness(swept: false, history: true).ReadAsync(new DateOnly(2023, 3, 1));
+
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, ratios.DividendYield.Reason);
+    }
+
+    [Fact]
+    public async Task A_sweep_that_starts_inside_the_trailing_year_does_not_cover_it()
+    {
+        var harness = new Harness(swept: false);
+        harness.Sweep(new DateOnly(2022, 6, 1), new DateOnly(2026, 10, 18));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, ratios.DividendYield.Reason);
+    }
+
+    [Fact]
+    public async Task A_session_after_the_sweep_is_not_covered()
+    {
+        // Read on 2023-02-28: nothing that went ex after it is vouched for.
+        var harness = new Harness(swept: false);
+        harness.Sweep(new DateOnly(2021, 10, 1), new DateOnly(2023, 2, 28));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, ratios.DividendYield.Reason);
+    }
+
+    [Fact]
+    public async Task A_sweep_recorded_after_the_observation_instant_is_not_read()
+    {
+        var harness = new Harness(swept: false);
+        harness.Close(March, 60_000m, recorded: new DateTimeOffset(2023, 3, 1, 9, 0, 0, TimeSpan.Zero));
+        harness.Sweep(new DateOnly(2021, 10, 1), new DateOnly(2026, 10, 18), recorded: new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero));
+
+        var before = await harness.ReadAsync(March, new DateTimeOffset(2026, 10, 19, 0, 0, 0, TimeSpan.Zero));
+        var after = await harness.ReadAsync(March, new DateTimeOffset(2026, 10, 22, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, before.DividendYield.Reason);
+        Assert.NotNull(after.DividendYield.Value);
+    }
+
+    [Fact]
+    public async Task A_capital_step_with_no_action_near_it_is_a_finding_and_changes_nothing()
+    {
+        // ACB's case: capital rises 15% from 2022Q3 to 2022Q4 and no action
+        // went ex in between. The bonus of February 2023 is after both.
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Equal(120_000_000m, ratios.Shares.Value);
+        var finding = Assert.Single(ratios.Findings);
+        Assert.Contains("Capital stepped +15.0% between 2022Q3 and 2022Q4", finding, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_capital_step_inside_the_tolerance_is_not_a_finding()
+    {
+        var ratios = await new Harness(capitalQ3: 990_000_000_000m).ReadAsync(March);
+
+        Assert.Empty(ratios.Findings);
+    }
+
+    [Fact]
+    public async Task A_capital_step_with_an_action_near_it_is_left_to_the_action_checks()
+    {
+        // A 15% bonus that went ex in 2022Q4 explains the same step: the
+        // no-action finding does not fire, and neither does an ADR-030 one.
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+        harness.AddBonus(new DateOnly(2022, 11, 15), 1.15m, new DateOnly(2022, 11, 1));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("Capital stepped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task VNM_swept_from_July_2023_has_a_yield_from_July_2024_until_the_sweep_date()
+    {
+        // VNM's cash dividends as transcribed from VSDC (corporate-actions.csv),
+        // and its sweep: complete from 2023-07-01, read on 2026-10-21. VNM had
+        // no share action, so every dividend is on today's share basis.
+        var harness = new Harness(actions: false, swept: false);
+        harness.Sweep(new DateOnly(2023, 7, 1), new DateOnly(2026, 10, 21));
+
+        foreach (var (exDate, cash, announced) in new (DateOnly, decimal, DateOnly)[]
+        {
+            (new(2023, 8, 3), 2_450m, new(2023, 7, 17)),
+            (new(2023, 12, 27), 500m, new(2023, 12, 13)),
+            (new(2024, 3, 15), 900m, new(2024, 3, 7)),
+            (new(2024, 9, 24), 2_450m, new(2024, 8, 30)),
+            (new(2024, 12, 26), 500m, new(2024, 12, 10)),
+            (new(2025, 5, 14), 2_000m, new(2025, 4, 29)),
+            (new(2025, 10, 16), 2_850m, new(2025, 10, 2)),
+            (new(2026, 6, 26), 1_850m, new(2026, 6, 17)),
+        })
+        {
+            harness.Dividend(exDate, cash, announced);
+        }
+
+        foreach (var session in new DateOnly[] { new(2024, 6, 28), new(2024, 7, 1), new(2024, 9, 30), new(2026, 10, 21), new(2026, 10, 22) })
+        {
+            harness.Close(session, 70_000m);
+        }
+
+        // The trailing year of 2024-06-28 starts before 2023-07-01.
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, (await harness.ReadAsync(new DateOnly(2024, 6, 28))).DividendYield.Reason);
+
+        // 2023-08-03, 2023-12-27 and 2024-03-15: 2,450 + 500 + 900 = 3,850.
+        Assert.Equal(3_850m / 70_000m, (await harness.ReadAsync(new DateOnly(2024, 7, 1))).DividendYield.Value);
+
+        // 2023-12-27, 2024-03-15 and 2024-09-24: 500 + 900 + 2,450 = 3,850.
+        Assert.Equal(3_850m / 70_000m, (await harness.ReadAsync(new DateOnly(2024, 9, 30))).DividendYield.Value);
+
+        // On the sweep's last day the year runs from 2025-10-21, so 2025-10-16
+        // has dropped out and only 2026-06-26's 1,850 is in it.
+        Assert.Equal(1_850m / 70_000m, (await harness.ReadAsync(new DateOnly(2026, 10, 21))).DividendYield.Value);
+
+        // The day after the sweep is not vouched for.
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, (await harness.ReadAsync(new DateOnly(2026, 10, 22))).DividendYield.Reason);
+    }
+
+    [Fact]
+    public async Task Inside_a_sweep_with_no_dividend_the_yield_is_zero()
     {
         var harness = new Harness();
         harness.Close(new DateOnly(2024, 3, 1), 60_000m);
@@ -426,11 +554,20 @@ public sealed class FundamentalRatioServiceTests
     [Fact]
     public async Task An_issuer_with_no_corporate_action_says_its_count_is_not_adjusted()
     {
-        var ratios = await new Harness(actions: false).ReadAsync(March);
+        var ratios = await new Harness(actions: false, swept: false).ReadAsync(March);
 
         Assert.Equal(100_000_000m, ratios.Shares.Value);
         Assert.Contains(ratios.Findings, finding => finding.Contains("No corporate action is recorded", StringComparison.Ordinal));
-        Assert.Equal(RatioAbsence.NoDividendCoverage, ratios.DividendYield.Reason);
+        Assert.Equal(RatioAbsence.DividendHistoryIncomplete, ratios.DividendYield.Reason);
+    }
+
+    [Fact]
+    public async Task A_swept_issuer_with_no_action_has_a_known_zero_yield()
+    {
+        // MSN's case: every notice read, and none paid anything.
+        var ratios = await new Harness(actions: false).ReadAsync(March);
+
+        Assert.Equal(0m, ratios.DividendYield.Value);
     }
 
     private sealed class Harness
@@ -439,6 +576,7 @@ public sealed class FundamentalRatioServiceTests
         private readonly InMemoryFundamentals _fundamentals = new();
         private readonly FakeBarRepository _bars = new();
         private readonly FakeCorporateActionRepository _actions = new();
+        private readonly FakeCorporateActionCoverageRepository _coverage = new();
         private readonly FinancialTemplate _template;
         private readonly FinancialStatementScope _scope;
         private readonly DateTimeOffset _recorded;
@@ -455,9 +593,15 @@ public sealed class FundamentalRatioServiceTests
             decimal? reportedEps = null,
             bool history = true,
             bool actions = true,
-            DateTimeOffset? recorded = null)
+            DateTimeOffset? recorded = null,
+            bool swept = true)
         {
             _recorded = recorded ?? Recorded;
+
+            if (swept)
+            {
+                Sweep(new DateOnly(2021, 10, 1), new DateOnly(2026, 10, 18));
+            }
             _template = template;
             _scope = scope;
             var bank = template == FinancialTemplate.Bank;
@@ -548,7 +692,13 @@ public sealed class FundamentalRatioServiceTests
             Service().ReadSeriesAsync(_instrument, sessions, knownAsOf, TestContext.Current.CancellationToken);
 
         private FundamentalRatioService Service() =>
-            new(new FundamentalsReader(_fundamentals), _bars, _actions);
+            new(new FundamentalsReader(_fundamentals), _bars, _actions, _coverage);
+
+        public void Dividend(DateOnly exDate, decimal cash, DateOnly announcedOn) =>
+            Action(CorporateActionType.CashDividend, exDate, ratio: null, cash, announcedOn);
+
+        public void Sweep(DateOnly completeFrom, DateOnly sweptOn, DateTimeOffset? recorded = null) =>
+            _coverage.Add(CorporateActionCoverage.Record(_instrument, completeFrom, sweptOn, "VSDC notices", recorded ?? _recorded));
 
         public FinancialReport Report(
             FiscalQuarter period,

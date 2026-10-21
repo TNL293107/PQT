@@ -56,8 +56,8 @@ HISTORY_SCHEMA_VERSION = 3
 FUNDAMENTALS_SCHEMA_VERSION = 4
 """The first schema whose manifests carry the fundamentals object."""
 
-SUPPORTED_RATIO_VERSIONS = frozenset({1})
-"""The ratio rules this reader can name: ADR-030 with its two checks is 1."""
+SUPPORTED_RATIO_VERSIONS = frozenset({1, 2})
+"""The ratio rules this reader can name: ADR-030 is 1, ADR-032 is 2."""
 
 SESSION_CUT = "session_date_00utc"
 """The cut every fundamentals row is read at (ADR-031)."""

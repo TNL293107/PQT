@@ -60,6 +60,8 @@ public sealed class ReferenceDataImportHostedService(
         await ImportVenueHistoryAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
         await ImportCorporateActionsAsync(scope.ServiceProvider, cancellationToken)
             .ConfigureAwait(false);
+        await ImportCorporateActionCoverageAsync(scope.ServiceProvider, cancellationToken)
+            .ConfigureAwait(false);
         await ImportUniversesAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
     }
 
@@ -184,6 +186,43 @@ public sealed class ReferenceDataImportHostedService(
         catch (Exception exception) when (IsRecoverable(exception))
         {
             InfrastructureLog.ReferenceDataImportFailed(logger, exception, "corporate action");
+        }
+    }
+
+    /// <summary>
+    /// Records which issuers' corporate actions were swept in full (ADR-032).
+    /// </summary>
+    /// <remarks>
+    /// After the actions, because a record vouches for actions the import above
+    /// has just recorded.
+    /// </remarks>
+    private async Task ImportCorporateActionCoverageAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+    {
+        if (services.GetService<ICorporateActionCoverageProvider>() is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var report = await services
+                .GetRequiredService<ICorporateActionCoverageImportService>()
+                .ImportAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            InfrastructureLog.CorporateActionCoverageImportCompleted(
+                logger, report.Source, report.Recorded, report.AlreadyHeld, report.Rejections.Count);
+
+            foreach (var rejection in report.Rejections)
+            {
+                InfrastructureLog.CorporateActionCoverageRejected(logger, rejection.LineNumber, rejection.Symbol, rejection.Reason);
+            }
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            InfrastructureLog.ReferenceDataImportFailed(logger, exception, "corporate action coverage");
         }
     }
 

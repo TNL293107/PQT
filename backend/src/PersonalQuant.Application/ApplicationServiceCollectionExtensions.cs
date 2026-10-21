@@ -107,6 +107,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<
             CorporateActions.ICorporateActionImportService,
             CorporateActions.CorporateActionImportService>();
+        services.AddScoped<
+            CorporateActions.ICorporateActionCoverageImportService,
+            CorporateActions.CorporateActionCoverageImportService>();
 
         // The canonical dataset. A read-only projection of everything above
         // it, registered here rather than beside the store it writes to: the
