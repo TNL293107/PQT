@@ -1,6 +1,6 @@
 # ADR-032: Ratios version 2 — capital steps without an action, and dividend coverage that is recorded
 
-**Status:** Proposed · **Date:** 2026-10-21 · **Phase:** Sprint 8, items 8.1 and 8.4 (Phase 6)
+**Status:** Proposed (Dev agreed with four edits, applied) · **Date:** 2026-10-21 · **Phase:** Sprint 8, items 8.1 and 8.4 (Phase 6)
 
 Supersedes the dividend-yield coverage rule and the "step with no action is not
 checked" sentence of [ADR-030](ADR-030-point-in-time-ratios.md). The rest of
@@ -39,8 +39,11 @@ version is bumped once.
 
 For a row at session `t`, take the latest known balance sheet and the one
 before it (same scope). If capital moved by more than 2% (`|step − 1| > 0.02`)
-and the announced share actions between the two balance sheets do not account
-for it by ADR-030's matching rule, the row carries the finding:
+and **no share action announced by `t` has an ex-date between the two
+quarter ends**, the row carries the finding. Where such an action exists,
+ADR-030's three outcomes speak and this one does not, so a step is never
+reported twice. "The one before it" means the previous quarter with stated
+capital, and capital is read by the same rule as ADR-030 (411a, or 411):
 
 `capital step +15.0% between 2023Q1 and 2023Q2 with no corporate action that explains it`
 
@@ -51,9 +54,8 @@ with both capital figures. Rules:
 - It appears on every row whose latest balance sheet is the later of the two,
   so it lasts as long as that balance sheet is the latest, and goes when the
   next one arrives.
-- It does not replace ADR-030's three outcomes (registered late, registered
-  early, unexplained with an action near). It covers the case ADR-030 left
-  out: no action near the step.
+- It covers the case ADR-030 left out: no action with an ex-date in the
+  interval. It does not replace ADR-030's three outcomes.
 - If the scope differs between the two balance sheets, the step is not
   compared (a separate and a consolidated capital are not comparable).
 - MBB's two capital values for 2022Q4 and 2023Q4 come from a repeated prior
@@ -74,17 +76,24 @@ The 365-day proxy is removed. Dividend yield is present only for a name with a
 | `swept_on` | the date the sweep was done |
 | `source` | where the notices came from (VSD, issuer disclosures) |
 
-Rule: dividend yield at `t` is present when the name has a record and
-`t − 365 days ≥ complete_from`. Otherwise it is absent with the new code
+A sweep proves completeness only up to the day it was done, and `complete_from`
+is about **ex-dates**: the sweep covers every action with `ex_date ≥
+complete_from`, including one announced before that date, so the notice list
+is read back far enough (about two months) to catch them.
+
+Rule: dividend yield at `t` is present when the name has a record,
+`t − 365 days ≥ complete_from` **and `t ≤ swept_on`**. Otherwise it is absent with the new code
 `dividend_history_incomplete`. A name with no record is absent. A present yield
 may be zero, because inside the coverage zero is known.
 
 Sprint 8 sweeps **eight names**: BCM, MSN, MWG, PLX, POW, VNM, VPL and VRE, which
-had no action at all. Every action type of those names from 2023-07-01 is
-transcribed (bonus, stock dividend, cash dividend, rights, split), each with
-its notice, ex-date and announcement date, and each name gets `complete_from =
-2023-07-01` or a later date where the notices begin later (VPL lists on
-2025-05-13). The other 18 names of the export are **not** swept: their yield is
+had no action at all. Every action type of those names is transcribed from
+2023-07-01 (bonus, stock dividend, cash dividend, rights, split). Each name's
+`complete_from` is the date the sweep can vouch for, written down with the
+earliest notice read; it is 2023-07-01 at the earliest, and VPL starts at its
+listing on 2025-05-13. Notice references go in
+`data/fixtures/sources/entitlements-eight-names.md`, one line per row, as
+sprint 5 did, so the corporate-actions CSV keeps its schema. The other 18 names of the export are **not** swept: their yield is
 absent until a later sprint sweeps them. That is the Moderator's choice of
 2026-10-21; the cost is that the dividend yield is a thin column for now.
 
@@ -98,9 +107,13 @@ the reader. Version 2 writes `dividend_history_incomplete` instead.
 - The Python reader accepts `ratio_version` 1 and 2 and still refuses any other.
   The `_absent` code set grows by `dividend_history_incomplete`; the parquet
   columns are unchanged.
-- The ratio service carries the capital-step finding in `findings`, the coverage
-  rule above in place of the proxy, and reads the coverage fixture the way it
-  reads corporate actions. The console, CLI and API show the same code.
+- The coverage record is **imported and read like corporate actions**, not read
+  from the file: a table `quant.corporate_action_coverage` (instrument_id,
+  complete_from, swept_on, source) with a migration, an import beside the
+  corporate actions (ticker resolved through the file alias), and a repository
+  read. The export and the API stay off the file system.
+- The ratio service carries the capital-step finding in `findings` and the
+  coverage rule above in place of the proxy. The console, CLI and API show the same code.
 - Share counts change only where new actions are recorded for the eight names.
   The "no corporate action recorded; share count not adjusted" finding goes
   away for a name that now has actions and stays for a name that has none.
@@ -127,6 +140,9 @@ the reader. Version 2 writes `dividend_history_incomplete` instead.
   yield, which is why this cost is accepted.
 - **Hand transcription.** The eight names' notices are read by a person, as in
   sprint 5. Each row names its source so a later reader can audit it.
+- **A sweep ages.** Yield is absent after `swept_on` until the name is swept
+  again, so a dataset read later does not count a dividend paid after the sweep
+  as "zero known".
 - **A step finding can fire for a legitimate reason.** A private placement or an
   ESOP issue moves capital with no bonus action. The finding says what it saw
   and nothing more.
