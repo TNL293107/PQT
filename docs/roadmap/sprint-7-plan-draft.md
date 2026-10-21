@@ -1,4 +1,4 @@
-# Sprint 7 plan — DRAFT v2, not approved
+# Sprint 7 plan — v2, approved, Sprint 7 closed 2026-10-21
 
 Status: Sprint 6 closed by the operator on 2026-10-20. This plan needs a
 "yes" from Lead, Dev and the Moderator before any Sprint 7 code is written or
@@ -113,4 +113,12 @@ backlog is out of Sprint 7.** Until it is answered the backlog stays out.
 
 - [x] Lead
 - [x] Dev (with the three edits above, applied)
-- [x] Moderator on points 1 and 3 (relayed by Dev); point 2 open
+- [x] Moderator on points 1 and 3 (relayed by Dev)
+- [x] Moderator on point 2 (2026-10-21): the backlog is out of Sprint 7 and goes to the next sprint together with ACB's capital step.
+
+## Close (2026-10-21)
+
+Sprint 7 closed by the Moderator and merged to `main`. Items 7.1–7.4 are done;
+evidence is in `phase-6-definition-of-done.md` and `evidence/`. Moved on:
+- The backlog above and the ACB +15% capital step (no finding today) go to the next sprint.
+- The flaky frontend test (`Console.test.tsx`, operator-key echo, 5 s timeout) moves to a later phase dedicated to UI/UX improvement.

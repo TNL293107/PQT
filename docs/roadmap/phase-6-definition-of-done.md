@@ -1,6 +1,6 @@
 # Phase 6 — definition of done (Sprint 7, item 7.4)
 
-Status: evidence filled by Lead on 2026-10-21; awaiting the Moderator and the operator. Each criterion names the evidence that closes it.
+Status: evidence filled by Lead on 2026-10-21; Sprint 7 closed by the Moderator the same day. Open items go to the next sprint (backlog, ACB capital step) and to a later UI/UX phase (flaky frontend test). Each criterion names the evidence that closes it.
 Evidence is filled in at the end of Sprint 7; a criterion with no evidence is
 not met. The operator declares Phase 6 complete; this document does not.
 
