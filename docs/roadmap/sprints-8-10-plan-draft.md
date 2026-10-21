@@ -43,13 +43,15 @@ sprints 8–9.
   much better covered (bonus and stock dividends of 5% or more breach the
   band; ESOP of about 1% is absorbed by the 2% tolerance). Options:
   - **Eight names only** (BCM, MSN, MWG, PLX, POW, VNM, VPL, VRE), 2023-07 →
-    now, about 30–50 VSD notices by hand: one item.
+    now, about 30–50 VSD notices by hand: one item. It fixes their share
+    counts; dividend yield stays absent for every name not swept.
   - **Full cash-dividend sweep, 26 names:** about 150–250 notices; a sprint-sized
-    data task. Records per name `complete_from`, `swept_on` and source in a
-    fixture (`corporate-action-coverage.csv`); yield is present only when
-    t − 365 ≥ `complete_from`.
-  - **Neither:** `dividend_yield` is absent for every name with a new code
-    (`dividend_history_incomplete`).
+    data task (sprint 9 may slip). Records per name `complete_from`, `swept_on`
+    and source in a fixture (`corporate-action-coverage.csv`); yield is present
+    only when t − 365 ≥ `complete_from`.
+  - **Neither:** `dividend_yield` is absent for every name.
+  In every option the 365-day proxy is removed and an unswept name gets a new
+  absence code, `dividend_history_incomplete`.
   Whichever is chosen is part of ADR-030 v2.
 - **8.5 Feature ADR (Lead).** Written in sprint 8; no feature code in sprint 8.
   `ratio_version` 2 (8.1 and 8.4 together, bumped once) lands before the
@@ -109,8 +111,8 @@ say-so; the operator declares a phase complete.
 
 1. **Corporate actions (8.4):** the eight names only, the full cash-dividend
    sweep for 26 names, or neither (dividend yield absent everywhere)? Lead and
-   Dev recommend the eight names plus a sweep only if the Moderator wants
-   dividend yield as a factor input.
+   Dev recommend the eight names now, and a sweep only if dividend yield is to
+   be a factor input (the yield exported today is understated).
 2. Declare Phase 6 complete at the end of sprint 8 (this plan) or now, with the
    backlog carried?
 3. (Dev's question (b).) Widen VN30 history, or state the narrow window
@@ -121,5 +123,5 @@ say-so; the operator declares a phase complete.
 ## Agreement
 
 - [x] Lead
-- [x] Dev (ticked with edits, which v3 applies; to confirm v3)
+- [x] Dev (ticked on v3, 8.4 wording agreed)
 - [ ] Moderator
