@@ -38,8 +38,9 @@ reasoning at the time is preserved.
 | [027](ADR-027-operator-write-path.md)                        | The first write path from a browser — an operator key | Accepted |
 | [028](ADR-028-venue-history.md)                             | Venue history — judging each session by the venue it traded on | Accepted |
 | [029](ADR-029-fundamentals-source.md)                        | Fundamentals source — the disclosure record says when, the filing says what | Accepted |
-| [030](ADR-030-point-in-time-ratios.md)                      | Point-in-time ratios and the share count behind them | Accepted |
+| [030](ADR-030-point-in-time-ratios.md)                      | Point-in-time ratios and the share count behind them | Accepted, partly superseded by 032 |
 | [031](ADR-031-fundamentals-in-the-dataset.md)               | Fundamentals in the canonical dataset (manifest v4) | Accepted |
+| [032](ADR-032-ratios-version-2.md)                          | Ratios version 2: capital steps without an action, recorded dividend coverage | Proposed |
 
 ## Format
 
