@@ -1,4 +1,4 @@
-# ADR-033: The feature catalogue — what a feature is, and the first seven
+# ADR-033: The feature catalogue — what a feature is, and the first eight
 
 **Status:** Proposed · **Date:** 2026-10-21 · **Phase:** Sprint 8 item 8.5, built in sprint 9 (Phase 7)
 
@@ -75,7 +75,7 @@ session).
 | `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close | book value absent (`equity_not_positive` is carried as the reason) |
 | `quality_roe` | `roe` | ROE (TTM) as the dataset states it | `roe` absent |
 
-That is seven new entries beside momentum 12-1, which was already there.
+That is eight entries: seven new, and momentum 12-1, which was already there.
 
 Decisions inside the table:
 
