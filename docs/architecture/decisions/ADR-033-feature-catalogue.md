@@ -1,6 +1,6 @@
 # ADR-033: The feature catalogue — what a feature is, and the first eight
 
-**Status:** Proposed · **Date:** 2026-10-21 · **Phase:** Sprint 8 item 8.5, built in sprint 9 (Phase 7)
+**Status:** Accepted (Lead, 2026-10-22, after QA + QC review) · **Date:** 2026-10-21 · **Phase:** Sprint 8 item 8.5, built in sprint 9 (Phase 7)
 
 ## Context
 

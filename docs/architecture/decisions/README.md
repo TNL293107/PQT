@@ -41,7 +41,7 @@ reasoning at the time is preserved.
 | [030](ADR-030-point-in-time-ratios.md)                      | Point-in-time ratios and the share count behind them | Accepted, partly superseded by 032 |
 | [031](ADR-031-fundamentals-in-the-dataset.md)               | Fundamentals in the canonical dataset (manifest v4) | Accepted |
 | [032](ADR-032-ratios-version-2.md)                          | Ratios version 2: capital steps without an action, recorded dividend coverage | Accepted |
-| [033](ADR-033-feature-catalogue.md)                         | The feature catalogue: what an entry declares, and the first eight | Proposed |
+| [033](ADR-033-feature-catalogue.md)                         | The feature catalogue: what an entry declares, and the first eight | Accepted |
 
 ## Format
 
