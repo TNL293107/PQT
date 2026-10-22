@@ -28,7 +28,8 @@ Gate A (U1–U5 + real-data validation) passed 2026-10-11.
 Gate B (U6–U10) passed 2026-10-11.
 --------------------------------------------------
 PHASE 5 — Market Intelligence    STATUS: COMPLETE (2026-10-13)
-PHASE 6+                         STATUS: PLANNED
+PHASE 6 — Fundamentals           STATUS: COMPLETE (2026-10-22)
+PHASE 7+                         STATUS: PLANNED
 --------------------------------------------------
 ADVANCED QUANT RESEARCH
  1. Prediction Market Mispricing   RESEARCH ONLY  (Phase 12)
@@ -145,7 +146,7 @@ and use the new numbering throughout.
 | 4 | Corporate Actions & Adjusted Data | Eight action types, adjustment factors, adjustment-on-read | COMPLETE * |
 | — | **Research Foundation Upgrade** | **U1–U10; Gates A and B passed 2026-10-11** | **COMPLETE** |
 | 5 | Market Intelligence Terminal | Command bar, charts, watchlist, market breadth, workspace, dataset & coverage registry — scope and slices in [ADR-026](../architecture/decisions/ADR-026-market-intelligence-terminal.md) | COMPLETE |
-| 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` — source in [ADR-029](../architecture/decisions/ADR-029-fundamentals-source.md) | IN PROGRESS |
+| 6 | Fundamental & Financial Data | Statements, ratios, point-in-time fundamentals with `reported_at` — source in [ADR-029](../architecture/decisions/ADR-029-fundamentals-source.md); declared complete by the operator 2026-10-22 at the end of sprint 8 ([definition of done](phase-6-definition-of-done.md)) | COMPLETE |
 | 7 | Factor Research & Feature Platform | Features, factors, signals, probability calibration and expected-value substrate, declarative labelled-dataset specification | PLANNED |
 | 8 | Backtesting & Research Validation | Event-driven backtest under Vietnamese market rules, **plus research validation: walk-forward, out-of-sample, perturbation, Deflated Sharpe Ratio, PBO** | PLANNED |
 | 9 | Risk Engine | Ex-ante exposure, ex-post attribution, scenarios | PLANNED |

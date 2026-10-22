@@ -52,9 +52,8 @@ Moderator names one.
 Closed in sprint 8: the ACB/SHB/SSB/VIB shared-form check (SHB, SSB, VIB are
 consolidated; ACB is P3); the 22 refusals (confirmed correct); the 111 dropped
 EPS lines (88 ×10^6 typos, 20 GAS money values, 3 above); HPG ×2 collected;
-ACB and HPG capital steps (rows added). The detector's ex-date window
-(HPG 2025Q3, TPB 2024Q4) is fixed in sprint 8 if the Moderator approves it,
-otherwise it is listed here.
+ACB and HPG capital steps (rows added); the detector's ex-date window
+(HPG 2025Q3, TPB 2024Q4), fixed in sprint 8 (`bedef68`).
 
 ## Closing
 
