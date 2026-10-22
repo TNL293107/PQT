@@ -114,3 +114,22 @@ fixture's existing FPT 2025 / GAS 2024 / SSI rows.
 - CafeF's own ThayDoi for 07/03/2024 is "+7,90 (+6,99%)", i.e. a reference of 113,000 and a limit-up close (113,000 x 1.07 = 120,910 -> 120,900). But CafeF's 06/03/2024 close is 111,000 (its ThayDoi "-2,40" from 113,400). The two CafeF fields disagree by 2,000.
 - Cross-check, VNDirect finfo API (https://api-finfo.vndirect.com.vn/v4/stock_prices?sort=date&q=code:DGC~date:gte:2024-03-04~date:lte:2024-03-08): 06/03/2024 close 113.0 (low 109.8, average 111.42); 07/03/2024 basicPrice (reference) 113.0, ceiling 120.9, close 120.9 = +6.99%. So CafeF's 06/03/2024 close of 111,000 is a bad bar (true close 113,000; 06/03 is then -0.35%, 07/03 a limit-up +6.99%). Not a corporate action: fix the bar, not the adjustments. No row written.
 
+
+## Capital steps with no action (sprint 8.1, QA's `docs/roadmap/evidence/sprint-8-1-steps.md`)
+
+Not price-band breaches: these two rows were missing, so the ratio service
+reported each charter-capital step as unexplained (ADR-032). Both notices were
+read on vsdc.vn on 2026-10-21. `announced_on` is the notice's "Cập nhật ngày"
+date, as above.
+
+### ACB 2023-06-01 (FY2022 dividend)
+
+- Actions: FY2022 cash dividend 10% (1,000 VND/share) plus stock dividend 100:15. Record date 02/06/2023 (Fri), ex-date 01/06/2023 (Thu). Cash paid 12/06/2023.
+- VSD notice "ACB: Trả cổ tức năm 2022 bằng tiền và cổ phiếu", updated 23/05/2023: https://vsdc.vn/vi/ad/159023
+- Check: capital 2023Q1 → 2023Q2 is +15.0% (₫33,774bn → ₫38,841bn), the stock dividend's factor.
+
+### HPG 2024-05-23 (bonus issue)
+
+- Action: shares issued from owners' equity ("tăng vốn cổ phần từ nguồn vốn chủ sở hữu"), 10:1, so `BonusShares` 0.1. Record date 24/05/2024 (Fri), ex-date 23/05/2024 (Thu).
+- VSD notice "HPG: Nhận cổ phiếu phát hành do thực hiện tăng vốn cổ phần từ nguồn vốn chủ sở hữu", updated 10/05/2024: https://vsdc.vn/vi/ad/170903
+- Check: capital 2024Q1 → 2024Q2 is +10.0%, the bonus factor.

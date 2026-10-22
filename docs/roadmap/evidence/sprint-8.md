@@ -11,8 +11,23 @@ Run 2026-10-21/22 by Lead on the local Docker stack at `develop` `532ba10`
 > ₫38,840,504,000,000) with no corporate action that explains it; the share
 > count is the balance sheet's.
 
-Shares are unchanged (3,884,050,400). MSN on 2024-12-02 shows a second real
+Shares are unchanged (3,884,050,400). MSN on 2024-12-02 shows a second
 case: +5.2% between 2024Q2 and 2024Q3 with no entitlement.
+
+**Checked (QA, 2026-10-21, `sprint-8-1-steps.md`):** the ACB step is a missing
+action (2022 dividend, 15% in shares, ex 2023-06-01, VSDC 159023), not a real
+finding; its row is to be added. Of the 6 step pairs in the dataset, MSN, VHM
+(buyback cancellation) and VJC (private placement) are real findings; HPG
+2024Q2 is a missing action; HPG 2025Q3 and TPB 2024Q4 are false findings
+caused by the detector's ex-date window (an amendment is proposed).
+
+The ACB 2023 and HPG 2024 rows were added (VSDC 159023, 170903). HPG's
+computes. ACB's two 2023-06-01 actions do not become adjustments, because ACB's
+stored bars start 2023-07-03 ("No daily bar is stored before the ex-date"),
+so `pqt fundamentals ratios ACB --on 2023-08-01` still carries the +15.0%
+finding. This is the stored-bar window limit (ADR-033), not a detector fault;
+no row of a dataset starting on or after 2024-08-05 is affected. Accepted by
+Lead on 2026-10-21, with no backfill of one name.
 
 ## 8.4 Corporate actions of the eight names and dividend coverage
 
@@ -41,7 +56,8 @@ Dataset `e1d22bee4937dad9` (VN30 as of 2024-08-05, 2024-08-05 → 2025-12-31,
 - `pqt dataset verify`: 2 files match the manifest. Python opens it
   (ratio_version 2) through `check_fundamentals_asof.py`.
 - As-of check over every row: **0 failures**.
-- Absence codes over the nine `_absent` columns:
+- The five most frequent absence codes over the nine `_absent` columns
+  (`trailing_loss` and `equity_not_positive` also occur, less often):
 
 | code | cells |
 | --- | --- |
