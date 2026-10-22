@@ -17,7 +17,10 @@ What is missing is a decision on what a catalogue entry must state, how a
 feature reads fundamentals without opening a second path to the data, and which
 features come first. The limit of the sample shapes the answer: VN30
 membership is recorded from 2024-08-05 and stored bars from 2023-07-03, so the
-usable window is about 2024-08 → now (roughly 26 monthly rebalances). The
+usable window is about 2024-08 → now (roughly 26 monthly rebalances to
+2026-10). The sprint 8 dataset `e1d22bee4937dad9` ends 2025-12-31, which gives
+about 17; sprints 9 and 10 run on a build that ends at the latest stored bar,
+and each report states the count its build gives (§5). The
 Moderator kept VN30 as it is (2026-10-21), so the window is a stated limit of
 every feature and report, not something sprint 9 widens.
 
@@ -66,13 +69,13 @@ session).
 
 | Feature | Reads | Definition | Absent when |
 | --- | --- | --- | --- |
-| `momentum_12_1` | adjusted close | return from 252 to 21 sessions ago (exists, v1) | fewer than 252 sessions of history |
-| `momentum_6_1` | adjusted close | return from 126 to 21 sessions ago | fewer than 126 sessions |
+| `momentum_12_1` | adjusted close | return from 252 to 21 sessions ago (exists, v1; lookback 253 sessions with the as-of) | no close 252 sessions ago or 21 sessions ago, or a start close ≤ 0 |
+| `momentum_6_1` | adjusted close | return from 126 to 21 sessions ago (lookback 127) | no close 126 sessions ago or 21 sessions ago, or a start close ≤ 0 |
 | `volatility_60` | adjusted close | standard deviation of daily log returns over 60 sessions | a missing close in the window |
 | `liquidity_20` | turnover | median over 20 sessions of the traded value (VND) of the bar | a missing bar in the window |
 | `size` | `shares`, `close_raw` | shares × raw close (market capitalisation) | either is absent |
 | `value_ep` | `eps_ttm`, `close_raw` | EPS (TTM) ÷ raw close, so a loss is a negative number, not a missing one | EPS or close absent |
-| `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close | book value absent (`equity_not_positive` is carried as the reason) |
+| `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close, so negative equity is a negative number, not a missing one | book value or close absent (`no_balance_sheet`, `no_charter_capital`, `no_close`); `equity_not_positive` belongs to `pb_absent` only and is never cited for this feature |
 | `quality_roe` | `roe` | ROE (TTM) as the dataset states it | `roe` absent |
 
 That is eight entries: seven new, and momentum 12-1, which was already there.
@@ -113,7 +116,8 @@ For every entry, a test holds all of:
 
 Each factor report states the window it ran on (first and last scored session,
 number of rebalances, number of names per rebalance) and says that the sample is
-about 26 monthly cross-sections of at most 30 names. A result on that sample is
+at most about 26 monthly cross-sections of at most 30 names (fewer on a build
+that ends earlier, such as about 17 for `e1d22bee4937dad9`). A result on that sample is
 described as exploratory. The report does not hide the window behind a
 significance number.
 
@@ -143,8 +147,9 @@ significance number.
 - **Eight names have thin fundamentals.** Their yield is absent and their share
   counts rest on newly transcribed actions (ADR-032); `size`, `value_ep` and
   `value_bp` for those names carry that.
-- **Value features lean on ADR-030's treasury-share bias**, which overstates P/E
-  and P/B (so understates E/P and B/P) for an issuer with treasury shares.
+- **Value and size features lean on ADR-030's treasury-share bias**, which
+  overstates P/E, P/B and market capitalisation (so understates E/P and B/P and
+  overstates `size`) for an issuer with treasury shares.
 
 ## Consequences
 

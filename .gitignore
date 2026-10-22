@@ -276,3 +276,4 @@ tmp/
 
 # Local agent/editor scratch. The dev-server launch config is per-machine.
 .claude/
+handoff.md
