@@ -59,7 +59,8 @@ otherwise it is listed here.
 ## Closing
 
 **Sprint 8 (2026-10-22).** All nine criteria have evidence, re-run at the end of
-sprint 8 (item 8.6). Lead closes sprint 8; the operator declares Phase 6.
+sprint 8 (item 8.6). Lead closed sprint 8, and the operator declared **Phase 6
+complete on 2026-10-22**.
 
 At the end of Sprint 7 Lead fills the Evidence column from real runs (commands
 and outputs kept under `docs/roadmap/evidence/`), the Moderator reviews, and the
