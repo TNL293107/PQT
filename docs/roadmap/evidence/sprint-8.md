@@ -75,3 +75,35 @@ Dataset `e1d22bee4937dad9` (VN30 as of 2024-08-05, 2024-08-05 → 2025-12-31,
 
 Tests at this commit: .NET unit 1,267/1,267; Python manifest and fundamentals
 tests pass; both reproduced by Lead on 2026-10-21.
+
+## Dataset re-export after the window fix (`bedef68`)
+
+Run 2026-10-22 by Dev, with the backend rebuilt from `bedef68`. This was after the HPG
+purge and re-import (sprint-8-2.md) and with the ACB 2023 and HPG 2024 rows of
+8.1 in the database. Same command and window as v1:
+
+```bash
+pqt dataset export --universe VN30 --as-of 2024-08-05 --from 2024-08-05 --to 2025-12-31 --fundamentals
+# dataset e1d22bee4937dad9 v2, schema 4, ratio version 2, 9,178 fundamentals rows, 4 not collected
+# content hash 503030f7496f89cba0afc8c9272c3bca4a0a26ce4957d7a89f3e8ebca69bd1dc
+```
+
+The id is unchanged, because it names the request; the content is version **v2**.
+
+- `pqt dataset verify e1d22bee4937dad9 --version 2`: 2 files match the manifest.
+- `check_fundamentals_asof.py` over v2: 9,178 rows checked, **0 failures**.
+- The absence codes and dividend yield (present on 2,237 rows) are the same as v1.
+- Rows carrying "Capital stepped" go from **356 to 129**:
+
+| name | step | rows v1 | rows v2 | why |
+| --- | --- | --- | --- | --- |
+| HPG | 2024Q1 → 2024Q2, +10.0% | 122 | 0 | the HPG 2024 bonus row (VSDC 170903, ex 2024-05-23) is now recorded: a missing action, not the window |
+| HPG | 2025Q2 → 2025Q3, +20.0% | 45 | 0 | window fix: ex 2025-06-26, 4 days before the prior quarter end, factor 1.20 matches |
+| TPB | 2024Q3 → 2024Q4, +20.0% | 60 | 0 | window fix: ex 2024-09-23, factor 1.20 matches |
+| MSN | 2024Q2 → 2024Q3, +5.2% | 65 | 65 | real finding, kept |
+| VHM | 2024Q1 → 2024Q4, −5.7% | 23 | 23 | real finding (buyback cancellation), kept |
+| VJC | 2025Q1 → 2025Q2, +9.2% | 41 | 41 | real finding (placement), kept |
+
+The expected ~251 counted only the window fix (356 − 105). The extra 122 come
+from the HPG 2024 row of 8.1. Every remaining finding is one of the three real
+ones from `sprint-8-1-steps.md`.
