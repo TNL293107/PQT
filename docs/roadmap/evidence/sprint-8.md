@@ -107,3 +107,29 @@ The id is unchanged, because it names the request; the content is version **v2**
 The expected ~251 counted only the window fix (356 − 105). The extra 122 come
 from the HPG 2024 row of 8.1. Every remaining finding is one of the three real
 ones from `sprint-8-1-steps.md`.
+
+## 8.6 Close: the Phase 6 definition of done re-run
+
+Run 2026-10-22 by Tester + Audit at `develop` `962c15e`, read-only (outputs in
+`tmp/audit-8-6/out/`, git-ignored); reviewed by QA + QC. The result is entered
+in `docs/roadmap/phase-6-definition-of-done.md` (`4cba51e`).
+
+- **Audit mirror and database (DoD #1):** `filings 1604 refused 22 withheld 692
+  shared 688 dropped 111`. The database holds 1,582 reports, 743 with values,
+  236,398 statement lines; the diff between mirror and database is empty. The
+  refused set is the 22 of 8.3. HPG's separate 2022Q2 and H1 are held without
+  values (`SharedForm`), and the consolidated pair with 326 and 280 lines.
+- **As-of (DoD #7):** `e1d22bee4937dad9` v2, 9,178 rows checked, 0 failures.
+  Negative control (`known_from_utc` shifted +30 days): 8,601 failures.
+- **Suites (DoD #8):** .NET unit 1,273/1,273; integration 206/206 (Docker,
+  4 min 23 s); Python 293 passed, 14 skipped (Qlib optional, ADR-017);
+  frontend 28 files, 306/306.
+- **Frontend run note:** a first frontend run, made while the integration suite
+  was running, exited 1 because 4 forks workers timed out on start
+  (`App.test.tsx`, `AppShell.test.tsx`, `Console.test.tsx`,
+  `InstrumentSearchDialog.test.tsx` never ran; 261 other tests passed). The 4
+  files then passed alone (45/45), and the full run alone gave 306/306. This is
+  a worker start-up timeout under load, not a test failure.
+
+Sprint 8 closed by Lead on 2026-10-22. Declaring Phase 6 and pushing are the
+Moderator's call.
