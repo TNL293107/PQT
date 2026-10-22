@@ -46,6 +46,7 @@ Moderator names one.
 | ACB bars before 2023-07-03, so the 2023-06-01 actions do not adjust | sprint-8.md §8.1 | later |
 | Dropped EPS lines that are not ×10^6 typos: VRE 2 (about 2× EPS), SSB 1 | sprint-8-3.md | later |
 | MBB two capital values (repeated form); ACB 2022 Q1–Q3 forms with no values | sprint 7 backlog | later |
+| Whether `SharesAt` counts stock-dividend shares correctly between the ex-date and the issue (2–5 weeks) | sprint-8-1-steps.md | later |
 | Flaky `Console.test.tsx` | DoD #8 | UI/UX phase |
 
 Closed in sprint 8: the ACB/SHB/SSB/VIB shared-form check (SHB, SSB, VIB are
