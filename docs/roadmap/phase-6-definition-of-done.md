@@ -21,17 +21,39 @@ not met. The operator declares Phase 6 complete; this document does not.
 ## Known limits that do not block Phase 6
 
 - Scope: banks and non-financials only in the first import; SSI, TCX, BVH are out of scope (`out_of_scope`).
-- Eight tickers (BCM, MSN, MWG, PLX, POW, VNM, VPL, VRE) have no corporate actions
-  recorded: share count is not adjusted and dividend yield is absent.
-- Dividend-coverage test is a proxy (earliest action newer than 365 days).
+- Eight tickers (BCM, MSN, MWG, PLX, POW, VNM, VPL, VRE) have their corporate
+  actions swept by hand from VSDC notices from 2023-07 (VPL from 2025-05-13;
+  sprint 8.4, ADR-032). Dividend yield is present only inside such a sweep;
+  every other name carries `dividend_history_incomplete`. The 365-day proxy is
+  removed.
 - VPL has filings only from 2025.
 
-## Backlog (from sprint-7-plan-draft.md)
+## Backlog (after sprint 8)
 
-VNM 2025 Q2/H1 missing; ACB/SHB/SSB/VIB shared-form scope needs a PDF check; 111
-EPS lines above ₫1,000,000 dropped; ACB +15% capital in 2023 Q2 without an
-action; MBB two capital values (repeated form); ACB 2022 Q1–Q3 forms carry no
-values; STB, GVR, HPG ×2 capture gap; 22 filings refused by the importer.
+Sprint 7's list, updated by sprint 8 (`evidence/sprint-8*.md`). `handoff.md`
+is git-ignored, so this list is the record. Owner is "later" unless the
+Moderator names one.
+
+| Item | Source | Owner |
+| --- | --- | --- |
+| STB and GVR not collected (IDS filing page fault) | ADR-029 note 2026-10-21 | later |
+| VNM 2025 Q2 and H1 not listed by IDS | ADR-029 note 2026-10-21 | later |
+| LPB: 11 unclassified quarterlies (2021Q4 → 2024Q2) stay refused | sprint-8-3.md §2 | later |
+| P1: GAS income lines shifted on five forms; profit 61 read as a known 0 | sprint-8-3.md §5 | sprint 9 (proposed) |
+| P2: VPB 2025Q4 form recorded as 2024Q4; a `PeriodConflict` rule | sprint-8-3.md §4 | sprint 9 (proposed) |
+| P3: ACB 2023 H1 separate form recorded as consolidated; rule 211 > 0 | sprint-8-3.md §3 | sprint 9 (proposed) |
+| P4: separate reports with consolidated-only lines and no twin (MBB 2021Q4, POW, VCB, VIC 2022, ACB 2024 annual) | sprint-8-3.md §3 | sprint 9 (proposed) |
+| ACB bars before 2023-07-03, so the 2023-06-01 actions do not adjust | sprint-8.md §8.1 | later |
+| Dropped EPS lines that are not ×10^6 typos: VRE 2 (about 2× EPS), SSB 1 | sprint-8-3.md | later |
+| MBB two capital values (repeated form); ACB 2022 Q1–Q3 forms with no values | sprint 7 backlog | later |
+| Flaky `Console.test.tsx` | DoD #8 | UI/UX phase |
+
+Closed in sprint 8: the ACB/SHB/SSB/VIB shared-form check (SHB, SSB, VIB are
+consolidated; ACB is P3); the 22 refusals (confirmed correct); the 111 dropped
+EPS lines (88 ×10^6 typos, 20 GAS money values, 3 above); HPG ×2 collected;
+ACB and HPG capital steps (rows added). The detector's ex-date window
+(HPG 2025Q3, TPB 2024Q4) is fixed in sprint 8 if the Moderator approves it,
+otherwise it is listed here.
 
 ## Closing
 
