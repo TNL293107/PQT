@@ -50,7 +50,41 @@ Purge and re-import of HPG: **pending the Moderator's approval** (a delete
 needs `fromModerator: true`). In scope: 54 reports, 8,341 statement lines and
 54 raw payloads.
 
-<!-- After the purge: counts after, the separate 2022Q2/H1 without values, the consolidated with values. -->
+### After the purge
+
+Lead ran the purge on 2026-10-22, with the Moderator's approval, with the deletes of
+`backups/hpg-purge-2026-10-22/purge.sql` in one transaction (the backup was
+written to the host first, not to the container's `/tmp`). It deleted 2 reports
+(`HPG-20220729-c739f94ddcf2`, `HPG-20220826-54a686232870`), their 606
+statement lines (326 + 280) and their 2 raw payloads. The rows are kept as
+`bk_*.csv` beside the script. Dev then re-imported HPG:
+
+```bash
+pqt fundamentals import --provider IDS --ticker HPG
+# 54 filings read; 0 recorded, 54 already held; 0 lines; refused 0;
+# values withheld: 23 sharing the consolidated form
+```
+
+The two purged filings were recorded again at 03:34 UTC.
+
+| Reference | Report | Values | Lines |
+| --- | --- | --- | --- |
+| `HPG-20220729-9521505d8534` | consolidated 2022Q2 | yes | 326 |
+| `HPG-20220829-6c78d1a5427f` | consolidated 2022 H1 | yes | 280 |
+| `HPG-20220729-c739f94ddcf2` | separate 2022Q2 | no (`SharedForm`) | 0 |
+| `HPG-20220826-54a686232870` | separate 2022 H1 | no (`SharedForm`) | 0 |
+
+| | Count |
+| --- | --- |
+| IDS reports | 1,582 |
+| IDS reports with values | 743 (745 − 2) |
+| IDS statement lines | 236,398 (237,004 − 606) |
+| IDS raw payloads | 1,582 |
+| Filings with no report (refused) | 22 (1,604 files − 1,582 reports), as in ADR-029 |
+
+**Refused count not re-run.** The 22 is read from the counts, not from an
+importer run. A full-provider import was not run: the harness denied it
+in Dev's pane.
 
 ## VNM 2025 second quarter and half year
 
@@ -85,4 +119,6 @@ ADR-029.
 FPT on 2023-08-01, before the purge: P/E 18.48, P/B 4.44, ROE 26.58%, shares
 1,269,981,365. These match ADR-029 and sprint 7 C.
 
-<!-- After the purge: FPT re-run, re-import counts. -->
+FPT on 2023-08-01, after the purge and on the backend rebuilt from `bedef68`:
+P/E 18.48, P/B 4.44, ROE 26.58%, shares 1,269,981,365. These are unchanged.
+The re-import counts are under **After the purge** above.
