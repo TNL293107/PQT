@@ -552,6 +552,30 @@ FPT on 2023-08-01 reads as before: P/E 18.48, P/B 4.44, ROE 26.58%. VNM on
 June to September 2025 was listed, so neither report was collected. This is
 a gap like HPG's.
 
+## Note · 2026-10-21 · the capture gaps retried (sprint 8.2)
+
+The evidence is in `docs/roadmap/evidence/sprint-8-2.md`.
+
+**HPG's consolidated 2022Q2 and 2022 half year are collected.** With the dates
+widened, both are listed and open (`HPG-20220729-9521505d8534`,
+`HPG-20220829-6c78d1a5427f`). Each shares its form with HPG's separate report
+for the same period, which was imported with values before it had a partner.
+The separate reports therefore carry the consolidated form. HPG is to be purged
+and re-imported so that they are held without values (`SharedForm`).
+
+**Still missing, each named with its reason:**
+
+| Filing | Reason |
+| --- | --- |
+| VNM 2025 Q2, consolidated and separate | Not listed. Searches over 01/07–31/10/2025 return only the Q3 reports, and 01/07–31/08/2025 returns nothing. |
+| VNM 2025 half year, consolidated and separate | Not listed; same searches. |
+| Every STB filing | Listed, but opening one returns to the search page. Retried 2026-10-21: 9 of 9 in 2022 failed. |
+| Every GVR filing | The same fault: 8 of 8 in 2022 failed. |
+
+These stay *not collected* in the coverage registry, never empty. For STB and
+GVR, the alternatives above still hold: HOSE's timed listing for the dates,
+with the PDF or `vendor` basis for the values. Nothing is imputed.
+
 ## Consequences
 
 - **Sprint 6 item 6.2.** A fact has an instrument, a fiscal period, a statement
