@@ -12,7 +12,7 @@ ignores. Commands are under **Reproduce**.
 | --- | --- |
 | Refused filings | **22**, as ADR-029 says: 11 `Unclassified` (all LPB) and 11 `ImplausibleDate`. The 28 in Lead's notes on the B0 re-import is unconfirmed: no commit, document or data state gives it. The 22 replaces it. |
 | Refusals correct? | All 22 are correct under the rules. Three of them leave consolidated values recorded under a separate report (VCB, VIC, ACB). |
-| New refusals pending | **2**: HPG's separate 2022Q2 and H1. The next import refuses them as `SharedForm` (finding 1). |
+| New refusals pending | **2**: HPG's separate 2022Q2 and H1. The next import refuses them as `SharedForm` (finding 1). *Outcome: purged and re-imported 2026-10-22, recorded without values, not refused; refused stays 22 (sprint-8-2.md).* |
 | Dropped EPS lines | **111**, matching ADR-029 by name. **88** are ×10^6 typos. **23 are not**: GAS 20, VRE 2 and SSB 1 (finding 3). |
 | Shared form, ACB/SHB/SSB/VIB | One consolidated PDF of each was checked against the form (section 3). **SHB, SSB and VIB: consolidated**, with total assets equal to the million. **ACB 2023 H1: the form is not the consolidated statement.** It is the separate one, recorded as consolidated. |
 
@@ -34,6 +34,9 @@ re-import of 2026-10-20.
   values; purge it and import again"). Refused filings then come to 24.
 - Fix: purge the two separate reports and import again. Per Lead, this goes to Dev
   after the 8.2 collection. It is not run here.
+- **Outcome (2026-10-22):** after the purge, the re-import recorded both separate
+  reports without values (`SharedForm`, withheld), not refused, so refused filings
+  stay at 22. See `sprint-8-2.md`, "After the purge".
 
 ## 2. Refused filings (22)
 
