@@ -385,6 +385,84 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
+    public async Task A_capital_step_from_an_action_that_went_ex_late_in_the_prior_quarter_is_not_a_finding()
+    {
+        // HPG 2025 and TPB 2024: the dividend went ex near the prior quarter
+        // end, and its shares reached only the next quarter's balance sheet.
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+        harness.AddBonus(new DateOnly(2022, 9, 20), 1.15m, new DateOnly(2022, 9, 1));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("Capital stepped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_action_exactly_sixty_days_before_the_prior_quarter_end_explains_the_step()
+    {
+        // 2022Q3 ends 2022-09-30; sixty days before it is 2022-08-01, inside.
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+        harness.AddBonus(new DateOnly(2022, 8, 1), 1.15m, new DateOnly(2022, 7, 15));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("Capital stepped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_action_sixty_one_days_before_the_prior_quarter_end_does_not_explain_the_step()
+    {
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+        harness.AddBonus(new DateOnly(2022, 7, 31), 1.15m, new DateOnly(2022, 7, 15));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Contains(ratios.Findings, finding => finding.Contains("Capital stepped +15.0% between 2022Q3 and 2022Q4", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_action_late_in_the_prior_quarter_does_not_hide_a_step_its_factor_does_not_match()
+    {
+        // A 10% bonus whose shares were already in the 2022Q3 balance sheet
+        // must not explain an unrelated 15% step to 2022Q4.
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+        harness.AddBonus(new DateOnly(2022, 9, 20), 1.10m, new DateOnly(2022, 9, 1));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Contains(ratios.Findings, finding => finding.Contains("Capital stepped +15.0% between 2022Q3 and 2022Q4", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_action_already_in_the_prior_balance_sheet_does_not_hide_the_next_step()
+    {
+        // The 15% bonus of 2022-09-20 is in the 2022Q3 balance sheet already
+        // (869.6bn → 1,000bn). The 10% placement to 2022Q4 is unrelated, and
+        // the bonus, in the lag zone, must not explain it. ADR-030's within-year
+        // check also reports Q2 → Q4: two findings over different spans, by design.
+        var harness = new Harness(capitalQ2: 869_565_217_391m, capitalQ3: 1_000_000_000_000m, capitalQ4: 1_100_000_000_000m);
+        harness.AddBonus(new DateOnly(2022, 9, 20), 1.15m, new DateOnly(2022, 9, 1));
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Contains(ratios.Findings, finding => finding.Contains("Capital stepped +10.0% between 2022Q3 and 2022Q4", StringComparison.Ordinal));
+        Assert.Contains(ratios.Findings, finding => finding.Contains("Capital moved", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_action_late_in_the_prior_quarter_with_no_announcement_does_not_explain_the_step()
+    {
+        // An action cannot be announced after its ex-date, so the guard on
+        // announcement is tested with an action whose announcement is unknown.
+        var harness = new Harness(capitalQ3: 869_565_217_391m);
+        harness.AddBonus(new DateOnly(2022, 9, 20), 1.15m, announcedOn: null);
+
+        var ratios = await harness.ReadAsync(March);
+
+        Assert.Contains(ratios.Findings, finding => finding.Contains("Capital stepped +15.0% between 2022Q3 and 2022Q4", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task VNM_swept_from_July_2023_has_a_yield_from_July_2024_until_the_sweep_date()
     {
         // VNM's cash dividends as transcribed from VSDC (corporate-actions.csv),
@@ -590,6 +668,7 @@ public sealed class FundamentalRatioServiceTests
             bool priorYearEquity = true,
             decimal capitalQ4 = 1_000_000_000_000m,
             decimal? capitalQ3 = null,
+            decimal? capitalQ2 = null,
             decimal? reportedEps = null,
             bool history = true,
             bool actions = true,
@@ -629,6 +708,11 @@ public sealed class FundamentalRatioServiceTests
                 if (reportedEps is { } eps)
                 {
                     Line(report, FinancialStatement.IncomeStatement, bank ? "23" : "70", period, PeriodSpan.Quarter, eps);
+                }
+
+                if (quarter == 2 && capitalQ2 is { } second)
+                {
+                    Line(report, FinancialStatement.BalanceSheet, bank ? "411" : "411a", period, PeriodSpan.Instant, second);
                 }
 
                 if (quarter == 3 && capitalQ3 is { } third)

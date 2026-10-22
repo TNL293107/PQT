@@ -201,6 +201,15 @@ public sealed class FundamentalRatioService(
     /// </remarks>
     internal const decimal ParCheckBand = 2m;
 
+    /// <summary>How long before the prior quarter end an action may go ex and still explain the next step.</summary>
+    /// <remarks>
+    /// Shares from a Vietnamese stock dividend are issued two to five weeks
+    /// after the ex-date, so one that goes ex late in a quarter reaches the
+    /// next quarter's charter capital (HPG 2025Q3, TPB 2024Q4; sprint 8.1).
+    /// Sixty days covers that with room to spare.
+    /// </remarks>
+    internal const int IssueLagDays = 60;
+
     /// <inheritdoc />
     public async Task<FundamentalRatios> ReadAsync(
         InstrumentId instrumentId,
@@ -504,6 +513,13 @@ public sealed class FundamentalRatioService(
     /// went ex between the two quarter ends, says so.
     /// </para>
     /// <para>
+    /// An action that went ex from <see cref="IssueLagDays"/> before the prior
+    /// quarter end (inclusive) up to it also explains the step, because its
+    /// shares are issued weeks later, but only when the step matches its factor
+    /// within <see cref="StepTolerance"/>. Its shares may already be in the prior
+    /// balance sheet, and then it must not hide an unrelated step.
+    /// </para>
+    /// <para>
     /// A finding only: the count is the balance sheet's, which is probably
     /// right, and no action is invented to explain it. A step with an action
     /// near it, or one an action going ex later was registered early into, is
@@ -540,14 +556,16 @@ public sealed class FundamentalRatioService(
         }
 
         var priorEnd = StatementLines.QuarterEnd(prior);
+        var lagFrom = priorEnd.AddDays(-IssueLagDays);
         var balanceEnd = StatementLines.QuarterEnd(quarter);
 
         var near = adjustments.Any(adjustment =>
             adjustment.Factor.Shares != 1m
-            && adjustment.ExDate > priorEnd
+            && adjustment.ExDate >= lagFrom
             && adjustment.ExDate <= balanceEnd
             && adjustment.ExDate <= session
-            && adjustment.AnnouncedOn is { } announced && announced <= announcedBy);
+            && adjustment.AnnouncedOn is { } announced && announced <= announcedBy
+            && (adjustment.ExDate > priorEnd || Matches(step, adjustment.Factor.Shares)));
 
         if (near)
         {

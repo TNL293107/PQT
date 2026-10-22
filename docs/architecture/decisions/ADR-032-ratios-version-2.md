@@ -56,6 +56,16 @@ with both capital figures. Rules:
   next one arrives.
 - It covers the case ADR-030 left out: no action with an ex-date in the
   interval. It does not replace ADR-030's three outcomes.
+- *Amended in sprint 8 (8.1 follow-up, accepted by Lead 2026-10-22):* an
+  action that went ex from 60 days before the prior quarter end (inclusive)
+  up to it also explains the step, but only when the step matches its factor
+  within 2% (`StepTolerance`). Stock dividend shares are issued 2–5 weeks
+  after the ex-date, so an ex-date late in a quarter shows in the next
+  quarter's capital (HPG 2025Q3, TPB 2024Q4;
+  `docs/roadmap/evidence/sprint-8-1-steps.md`). The factor match keeps an
+  action already in the prior balance sheet from hiding an unrelated step;
+  such a case gives both this finding and ADR-030's within-year one, over
+  different spans.
 - If the scope differs between the two balance sheets, the step is not
   compared (a separate and a consolidated capital are not comparable).
 - MBB's two capital values for 2022Q4 and 2023Q4 come from a repeated prior
