@@ -71,8 +71,8 @@ session).
 | --- | --- | --- | --- |
 | `momentum_12_1` | adjusted close | return from 252 to 21 sessions ago (exists, v1; lookback 253 sessions with the as-of) | no close 252 sessions ago or 21 sessions ago, or a start close ≤ 0 |
 | `momentum_6_1` | adjusted close | return from 126 to 21 sessions ago (lookback 127) | no close 126 sessions ago or 21 sessions ago, or a start close ≤ 0 |
-| `volatility_60` | adjusted close | standard deviation of daily log returns over 60 sessions | a missing close in the window |
-| `liquidity_20` | turnover | median over 20 sessions of the traded value (VND) of the bar | a missing bar in the window |
+| `volatility_60` | adjusted close | standard deviation of daily log returns over 60 sessions (lookback 61 closes) | a missing close in the window |
+| `liquidity_20` | turnover | median over 20 sessions of the traded value (VND) of the bar (lookback 20) | a missing bar in the window |
 | `size` | `shares`, `close_raw` | shares × raw close (market capitalisation) | either is absent |
 | `value_ep` | `eps_ttm`, `close_raw` | EPS (TTM) ÷ raw close, so a loss is a negative number, not a missing one | EPS or close absent |
 | `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close, so negative equity is a negative number, not a missing one | book value or close absent (`no_balance_sheet`, `no_charter_capital`, `no_close`); `equity_not_positive` belongs to `pb_absent` only and is never cited for this feature |
@@ -144,9 +144,10 @@ significance number.
   `trial_count`, not a finding.
 - **Survivorship in the window.** Membership is as recorded from 2024-08-05;
   the dataset states `membership: point-in-time` only where coverage allows.
-- **Eight names have thin fundamentals.** Their yield is absent and their share
-  counts rest on newly transcribed actions (ADR-032); `size`, `value_ep` and
-  `value_bp` for those names carry that.
+- **Eight names rest on newly transcribed actions.** Their share counts depend
+  on 24 rows read by hand from VSDC notices (ADR-032), and `size`, `value_ep`
+  and `value_bp` for those names carry that. Dividend yield is present only for
+  them.
 - **Value and size features lean on ADR-030's treasury-share bias**, which
   overstates P/E, P/B and market capitalisation (so understates E/P and B/P and
   overstates `size`) for an issuer with treasury shares.
