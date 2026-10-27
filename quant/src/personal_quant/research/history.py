@@ -129,15 +129,15 @@ class PointInTimeHistory:
         """
         return self._dataset.members_on(self._as_of)
 
-    def closes(self, instrument_id: str, sessions: int) -> Sequence[Decimal | None]:
-        """Return the last ``sessions`` closes ending at the as-of, oldest first.
+    def bars(self, instrument_id: str, sessions: int) -> Sequence[Bar | None]:
+        """Return the last ``sessions`` bars ending at the as-of, oldest first.
 
         Args:
             instrument_id: The instrument.
             sessions: How many sessions to read, the as-of included.
 
         Returns:
-            One close per session; ``None`` where the instrument has no bar or
+            One bar per session; ``None`` where the instrument has no bar or
             the session falls before the dataset begins.
 
         Raises:
@@ -156,8 +156,26 @@ class PointInTimeHistory:
         bars = self._dataset.bars_of(instrument_id)
 
         return tuple(
-            None if session is None or session not in bars else bars[session].close
-            for session in self._window[-sessions:]
+            None if session is None else bars.get(session) for session in self._window[-sessions:]
+        )
+
+    def closes(self, instrument_id: str, sessions: int) -> Sequence[Decimal | None]:
+        """Return the last ``sessions`` closes ending at the as-of, oldest first.
+
+        Args:
+            instrument_id: The instrument.
+            sessions: How many sessions to read, the as-of included.
+
+        Returns:
+            One close per session; ``None`` where the instrument has no bar or
+            the session falls before the dataset begins.
+
+        Raises:
+            LookbackExceededError: More sessions were asked for than declared.
+            ValueError: ``sessions`` is below one.
+        """
+        return tuple(
+            None if bar is None else bar.close for bar in self.bars(instrument_id, sessions)
         )
 
     def bar(self, instrument_id: str, session: date) -> Bar | None:

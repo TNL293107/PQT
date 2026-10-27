@@ -176,6 +176,14 @@ class History(Protocol):
         """Return the universe's members on the as-of session."""
         ...
 
+    def bars(self, instrument_id: str, sessions: int) -> Sequence[Bar | None]:
+        """Return the last ``sessions`` bars ending at the as-of, oldest first.
+
+        ``None`` stands for a session with no bar for the instrument, or one
+        before the dataset begins.
+        """
+        ...
+
     def closes(self, instrument_id: str, sessions: int) -> Sequence[Decimal | None]:
         """Return the last ``sessions`` closes ending at the as-of, oldest first.
 

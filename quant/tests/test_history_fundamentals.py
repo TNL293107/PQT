@@ -92,6 +92,22 @@ def test_an_instrument_without_a_row_reads_as_none_not_zero(tmp_path: Path) -> N
     )
 
 
+def test_a_row_is_not_filled_forward_to_a_session_without_one(tmp_path: Path) -> None:
+    write_dataset(
+        tmp_path,
+        SyntheticDataset(
+            bars=[SyntheticBar("aaa", session, Decimal(10)) for session in SESSIONS[:2]],
+            spells={"aaa": [(SESSIONS[0], None)]},
+            fundamentals=[SyntheticFundamentals("aaa", SESSIONS[0])],
+            ratio_version=2,
+        ),
+    )
+    dataset = LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+    assert PointInTimeHistory(dataset, SESSIONS[0], Lookback(1)).fundamentals("aaa") is not None
+    assert PointInTimeHistory(dataset, SESSIONS[1], Lookback(1)).fundamentals("aaa") is None
+
+
 def test_a_restatement_changes_the_value_only_from_its_session(tmp_path: Path) -> None:
     dataset = _dataset(tmp_path)
 
