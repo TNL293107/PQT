@@ -14,16 +14,16 @@ engineering project.
 Phase 0–4                     COMPLETE
 Research Foundation Upgrade   COMPLETE      ← Gates A and B passed 2026-10-11
 Phase 5                       COMPLETE      ← Market Intelligence Terminal, declared 2026-10-13
-Phase 6                       IN PROGRESS   ← point-in-time fundamentals, source in ADR-029
+Phase 6                       COMPLETE      ← point-in-time fundamentals, declared 2026-10-22
 Phase 7–20                    PLANNED
 ```
 
 |              |                                                              |
 | ------------ | ------------------------------------------------------------ |
-| **Complete** | Phases 0–5, and the Research Foundation Upgrade (U1–U10)      |
-| **Current**  | Sprint 6 — Phase 6, point-in-time fundamentals ([sprint plan](docs/roadmap/sprint-plan.md)) |
+| **Complete** | Phases 0–6, and the Research Foundation Upgrade (U1–U10)      |
+| **Current**  | Sprint 9 — Phase 7 foundations ([sprint plan](docs/roadmap/sprints-8-10-plan.md)) |
 | **Runs**     | `docker compose up --build` — four services, health-gated     |
-| **Tests**    | 1,098 unit, 198 integration, 299 React (2026-10-13); 262 Python + 91 Qlib and C++ green in CI |
+| **Tests**    | 1,273 unit, 206 integration, 306 React, 293 Python (14 Qlib skipped) (2026-10-22, [sprint 8 evidence](docs/roadmap/evidence/sprint-8.md)) |
 | **Licence**  | Proprietary. Public to read, not to reuse.                    |
 
 **The caveat that mattered, and where it now stands.** Phases 2–4 were built,
