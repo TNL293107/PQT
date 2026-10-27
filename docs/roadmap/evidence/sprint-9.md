@@ -55,8 +55,19 @@ Gates (Tester + Audit, `tmp/audit-<sha>/verdict.txt`):
 | `1b10d7c` | **PASS** ("tests only on top of 5549e04") | 308 passed, 14 skipped | 1,283 | 206 | Python 8/8, C# 4/4 |
 
 `5549e04` hand check: "grid 4/4, labels 4/4, window 4 rebalances 2-3 names".
-`CATALOGUE` wiring: `b44e3a3` ("check a labelled dataset's request against the
-feature catalogue by default") on the same branch; its gate is **PENDING**.
+`CATALOGUE` wiring (`tmp/audit-<sha>/verdict.txt`):
+
+| sha | verdict | Python | mutants killed |
+| --- | --- | --- | --- |
+| `b44e3a3` | **FAIL** ("test gap; code correct") | 353 passed, 14 skipped | 4/7 (survived: default skips `CATALOGUE[0]`, default skips `CATALOGUE[-1]`, version mismatch not refused on default) |
+| `5278c5e` | **PASS** (tests only) | 362 passed, 14 skipped | 7/7 |
+
+.NET at `b44e3a3`: unit 1,291, integration 206; not re-run at `5278c5e` (no C#
+change). Lead's merged-main 351 passed / 25 skipped is the same suite: 351 + 11
+`job_queue` skipped without a test DB = 362.
+
+Merged to `main` (not pushed): `0528b3e` (9.2 and the wiring), `02515a1` (this
+evidence). Lead on merged `main`: .NET unit 1,291/1,291, integration 206/206.
 
 ## 9.3 Factors registered (ADR-033 catalogue v1)
 
@@ -137,5 +148,4 @@ room and the connection-string question settled.
 - `rebalances()` O(n²) lookup: accepted, `ponytail:` comment in `labelled.py`
   (`6087385`).
 - GAS purge and import: pending.
-- 9.2 branch (`6087385`, `b44e3a3`) not yet merged; `b44e3a3` gate pending.
 - 9.1 window numbers: pending a real labelled export.
