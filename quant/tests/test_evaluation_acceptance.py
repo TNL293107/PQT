@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 
 from personal_quant.factors.momentum import Momentum
-from personal_quant.research.protocols import History, Lookback
+from personal_quant.research.protocols import FeatureEngine, History, Lookback
 from synthetic import SyntheticBar, SyntheticDataset, weekdays, write_dataset
 
 SESSIONS = weekdays(date(2026, 1, 5), 15)
@@ -64,13 +64,13 @@ class _PeeksAtTheLabel:
         return {"aaa": float(bar.close)} if bar is not None else {}
 
 
-ENGINES = [TRAILING, _Negated(), _PeeksAtTheLabel()]
+ENGINES: list[FeatureEngine] = [TRAILING, _Negated(), _PeeksAtTheLabel()]
 # The canary gets a build of its own: a labelled dataset evaluates every
 # feature its request names at each rebalance, so it would fail the others.
-SOUND = [TRAILING, _Negated()]
+SOUND: list[FeatureEngine] = [TRAILING, _Negated()]
 
 
-def _write(tmp_path: Path, engines: list[Any] = SOUND) -> None:
+def _write(tmp_path: Path, engines: list[FeatureEngine] = SOUND) -> None:
     bars = [
         SyntheticBar(name, session, Decimal(repr(100 * (1 + rate) ** index)))
         for name, rate in RATES.items()
