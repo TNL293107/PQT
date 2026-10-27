@@ -11,8 +11,10 @@ from dataclasses import dataclass
 
 from personal_quant.factors.liquidity import Liquidity
 from personal_quant.factors.momentum import Momentum
+from personal_quant.factors.quality import ReturnOnEquity
 from personal_quant.factors.risk import Volatility
 from personal_quant.factors.size import Size
+from personal_quant.factors.value import BookToPrice, EarningsToPrice
 from personal_quant.research.protocols import FeatureEngine
 
 __all__ = ["CATALOGUE", "Entry", "entry"]
@@ -59,8 +61,27 @@ CATALOGUE: tuple[Entry, ...] = (
         "No fundamentals row, or shares or close_raw absent.",
         "higher_is_larger",
     ),
+    Entry(
+        EarningsToPrice(),
+        ("eps_ttm", "close_raw"),
+        "No fundamentals row, eps_ttm or close_raw absent, or a close at or below zero.",
+        "higher_is_cheaper",
+    ),
+    Entry(
+        BookToPrice(),
+        ("book_value_per_share", "close_raw"),
+        "No fundamentals row, book_value_per_share (no_balance_sheet, no_charter_capital) "
+        "or close_raw (no_close) absent, or a close at or below zero.",
+        "higher_is_cheaper",
+    ),
+    Entry(
+        ReturnOnEquity(),
+        ("roe",),
+        "No fundamentals row, or roe absent.",
+        "higher_is_more_profitable",
+    ),
 )
-"""Catalogue v1 so far; the value and quality entries wait on backlog P1."""
+"""Catalogue v1 (ADR-033 §3): eight entries."""
 
 
 def entry(name: str) -> Entry:
