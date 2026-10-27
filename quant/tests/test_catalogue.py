@@ -149,8 +149,9 @@ def test_volatility_is_the_sample_deviation_of_60_log_returns(tmp_path: Path) ->
 
 
 def test_liquidity_is_the_median_turnover_over_20_sessions(tmp_path: Path) -> None:
-    # Turnovers 1,000 ... 20,000 over the window; an older, larger one is outside it.
-    dataset = _dataset(tmp_path, _series("aaa", [999, *range(1, 21)], turnover=True))
+    # Turnovers 1,000 ... 19,000 and one of 1,000,000 over the window, so the
+    # mean (about 59,500) is not the median; an older, larger one is outside it.
+    dataset = _dataset(tmp_path, _series("aaa", [999, *range(1, 20), 1_000], turnover=True))
 
     assert evaluate(Liquidity(), dataset, SESSIONS[20]) == {"aaa": 10_500.0}
 
