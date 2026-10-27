@@ -170,6 +170,20 @@ def test_the_window_states_its_rebalances_and_names(tmp_path: Path) -> None:
     assert "exploratory" in window.statement()
 
 
+def test_without_engines_the_request_is_checked_against_the_catalogue(tmp_path: Path) -> None:
+    # momentum_6_1 is catalogued with a lookback of 127, so a request that
+    # says 126 is refused by the default, as one naming last_close is.
+    _write(tmp_path, _request(features=[{"name": "momentum_6_1", "version": 1, "lookback": 126}]))
+
+    with pytest.raises(LabelledDatasetError, match="lookback of 126"):
+        LabelledDataset.open(LocalDatasetProvider(tmp_path), DATASET)
+
+    _write(tmp_path / "other", _request())
+
+    with pytest.raises(LabelledDatasetError, match="last_close"):
+        LabelledDataset.open(LocalDatasetProvider(tmp_path / "other"), DATASET)
+
+
 def test_a_build_without_a_request_is_refused(tmp_path: Path) -> None:
     write_dataset(
         tmp_path,

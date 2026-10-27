@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from personal_quant.backtesting.returns import forward_returns
+from personal_quant.factors.catalogue import CATALOGUE
 from personal_quant.research.datasets import CanonicalDataset, LocalDatasetProvider
 from personal_quant.research.history import evaluate
 from personal_quant.research.manifest import DatasetRequest
@@ -83,15 +84,16 @@ class LabelledDataset:
     def open(
         provider: LocalDatasetProvider,
         dataset_id: str,
-        engines: Iterable[FeatureEngine],
+        engines: Iterable[FeatureEngine] | None = None,
         version: int | None = None,
     ) -> LabelledDataset:
-        """Verify a build and check its request against the features handed in.
+        """Verify a build and check its request against the catalogue (ADR-033).
 
         Args:
             provider: Where the build is held.
             dataset_id: The dataset id.
-            engines: The features available, such as the catalogue's.
+            engines: The features available; the catalogue's when ``None``.
+                Tests hand in their own.
             version: The build to open; the latest when ``None``.
 
         Returns:
@@ -110,7 +112,8 @@ class LabelledDataset:
                 "labelled dataset."
             )
 
-        by_name = {engine.name: engine for engine in engines}
+        available = [entry.engine for entry in CATALOGUE] if engines is None else engines
+        by_name = {engine.name: engine for engine in available}
         chosen: list[FeatureEngine] = []
 
         for feature in sorted(request.features, key=lambda feature: feature.name):
