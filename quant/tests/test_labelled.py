@@ -97,6 +97,19 @@ def test_rebalances_fall_every_rebalance_every_sessions_from_the_first_scored_on
     assert [rebalance.exit for rebalance in rebalances] == [SESSIONS[5], SESSIONS[8], SESSIONS[11]]
 
 
+def test_a_rebalance_whose_label_ends_past_the_last_session_is_dropped_not_refused(
+    tmp_path: Path,
+) -> None:
+    # `to` is the last session. From the third, every three: 2, 5, 8 and 11;
+    # 11 + 3 is past the twelfth session, so 11 is dropped and not counted.
+    _write(tmp_path, _request(to=SESSIONS[-1].isoformat()))
+    labelled = _open(tmp_path)
+
+    assert SESSIONS[11] not in [rebalance.session for rebalance in labelled.rebalances()]
+    assert labelled.window().rebalances == 3
+    assert labelled.window().last == SESSIONS[8]
+
+
 def test_features_and_labels_are_computed_at_read_time(tmp_path: Path) -> None:
     _write(tmp_path)
 

@@ -150,6 +150,8 @@ class LabelledDataset:
         sessions = list(self._dataset.sessions)
 
         for session in self._sessions:
+            # ponytail: index() per rebalance is O(n^2); fine at ~26 rebalances,
+            # carry the index alongside the session if the window grows.
             exit_session = sessions[sessions.index(session) + horizon]
             members = self._dataset.members_on(session)
 

@@ -27,12 +27,17 @@ namespace PersonalQuant.UnitTests.Datasets;
 /// them would fail every dataset already on disk.
 /// </para>
 /// <para>
-/// The version 3 fixture was written by this test's version 3 build and is
-/// now held like the two before it, by its hash. The version 4 fixture is
-/// built below and written by this test when <c>PQT_WRITE_GOLDEN=1</c>;
-/// otherwise the test asserts the committed file is exactly what this build
-/// would write. Neither carries prices, so committing them redistributes
-/// nothing.
+/// The version 3 and 4 fixtures were written by this test's builds of those
+/// versions and are now held like the two before them, by their hashes. The
+/// version 5 fixture, <c>v5-export.json</c>, is built below and written by
+/// this test when <c>PQT_WRITE_GOLDEN=1</c>; otherwise the test asserts the
+/// committed file is exactly what this build would write. None carries
+/// prices, so committing them redistributes nothing.
+/// </para>
+/// <para>
+/// <c>v5-request.json</c> is different: QA + QC built it by hand, with its
+/// canonical string beside it, so it pins both languages to ADR-034 rather
+/// than to either implementation.
 /// </para>
 /// </remarks>
 public sealed class DatasetManifestGoldenTests
