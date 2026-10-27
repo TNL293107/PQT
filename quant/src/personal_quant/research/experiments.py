@@ -32,7 +32,6 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 
 import personal_quant
-from personal_quant.research.momentum_slice import SliceResult
 
 __all__ = [
     "ENGINE",
@@ -43,7 +42,6 @@ __all__ = [
     "compare_metrics",
     "insert_run",
     "parameters_hash",
-    "slice_metrics",
 ]
 
 ENGINE = "personal_quant"
@@ -68,6 +66,7 @@ class RunRecord:
     started_at: datetime
     finished_at: datetime
     reproduces_run_id: UUID | None = None
+    status: str = "succeeded"
     run_id: UUID = field(default_factory=uuid4)
     engine_version: str = personal_quant.__version__
     commit: str | None = field(default_factory=lambda: code_commit())
@@ -115,34 +114,6 @@ def parameters_hash(parameters: Mapping[str, Any]) -> str:
     """
     canonical = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def slice_metrics(result: SliceResult) -> dict[str, float | None]:
-    """Reduce a momentum-slice result to the metrics a run records.
-
-    Args:
-        result: The slice's result.
-
-    Returns:
-        The metrics by name.
-    """
-    info = result.information
-    spread = [item.value for item in result.series("spread")]
-
-    return {
-        "periods": float(len(result.periods)),
-        "ic_periods": float(info.periods),
-        "ic_mean": info.mean,
-        "ic_deviation": info.deviation,
-        "information_ratio": info.information_ratio,
-        "t_statistic": info.t_statistic,
-        "top_compounded": _compound(result, "top"),
-        "bottom_compounded": _compound(result, "bottom"),
-        "spread_mean": sum(spread) / len(spread) if spread else None,
-        "spread_positive_share": (
-            sum(value > 0 for value in spread) / len(spread) if spread else None
-        ),
-    }
 
 
 def compare_metrics(
@@ -227,7 +198,7 @@ def insert_run(
                 factor_version, params, params_hash, code_commit, research_engine,
                 research_engine_version, trial_index, trial_count, reproduces_run_id,
                 started_at_utc, finished_at_utc)
-            VALUES (%s, %s, %s, 'succeeded', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s)
             """
         ).format(runs),
@@ -235,6 +206,7 @@ def insert_run(
             run.run_id,
             experiment_id,
             job_id,
+            run.status,
             run.strategy,
             run.universe_code,
             run.universe_as_of,
@@ -333,15 +305,6 @@ class RunStore:
             metrics=measured,
             commit=row[9],
         )
-
-
-def _compound(result: SliceResult, which: str) -> float | None:
-    series = result.series(which)
-
-    if not series:
-        return None
-
-    return math.prod(1.0 + item.value for item in series) - 1.0
 
 
 def _same(before: float | None, after: float | None) -> bool:

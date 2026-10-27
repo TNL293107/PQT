@@ -22,6 +22,7 @@ class _Queue:
         self.pending = list(jobs)
         self.completed: dict[str, Mapping[str, Any]] = {}
         self.failed: dict[str, str] = {}
+        self.failed_runs: dict[str, RunRecord] = {}
         self.lose_lease = lose_lease
 
     def claim(self, worker: str, lease: timedelta) -> Job | None:
@@ -35,11 +36,14 @@ class _Queue:
 
         self.completed[job.kind] = result
 
-    def fail(self, job: Job, worker: str, error: str) -> None:
+    def fail(self, job: Job, worker: str, error: str, run: RunRecord | None = None) -> None:
         if self.lose_lease:
             raise LeaseLostError("lost")
 
         self.failed[job.kind] = error
+
+        if run is not None:
+            self.failed_runs[job.kind] = run
 
 
 def _job(kind: str = "echo", attempts: int = 1, **payload: Any) -> Job:  # noqa: ANN401

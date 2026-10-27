@@ -139,6 +139,11 @@ class LabelledDataset:
         return LabelledDataset(dataset, request, chosen)
 
     @property
+    def dataset(self) -> CanonicalDataset:
+        """The verified build, for reads outside the harness such as labels."""
+        return self._dataset
+
+    @property
     def request(self) -> DatasetRequest:
         """The request the build was exported from."""
         return self._request

@@ -7,7 +7,12 @@ import statistics
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-__all__ = ["InformationSummary", "information_coefficient", "summarise"]
+__all__ = [
+    "InformationSummary",
+    "information_coefficient",
+    "pearson_information_coefficient",
+    "summarise",
+]
 
 _MINIMUM_NAMES = 3
 _MINIMUM_PERIODS = 2
@@ -34,7 +39,7 @@ class InformationSummary:
 def information_coefficient(
     scores: Mapping[str, float], returns: Mapping[str, float]
 ) -> float | None:
-    """Return the Spearman rank correlation of scores with later returns.
+    """Return the rank IC: the Spearman rank correlation of scores with later returns.
 
     Args:
         scores: The factor value per instrument at the rebalance.
@@ -56,6 +61,33 @@ def information_coefficient(
         return None
 
     return statistics.correlation(left, right, method="ranked")
+
+
+def pearson_information_coefficient(
+    scores: Mapping[str, float], returns: Mapping[str, float]
+) -> float | None:
+    """Return the IC: the Pearson correlation of scores with later returns (ADR-036).
+
+    Args:
+        scores: The factor value per instrument at the rebalance.
+        returns: The return per instrument over the following period.
+
+    Returns:
+        The correlation over the instruments that have both, or ``None``
+        when fewer than three do or either side has no spread.
+    """
+    common = sorted(set(scores) & set(returns))
+
+    if len(common) < _MINIMUM_NAMES:
+        return None
+
+    left = [scores[instrument] for instrument in common]
+    right = [returns[instrument] for instrument in common]
+
+    if len(set(left)) == 1 or len(set(right)) == 1:
+        return None
+
+    return statistics.correlation(left, right)
 
 
 def summarise(coefficients: Sequence[float]) -> InformationSummary:

@@ -166,6 +166,28 @@ def test_a_failed_job_records_its_error(schema: str, connection: psycopg.Connect
     assert (status, result, error, finished) == ("failed", None, "Rejected: no such dataset.", True)
 
 
+def test_a_failed_trial_records_its_run_as_failed_and_counts_it(
+    schema: str, connection: psycopg.Connection[Any]
+) -> None:
+    # ADR-036 §5: a job that failed after its payload was accepted is a trial.
+    _queue(schema, connection, ("only", "2026-10-11T01:00Z"))
+    queue = PostgresJobQueue(connection, schema)
+    job = queue.claim("w1", LEASE)
+    assert job is not None
+
+    queue.fail(job, "w1", "ZeroDivisionError: planted", _run(status="failed", metrics={}))
+
+    status, _, _, _, error, _ = _row(schema, connection, job.id)
+    assert (status, error) == ("failed", "ZeroDivisionError: planted")
+    assert _trials(schema, connection) == [(1, 1, False)]
+
+    runs = connection.execute(
+        sql.SQL("SELECT status FROM {}").format(sql.Identifier(schema, "runs"))
+    ).fetchall()
+    connection.commit()
+    assert [tuple(row) for row in runs] == [("failed",)]
+
+
 def test_a_worker_that_lost_its_job_cannot_finish_it(
     schema: str, connection: psycopg.Connection[Any]
 ) -> None:
