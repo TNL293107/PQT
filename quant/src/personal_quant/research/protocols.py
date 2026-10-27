@@ -59,7 +59,9 @@ class Bar:
 
     Prices are :class:`~decimal.Decimal`, read from the strings the dataset
     stores them as. Nothing between the exchange and a factor goes through a
-    binary float; a factor may convert at its own boundary.
+    binary float; a factor may convert at its own boundary. ``turnover`` is
+    the cash value traded (VND) as recorded, never adjusted, and ``None``
+    where the source did not report it.
     """
 
     instrument_id: str
@@ -69,6 +71,7 @@ class Bar:
     low: Decimal
     close: Decimal
     volume: int
+    turnover: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

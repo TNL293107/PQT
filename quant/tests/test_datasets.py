@@ -44,6 +44,17 @@ def test_a_build_loads_with_exact_decimal_prices(tmp_path: Path) -> None:
     assert SESSIONS[0] not in dataset.bars_of("bbb")
 
 
+def test_turnover_loads_as_recorded_and_unreported_turnover_stays_none(tmp_path: Path) -> None:
+    spec = _spec()
+    spec.bars[0] = SyntheticBar("aaa", SESSIONS[0], Decimal("100.5"), turnover=Decimal("1234567.5"))
+    write_dataset(tmp_path, spec)
+
+    dataset = LocalDatasetProvider(tmp_path).open("0123456789abcdef")
+
+    assert dataset.bars_of("aaa")[SESSIONS[0]].turnover == Decimal("1234567.5")
+    assert dataset.bars_of("aaa")[SESSIONS[1]].turnover is None
+
+
 def test_verify_keeps_the_bytes_it_hashed(tmp_path: Path) -> None:
     # A reader built on the verified build reads these bytes, not the file:
     # changing the file afterwards changes nothing it can see.

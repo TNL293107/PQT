@@ -91,7 +91,16 @@ FUNDAMENTAL_VALUES = (
 """The value columns of ``fundamentals.parquet``, each beside its ``_absent`` reason."""
 
 _BUILD = re.compile(r"v(?P<version>[1-9][0-9]*)")
-_COLUMNS = ["instrument_id", "opened_at_utc", "open", "high", "low", "close", "volume"]
+_COLUMNS = [
+    "instrument_id",
+    "opened_at_utc",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover",
+]
 
 
 class DatasetIntegrityError(RuntimeError):
@@ -586,7 +595,7 @@ def read_bars_table(payload: bytes) -> Any:  # noqa: ANN401 - pyarrow ships no t
     Returns:
         A ``pyarrow.Table`` of ``instrument_id``, ``session`` (``date32``),
         ``open``, ``high``, ``low`` and ``close`` as the exporter's strings,
-        and ``volume``.
+        ``volume``, and ``turnover`` as the exporter's string or null.
     """
     table = pq.read_table(pa.BufferReader(payload), columns=_COLUMNS)
     opened = table.column("opened_at_utc")
@@ -626,7 +635,7 @@ def read_fundamentals_table(payload: bytes) -> Any:  # noqa: ANN401 - pyarrow sh
 
 def _read_bars(payload: bytes) -> list[Bar]:
     columns = read_bars_table(payload).to_pydict()
-    names = ["instrument_id", "session", "open", "high", "low", "close", "volume"]
+    names = ["instrument_id", "session", "open", "high", "low", "close", "volume", "turnover"]
 
     return [
         Bar(
@@ -637,8 +646,9 @@ def _read_bars(payload: bytes) -> list[Bar]:
             low=Decimal(low),
             close=Decimal(close),
             volume=int(volume),
+            turnover=None if turnover is None else Decimal(turnover),
         )
-        for instrument, session, open_, high, low, close, volume in zip(
+        for instrument, session, open_, high, low, close, volume, turnover in zip(
             *(columns[name] for name in names), strict=True
         )
     ]

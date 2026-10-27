@@ -96,7 +96,8 @@ _VIEWS = (
         CAST(high AS DECIMAL(38,10)) AS high,
         CAST(low AS DECIMAL(38,10)) AS low,
         CAST(close AS DECIMAL(38,10)) AS close,
-        volume
+        volume,
+        CAST(turnover AS DECIMAL(38,10)) AS turnover
     FROM verified_bars
     """,
     """
@@ -210,10 +211,10 @@ def connect(
 
 def _require_representable(bars: Iterable[Bar]) -> None:
     for bar in bars:
-        for name in _PRICES:
-            price: Decimal = getattr(bar, name)
+        for name in (*_PRICES, "turnover"):
+            price: Decimal | None = getattr(bar, name)
 
-            if not _representable(price):
+            if price is not None and not _representable(price):
                 raise UnrepresentablePriceError(
                     f"{bar.instrument_id} {name} on {bar.session} is {price}, which "
                     f"{PRICE_TYPE} cannot hold exactly."

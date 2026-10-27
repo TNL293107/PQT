@@ -101,6 +101,33 @@ def test_prices_are_decimal_columns_not_doubles(
     assert {columns[price] for price in ("open", "high", "low", "close")} == {PRICE_TYPE}
     assert columns["session"] == "DATE"
     assert columns["volume"] == "BIGINT"
+    assert columns["turnover"] == PRICE_TYPE
+
+
+def test_turnover_matches_the_python_loader_and_null_stays_null(tmp_path: Path) -> None:
+    spec = _spec()
+    spec.bars[0] = SyntheticBar(
+        spec.bars[0].instrument_id,
+        spec.bars[0].session,
+        spec.bars[0].close,
+        turnover=Decimal("98765432.125"),
+    )
+    write_dataset(tmp_path, spec)
+    dataset = _load(tmp_path)
+
+    with connect(LocalDatasetProvider(tmp_path), DATASET) as connection:
+        rows = connection.sql(
+            "SELECT instrument_id, session, turnover FROM bars ORDER BY instrument_id, session"
+        ).fetchall()
+
+    expected = [
+        (instrument, bar.session, bar.turnover)
+        for instrument in ("aaa", "bbb", "ccc")
+        for bar in sorted(dataset.bars_of(instrument).values(), key=lambda bar: bar.session)
+    ]
+
+    assert rows == expected
+    assert sum(turnover is not None for _, _, turnover in rows) == 1
 
 
 def test_sessions_are_the_loaders_sessions(tmp_path: Path) -> None:
