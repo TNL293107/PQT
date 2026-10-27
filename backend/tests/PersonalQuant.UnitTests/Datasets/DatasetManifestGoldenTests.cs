@@ -47,6 +47,9 @@ public sealed class DatasetManifestGoldenTests
     [InlineData("v2-known-as-of.json")]
     [InlineData(GoldenV3)]
     [InlineData(GoldenV4)]
+    // Hand-built from ADR-034 §3 (the canonical string is beside it), not
+    // written by this build: it pins the C# rendering to the Python one.
+    [InlineData("v5-request.json")]
     public void A_committed_manifest_hashes_to_the_content_hash_it_records(string name)
     {
         var manifest = Read(name);
