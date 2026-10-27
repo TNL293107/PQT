@@ -76,9 +76,9 @@ session).
 | `momentum_6_1` | adjusted close | return from 126 to 21 sessions ago (lookback 127) | no close 126 sessions ago or 21 sessions ago, or a start close ≤ 0 |
 | `volatility_60` | adjusted close | standard deviation of daily log returns over 60 sessions (lookback 61 closes) | a missing close in the window |
 | `liquidity_20` | turnover | median over 20 sessions of the traded value (VND) of the bar (lookback 20) | a missing bar, or a bar with no turnover reported, in the window |
-| `size` | `shares`, `close_raw` | shares × raw close (market capitalisation) | either is absent |
-| `value_ep` | `eps_ttm`, `close_raw` | EPS (TTM) ÷ raw close, so a loss is a negative number, not a missing one | EPS or close absent |
-| `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close, so negative equity is a negative number, not a missing one | book value or close absent (`no_balance_sheet`, `no_charter_capital`, `no_close`); `equity_not_positive` belongs to `pb_absent` only and is never cited for this feature |
+| `size` | `shares`, `close_raw` | shares × raw close (market capitalisation) | either is absent, or `close_raw` ≤ 0 |
+| `value_ep` | `eps_ttm`, `close_raw` | EPS (TTM) ÷ raw close, so a loss is a negative number, not a missing one | EPS or close absent, or `close_raw` ≤ 0 |
+| `value_bp` | `book_value_per_share`, `close_raw` | book value per share ÷ raw close, so negative equity is a negative number, not a missing one | book value or close absent (`no_balance_sheet`, `no_charter_capital`, `no_close`), or `close_raw` ≤ 0; `equity_not_positive` belongs to `pb_absent` only and is never cited for this feature |
 | `quality_roe` | `roe` | ROE (TTM) as the dataset states it | `roe` absent |
 
 That is eight entries: seven new, and momentum 12-1, which was already there.
