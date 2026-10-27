@@ -75,6 +75,7 @@ internal static class StatementNormaliser
     internal const decimal MaximumEarningsPerShare = 1_000_000m;
 
     private static readonly decimal[] Units = [1m, 1_000m, 1_000_000m];
+    private static readonly string[] ShiftedCodes = ["61", "62", "70", "71"];
     private const NumberStyles CellStyle =
         NumberStyles.AllowLeadingSign | NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint
             | NumberStyles.AllowParentheses | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite;
@@ -197,17 +198,21 @@ internal static class StatementNormaliser
             return null;
         }
 
+        var shifted = template == FinancialTemplate.NonFinancialCircular200 ? ShiftedIncomeLines(values) : [];
+
         // Earnings per share is typed in đồng, and no Vietnamese share earns
         // a million of them. Some bank forms carry it a million times over
         // (VCB, VIB, TCB, BID, LPB); such a line is dropped, and said so.
         var dropped = values
             .Where(pair => IsPerShare(template.Value, pair.Key.Item1, pair.Key.Item2) && Math.Abs(pair.Value) > MaximumEarningsPerShare)
+            .ExceptBy(shifted.SelectMany(column => column.Lines), pair => pair.Key)
             .ToList();
+        var removed = dropped.Select(pair => pair.Key).Concat(shifted.SelectMany(column => column.Lines)).ToHashSet();
 
         return new NormalisedFiling(
             template.Value,
             [
-                .. values.Except(dropped).Select(pair => new NormalisedValue(
+                .. values.Where(pair => !removed.Contains(pair.Key)).Select(pair => new NormalisedValue(
                     pair.Key.Item1,
                     pair.Key.Item2,
                     pair.Key.Item3,
@@ -215,7 +220,51 @@ internal static class StatementNormaliser
                     IsPerShare(template.Value, pair.Key.Item1, pair.Key.Item2) ? pair.Value : pair.Value * unit)),
             ],
             unit,
-            [.. dropped.Select(pair => $"{pair.Key.Item1} line {pair.Key.Item2} for {pair.Key.Item3} {pair.Key.Item4} states {pair.Value} per share.")]);
+            [
+                .. shifted.Select(column => column.Detail),
+                .. dropped.Select(pair => $"{pair.Key.Item1} line {pair.Key.Item2} for {pair.Key.Item3} {pair.Key.Item4} states {pair.Value} per share."),
+            ]);
+    }
+
+    /// <summary>Finds income columns whose lines from 61 down sit one row too low.</summary>
+    /// <remarks>
+    /// Five of GAS's consolidated Circular 200 forms (2022Q1 to 2024Q1) carry
+    /// profit to the parent on 62, the non-controlling interest on 70 and the
+    /// basic EPS on 71, with 61 left as 0. Read as filed, 61 is a known zero
+    /// profit. The shift is told by 61 = 0, 62 ≠ 0 and 70 = 60 − 62 ≠ 0 to the
+    /// đồng (a true zero to the parent beside an EPS of 0 has 70 = 0); in such a column 61, 62, 70 and 71 are dropped, so the profit is
+    /// absent rather than zero (sprint 8.3, P1). Nothing is moved back up: a
+    /// guess at the right row would look like a record.
+    /// </remarks>
+    /// <param name="values">The filing's values as typed.</param>
+    /// <returns>Each shifted column: the lines to drop and why.</returns>
+    private static List<(IReadOnlyList<(FinancialStatement, string, FiscalQuarter, PeriodSpan)> Lines, string Detail)> ShiftedIncomeLines(
+        Dictionary<(FinancialStatement, string, FiscalQuarter, PeriodSpan), decimal> values)
+    {
+        decimal? Line(string code, FiscalQuarter period, PeriodSpan span) =>
+            values.TryGetValue((FinancialStatement.IncomeStatement, code, period, span), out var value) ? value : null;
+
+        return
+        [
+            .. values.Keys
+                .Where(key => key.Item1 == FinancialStatement.IncomeStatement && key.Item2 == "61")
+                .Where(key =>
+                    Line("61", key.Item3, key.Item4) == 0m
+                    && Line("62", key.Item3, key.Item4) is { } parent and not 0m
+                    && Line("60", key.Item3, key.Item4) is { } afterTax
+                    && afterTax != parent
+                    && Line("70", key.Item3, key.Item4) == afterTax - parent)
+                .OrderBy(key => key.Item3)
+                .ThenBy(key => key.Item4)
+                .Select(key => (
+                    (IReadOnlyList<(FinancialStatement, string, FiscalQuarter, PeriodSpan)>)[
+                        .. ShiftedCodes
+                            .Select(code => (FinancialStatement.IncomeStatement, code, key.Item3, key.Item4))
+                            .Where(values.ContainsKey),
+                    ],
+                    $"IncomeStatement lines 61 to 71 for {key.Item3} {key.Item4} sit one row low (61 is 0, 70 is 60 less 62); "
+                        + "61, 62, 70 and 71 are dropped, so profit to the parent is absent, not zero.")),
+        ];
     }
 
     /// <summary>Whether a line is stated per share, in đồng whatever the form's unit.</summary>
