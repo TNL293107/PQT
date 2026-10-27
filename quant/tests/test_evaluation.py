@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
@@ -266,3 +267,148 @@ def test_a_reproduction_that_fails_is_not_a_new_trial(tmp_path: Path) -> None:
 
     assert failure.value.run.status == "failed"
     assert failure.value.run.reproduces_run_id == recorded.run_id
+
+
+class _TwoOutliers:
+    """Ranks by the label, but the top two names sit far out, so wz-1 clips both to one limit."""
+
+    name = "two_outliers"
+    version = "1"
+    lookback = TRAILING.lookback
+
+    def compute(self, history: History) -> Mapping[str, float]:
+        values = dict(TRAILING.compute(history))
+        for name in sorted(values, key=values.__getitem__)[-2:]:
+            values[name] *= 1_000
+        return values
+
+
+@pytest.mark.parametrize("transform", ["raw", "wz-1"])
+def test_decay_at_the_rebalance_horizon_equals_rank_ic_under_each_transform(
+    tmp_path: Path, transform: str
+) -> None:
+    # Under wz-1 the two outliers tie at the clip limit, so the transformed
+    # rank IC differs from the raw one; decay must read the same transformed
+    # cross-section, and so equal it.
+    _write(tmp_path, [_TwoOutliers()])
+    handler = factor_evaluation_handler(tmp_path, [*ENGINES, _TwoOutliers()])
+
+    outcome = handler(_payload(feature="two_outliers", transform_version=transform))
+    raw = handler(_payload(feature="two_outliers", transform_version="raw")).run
+
+    assert outcome.run is not None
+    assert raw is not None
+    metrics = outcome.run.metrics
+    assert metrics[f"decay_rank_ic_mean_h{HORIZON}"] == metrics["rank_ic_mean"]
+
+    if transform == "wz-1":
+        assert metrics["rank_ic_mean"] != raw.metrics["rank_ic_mean"]
+
+
+# Prices that rise and fall, so returns over different spans rank the names
+# differently; a decay read one session short gives a different number.
+ZIGZAG = {
+    "aaa": [100, 104, 98, 107, 101, 96, 103, 110, 99, 105, 102, 108, 97, 106, 100],
+    "bbb": [100, 97, 103, 99, 108, 102, 95, 101, 107, 98, 104, 96, 109, 103, 99],
+    "ccc": [100, 102, 101, 99, 103, 106, 104, 98, 102, 109, 100, 105, 103, 97, 108],
+    "ddd": [100, 99, 105, 103, 97, 101, 108, 104, 96, 103, 107, 99, 102, 110, 98],
+    "eee": [100, 106, 100, 104, 99, 107, 101, 97, 105, 100, 98, 106, 104, 99, 103],
+    "fff": [100, 101, 96, 102, 105, 98, 106, 103, 101, 97, 109, 102, 98, 104, 107],
+}
+
+
+def _write_zigzag(tmp_path: Path) -> None:
+    write_dataset(
+        tmp_path,
+        SyntheticDataset(
+            dataset_id=DATASET,
+            bars=[
+                SyntheticBar(name, SESSIONS[index], Decimal(close))
+                for name, closes in ZIGZAG.items()
+                for index, close in enumerate(closes)
+            ],
+            spells={name: [(SESSIONS[0], None)] for name in ZIGZAG},
+            request={
+                "universe": "TEST30",
+                "as_of": None,
+                "from": SESSIONS[TRAILING.lookback.sessions - 1].isoformat(),
+                "to": SESSIONS[-1].isoformat(),
+                "interval": "1d",
+                "fundamentals": False,
+                "rebalance_every": HORIZON,
+                "features": [
+                    {"name": TRAILING.name, "version": 1, "lookback": TRAILING.lookback.sessions}
+                ],
+                "label": {"horizon": HORIZON, "basis": "adjusted"},
+            },
+        ),
+    )
+
+
+def _spearman(left: list[float], right: list[float]) -> float:
+    # Tied values share the mean of their ranks (bbb and ccc tie at t = 3).
+    def ranks(values: list[float]) -> list[float]:
+        return [
+            sum(other < value for other in values)
+            + (sum(other == value for other in values) - 1) / 2
+            for value in values
+        ]
+
+    a, b = ranks(left), ranks(right)
+    mean_a, mean_b = sum(a) / len(a), sum(b) / len(b)
+    covariance = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b, strict=True))
+    spread_a = math.sqrt(sum((x - mean_a) ** 2 for x in a))
+    spread_b = math.sqrt(sum((y - mean_b) ** 2 for y in b))
+    return covariance / (spread_a * spread_b)
+
+
+def test_decay_at_twice_the_rebalance_is_the_rank_ic_of_the_return_h_sessions_ahead(
+    tmp_path: Path,
+) -> None:
+    # Rebalances at 3, 6, 9 (12 + 6 passes the end); 9 + 6 = 15 is past it too,
+    # so h = 6 keeps 3 and 6. Each IC by hand: trailing 3-session return
+    # against the close-to-close return from t to t + 6.
+    _write_zigzag(tmp_path)
+    names = sorted(ZIGZAG)
+    expected = []
+
+    for t in (3, 6):
+        trailing = [ZIGZAG[name][t] / ZIGZAG[name][t - 3] - 1 for name in names]
+        ahead = [ZIGZAG[name][t + 6] / ZIGZAG[name][t] - 1 for name in names]
+        expected.append(_spearman(trailing, ahead))
+
+    outcome = factor_evaluation_handler(tmp_path, ENGINES)(_payload(decay_horizons=[2 * HORIZON]))
+
+    assert outcome.run is not None
+    assert outcome.run.metrics[f"decay_periods_h{2 * HORIZON}"] == 2
+    assert outcome.run.metrics[f"decay_rank_ic_mean_h{2 * HORIZON}"] == pytest.approx(
+        sum(expected) / 2, abs=1e-12
+    )
+
+
+class _ThinAtSix:
+    """The constant ranking, but only two names at the second rebalance."""
+
+    name = "thin_at_six"
+    version = "1"
+    lookback = Lookback(1)
+
+    def compute(self, history: History) -> Mapping[str, float]:
+        names = sorted(history.members())
+        kept = names[:2] if history.as_of == SESSIONS[6] else names
+        return {name: float(index) for index, name in enumerate(kept)}
+
+
+def test_turnover_after_a_period_without_a_top_quantile_is_absent(tmp_path: Path) -> None:
+    # Rebalances at 3, 6, 9. At 6 there are 2 names for 3 quantiles: no top.
+    # Turnover at 9 has no previous top to compare with, so only 0 periods count.
+    _write(tmp_path, [_ThinAtSix()])
+
+    outcome = factor_evaluation_handler(tmp_path, [*ENGINES, _ThinAtSix()])(
+        _payload(feature="thin_at_six")
+    )
+
+    assert outcome.run is not None
+    assert outcome.run.metrics["spread_periods"] == 2
+    assert outcome.run.metrics["turnover_periods"] == 0
+    assert outcome.run.metrics["turnover_mean"] is None

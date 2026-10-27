@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
 from personal_quant.research.experiments import RunRecord
-from personal_quant.worker.handlers import JobOutcome, JobRejectedError
+from personal_quant.worker.handlers import JobOutcome, JobRejectedError, TrialFailedError
 from personal_quant.worker.queue import Job, LeaseLostError
 from personal_quant.worker.runner import Worker
 
@@ -91,6 +91,50 @@ def test_a_rejected_payload_fails_with_the_reason() -> None:
     Worker(queue, {"reject": _reject}, "w").run_once()
 
     assert queue.failed["reject"].startswith("Rejected: 'quantiles' must be at least 1")
+
+
+def _failed_run() -> RunRecord:
+    return RunRecord(
+        experiment="evaluation",
+        strategy="factor_evaluation",
+        universe_code="TEST30",
+        universe_as_of=None,
+        membership="point_in_time",
+        dataset_id="0123456789abcdef",
+        dataset_version=1,
+        schema_version=5,
+        content_hash="a" * 64,
+        factor_version="crashes@1",
+        parameters={},
+        metrics={},
+        started_at=datetime(2026, 10, 27, tzinfo=UTC),
+        finished_at=datetime(2026, 10, 27, tzinfo=UTC),
+        status="failed",
+    )
+
+
+def test_a_trial_that_fails_is_recorded_with_its_failed_run() -> None:
+    run = _failed_run()
+
+    def fails(payload: Mapping[str, Any]) -> JobOutcome:
+        raise TrialFailedError(ZeroDivisionError("planted"), run)
+
+    queue = _Queue(_job("trial"))
+
+    Worker(queue, {"trial": fails}, "w").run_once()
+
+    assert queue.failed["trial"] == "ZeroDivisionError: planted"
+    assert queue.failed_runs["trial"] is run
+    assert queue.failed_runs["trial"].status == "failed"
+
+
+def test_a_rejected_payload_records_no_run() -> None:
+    queue = _Queue(_job("reject"))
+
+    Worker(queue, {"reject": _reject}, "w").run_once()
+
+    assert "reject" in queue.failed
+    assert queue.failed_runs == {}
 
 
 def test_a_kind_without_a_handler_fails() -> None:
