@@ -63,6 +63,18 @@ def test_another_sessions_values_do_not_change_this_ones() -> None:
     assert winsorise_zscore(sessions["t1"]) == before
 
 
+def test_a_cross_section_seen_in_between_does_not_change_the_next_result() -> None:
+    # The pooled-panel leak ADR-035 rules out: a transform fitted on every
+    # value seen so far would clip A differently after B's extreme value.
+    a = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0, "e": 100.0}
+    b = {"a": 10.0, "b": 20.0, "c": 30.0, "d": 40.0, "e": 1e9}
+
+    first = winsorise_zscore(a)
+    winsorise_zscore(b)
+
+    assert winsorise_zscore(a) == first
+
+
 def test_a_zero_mad_leaves_the_outlier_unclipped() -> None:
     # Four equal values and one outlier: MAD 0, so no clip. Mean 3, deviations
     # -2 (x4) and 8, sample deviation sqrt(80 / 4).
