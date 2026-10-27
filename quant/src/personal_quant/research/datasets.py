@@ -61,7 +61,7 @@ from personal_quant.research.manifest import (
     UnsupportedManifestError,
     content_hash_of,
 )
-from personal_quant.research.protocols import Bar
+from personal_quant.research.protocols import Bar, FundamentalsRow
 
 __all__ = [
     "CanonicalDataset",
@@ -150,12 +150,19 @@ def require_daily(manifest: DatasetManifest) -> None:
 class CanonicalDataset:
     """A loaded, verified dataset build."""
 
-    def __init__(self, manifest: DatasetManifest, bars: Sequence[Bar]) -> None:
-        """Index a build's bars by instrument and session.
+    def __init__(
+        self,
+        manifest: DatasetManifest,
+        bars: Sequence[Bar],
+        fundamentals: Any = None,  # noqa: ANN401 - pyarrow ships no types.
+    ) -> None:
+        """Index a build's bars and fundamentals by instrument and session.
 
         Args:
             manifest: The verified manifest.
             bars: Every bar the build holds.
+            fundamentals: The verified ``fundamentals.parquet`` table, or
+                ``None`` for a build without it.
 
         Raises:
             UnsupportedManifestError: The build is not daily. Sessions here are
@@ -172,6 +179,7 @@ class CanonicalDataset:
         self._bars = {key: MappingProxyType(value) for key, value in by_instrument.items()}
         self._sessions = tuple(sorted({bar.session for bar in bars}))
         self._all = frozenset(instrument.instrument_id for instrument in manifest.instruments)
+        self._fundamentals = _index_fundamentals(fundamentals)
 
     @property
     def manifest(self) -> DatasetManifest:
@@ -193,6 +201,18 @@ class CanonicalDataset:
             A read-only mapping from session to bar.
         """
         return self._bars.get(instrument_id, MappingProxyType({}))
+
+    def fundamentals_of(self, instrument_id: str) -> Mapping[date, FundamentalsRow]:
+        """Return one instrument's fundamentals rows by session.
+
+        Args:
+            instrument_id: The canonical instrument id.
+
+        Returns:
+            A read-only mapping from session to row; empty for an instrument
+            without rows or a build without fundamentals.
+        """
+        return self._fundamentals.get(instrument_id, MappingProxyType({}))
 
     def members_on(self, session: date) -> frozenset[str]:
         """Return the instruments that belonged to the universe on a session.
@@ -266,7 +286,7 @@ class LocalDatasetProvider:
         """
         build = self.verify(dataset_id, version)
 
-        return CanonicalDataset(build.manifest, build.bars)
+        return CanonicalDataset(build.manifest, build.bars, build.fundamentals)
 
     def verify(self, dataset_id: str, version: int | None = None) -> VerifiedBuild:
         """Check a build against its manifest, and keep what was checked.
@@ -652,6 +672,30 @@ def _read_bars(payload: bytes) -> list[Bar]:
             *(columns[name] for name in names), strict=True
         )
     ]
+
+
+def _index_fundamentals(
+    table: Any,  # noqa: ANN401 - pyarrow ships no types.
+) -> dict[str, MappingProxyType[date, FundamentalsRow]]:
+    if table is None:
+        return {}
+
+    by_instrument: dict[str, dict[date, FundamentalsRow]] = {}
+
+    for row in table.to_pylist():
+        values = MappingProxyType(
+            {name: None if row[name] is None else Decimal(row[name]) for name in FUNDAMENTAL_VALUES}
+        )
+        absent = MappingProxyType({name: row[f"{name}_absent"] for name in FUNDAMENTAL_VALUES})
+        by_instrument.setdefault(row["instrument_id"], {})[row["session"]] = FundamentalsRow(
+            instrument_id=row["instrument_id"],
+            session=row["session"],
+            values=values,
+            absent=absent,
+            findings=row["findings"],
+        )
+
+    return {key: MappingProxyType(value) for key, value in by_instrument.items()}
 
 
 def _plain(dataset_id: str) -> str:

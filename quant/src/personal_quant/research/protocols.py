@@ -41,6 +41,7 @@ __all__ = [
     "ExperimentTracker",
     "FactorEngine",
     "FeatureEngine",
+    "FundamentalsRow",
     "History",
     "Lookback",
     "Model",
@@ -72,6 +73,22 @@ class Bar:
     close: Decimal
     volume: int
     turnover: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FundamentalsRow:
+    """One row of ``fundamentals.parquet``: an instrument's ratios at one session (ADR-031).
+
+    ``values`` maps each value column to its :class:`~decimal.Decimal`, or to
+    ``None`` where it is absent; ``absent`` maps it to the dataset's reason,
+    or ``None`` where it is present. ``findings`` stays the dataset's JSON text.
+    """
+
+    instrument_id: str
+    session: date
+    values: Mapping[str, Decimal | None]
+    absent: Mapping[str, str | None]
+    findings: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +142,10 @@ class Dataset(Protocol):
         """Return the instruments that belonged to the universe on a session."""
         ...
 
+    def fundamentals_of(self, instrument_id: str) -> Mapping[date, FundamentalsRow]:
+        """Return one instrument's fundamentals rows by session; empty without any."""
+        ...
+
 
 class DataProvider(Protocol):
     """Locates versioned datasets. Never talks to a vendor."""
@@ -165,6 +186,13 @@ class History(Protocol):
 
     def bar(self, instrument_id: str, session: date) -> Bar | None:
         """Return one bar within the window, or ``None`` when there is none."""
+        ...
+
+    def fundamentals(self, instrument_id: str) -> FundamentalsRow | None:
+        """Return the instrument's fundamentals row at the as-of, or ``None`` (ADR-033).
+
+        Refuses a build exported without fundamentals or below ``ratio_version`` 2.
+        """
         ...
 
 

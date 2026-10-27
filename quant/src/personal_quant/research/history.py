@@ -14,6 +14,12 @@ discouraged in a comment:
   :class:`NonMemberScoredError`. That is survivorship: a score for a security
   no strategy could have chosen from the universe that day.
 
+Fundamentals are read at the as-of session only (ADR-033), so a fundamentals
+read cannot look ahead or reach back by construction. A build exported
+without ``--fundamentals``, or with a ``ratio_version`` below 2, is refused
+with :class:`FundamentalsUnavailableError` rather than read as an empty
+cross-section.
+
 Lookbacks count market sessions — every session of the dataset, whichever
 instrument traded — not one instrument's own bars, so a gap in a series reads
 as ``None`` in its place rather than pulling an older bar forward.
@@ -25,9 +31,18 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 
-from personal_quant.research.protocols import Bar, Dataset, FactorEngine, FeatureEngine, Lookback
+from personal_quant.research.protocols import (
+    Bar,
+    Dataset,
+    FactorEngine,
+    FeatureEngine,
+    FundamentalsRow,
+    Lookback,
+)
 
 __all__ = [
+    "MIN_RATIO_VERSION",
+    "FundamentalsUnavailableError",
     "LookAheadError",
     "LookbackExceededError",
     "NonMemberScoredError",
@@ -35,6 +50,14 @@ __all__ = [
     "PointInTimeHistory",
     "evaluate",
 ]
+
+
+MIN_RATIO_VERSION = 2
+"""The oldest ``ratio_version`` a feature may read: ADR-032's rules make the ratios usable."""
+
+
+class FundamentalsUnavailableError(RuntimeError):
+    """A fundamentals read on a build that has none, or ratios older than version 2."""
 
 
 class PointInTimeError(RuntimeError):
@@ -165,6 +188,37 @@ class PointInTimeHistory:
             )
 
         return self._dataset.bars_of(instrument_id).get(session)
+
+    def fundamentals(self, instrument_id: str) -> FundamentalsRow | None:
+        """Return the instrument's fundamentals row at the as-of.
+
+        Args:
+            instrument_id: The instrument.
+
+        Returns:
+            The row with its ``_absent`` codes, or ``None`` when the
+            instrument has none that session.
+
+        Raises:
+            FundamentalsUnavailableError: The build carries no fundamentals, or
+                its ``ratio_version`` is below :data:`MIN_RATIO_VERSION`.
+        """
+        described = self._dataset.manifest.fundamentals
+
+        if described is None:
+            raise FundamentalsUnavailableError(
+                f"{self._engine} reads fundamentals, but dataset "
+                f"{self._dataset.manifest.dataset_id} was exported without --fundamentals."
+            )
+
+        if described.ratio_version < MIN_RATIO_VERSION:
+            raise FundamentalsUnavailableError(
+                f"{self._engine} reads fundamentals at ratio_version {MIN_RATIO_VERSION} or "
+                f"later; dataset {self._dataset.manifest.dataset_id} carries "
+                f"{described.ratio_version}."
+            )
+
+        return self._dataset.fundamentals_of(instrument_id).get(self._as_of)
 
 
 def evaluate(
