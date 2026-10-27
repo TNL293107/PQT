@@ -110,6 +110,43 @@ def test_a_rebalance_whose_label_ends_past_the_last_session_is_dropped_not_refus
     assert labelled.window().last == SESSIONS[8]
 
 
+def test_a_rebalance_whose_label_ends_one_session_past_the_end_is_dropped(
+    tmp_path: Path,
+) -> None:
+    # From the first session, every three: 0, 3, 6, 9. Nine plus three is
+    # twelve, one past the last index, so 9 is dropped.
+    _write(tmp_path, _request(**{"from": SESSIONS[0].isoformat()}))
+    labelled = _open(tmp_path)
+
+    assert [rebalance.session for rebalance in labelled.rebalances()] == [
+        SESSIONS[0],
+        SESSIONS[3],
+        SESSIONS[6],
+    ]
+    assert labelled.window().rebalances == 3
+
+
+def test_a_member_without_a_bar_at_the_rebalance_has_no_label_not_zero(tmp_path: Path) -> None:
+    # ccc is a member throughout but has no bar on the third session.
+    bars = [SyntheticBar("aaa", session, Decimal(100)) for session in SESSIONS]
+    bars += [
+        SyntheticBar("ccc", session, Decimal(10)) for session in SESSIONS if session != SESSIONS[2]
+    ]
+    write_dataset(
+        tmp_path,
+        SyntheticDataset(
+            bars=bars,
+            spells={"aaa": [(SESSIONS[0], None)], "ccc": [(SESSIONS[0], None)]},
+            request=_request(),
+        ),
+    )
+
+    first = next(_open(tmp_path).rebalances())
+
+    assert first.session == SESSIONS[2]
+    assert first.label == {"aaa": 0.0}
+
+
 def test_features_and_labels_are_computed_at_read_time(tmp_path: Path) -> None:
     _write(tmp_path)
 

@@ -23,9 +23,12 @@ import pytest
 
 from personal_quant.research.manifest import (
     DatasetManifest,
+    DatasetRequest,
+    RequestFeature,
     UnsupportedManifestError,
     content_hash_of,
     dotnet_round_trip,
+    request_part,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "manifests"
@@ -335,3 +338,22 @@ def test_a_known_as_of_instant_is_read_as_utc() -> None:
     manifest = DatasetManifest.from_json(raw)
 
     assert manifest.known_as_of_utc == datetime(2026, 9, 18, 3, 4, 5, tzinfo=UTC)
+
+
+def test_request_features_are_rendered_in_ordinal_order() -> None:
+    # "B" (0x42) sorts before "a" (0x61) ordinally, as C# StringComparer.Ordinal does.
+    request = DatasetRequest(
+        universe="VN30",
+        from_date=date(2026, 7, 1),
+        to_date=date(2026, 9, 17),
+        interval="1d",
+        fundamentals=True,
+        rebalance_every=21,
+        features=(RequestFeature("a", 1, 1), RequestFeature("B", 1, 253)),
+        horizon=21,
+        basis="adjusted",
+    )
+
+    assert request_part(request) == (
+        "request:VN30,2026-07-01,2026-09-17,1d,True,21,21,adjusted;B:1:253,a:1:1,|"
+    )

@@ -132,6 +132,32 @@ public sealed class DatasetCommandsTests
         Assert.NotEqual(first.DatasetId, plain.DatasetId);
     }
 
+    [Fact]
+    public void Features_are_rendered_in_ordinal_order_not_the_cultures()
+    {
+        // Ordinal puts "B" (0x42) before "a" (0x61); a culture-aware sort puts
+        // "a" first. Python's sorted() is ordinal, so only ordinal agrees.
+        LabelledDatasetRequest labelled = new(
+            "VN30",
+            null,
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 9, 17),
+            "1d",
+            true,
+            21,
+            [new LabelledDatasetFeature("a", 1, 1), new LabelledDatasetFeature("B", 1, 253)],
+            new LabelledDatasetLabel(21, "adjusted"));
+
+        Assert.True(DatasetRequest.TryResolve(labelled, out var request, out var problem), problem);
+
+        var canonical = "VN30|point-in-time|OneDay|2026-07-01|2026-09-17|adjusted|current|Strict|history:252|fundamentals"
+            + "|request:VN30,2026-07-01,2026-09-17,1d,True,21,21,adjusted;B:1:253,a:1:1,|";
+        var expected = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical)))[..16];
+
+        Assert.Equal(expected, request.DatasetId);
+    }
+
     private static string Request(string asOf, int horizon, string basis)
     {
         var path = Path.Combine(Path.GetTempPath(), $"pqt-request-{Guid.NewGuid():N}.json");
