@@ -53,6 +53,8 @@ def _raw(name: str) -> dict[str, Any]:
         # Its hash comes from v5-request.canonical.txt, rendered by hand from
         # ADR-034 §3, so it is an oracle neither implementation produced.
         "v5-request.json",
+        # Schema 5 written by the .NET build, so the parity runs both ways.
+        "v5-export.json",
     ],
 )
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:
@@ -67,9 +69,10 @@ def test_the_schema_5_fixture_hash_is_the_hand_rendered_canonical_string() -> No
     # ordinally in the string.
     canonical = (FIXTURES / "v5-request.canonical.txt").read_text(encoding="utf-8")
 
-    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == _raw("v5-request.json")[
-        "content_hash"
-    ]
+    assert (
+        hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        == _raw("v5-request.json")["content_hash"]
+    )
 
 
 def test_a_schema_1_manifest_reads_as_an_as_of_export() -> None:
@@ -118,9 +121,9 @@ def test_an_edited_spell_no_longer_matches_its_hash() -> None:
 
 def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
     raw = _raw("v4-fundamentals.json")
-    raw["schema_version"] = 5
+    raw["schema_version"] = 6
 
-    with pytest.raises(UnsupportedManifestError, match="schema version 5"):
+    with pytest.raises(UnsupportedManifestError, match="schema version 6"):
         DatasetManifest.from_json(raw)
 
 

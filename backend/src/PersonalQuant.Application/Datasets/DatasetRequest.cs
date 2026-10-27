@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.CorporateActions;
 using PersonalQuant.Domain.MarketData;
 using PersonalQuant.Domain.Universes;
@@ -74,7 +75,8 @@ public sealed record DatasetRequest
         DateTimeOffset? knownAsOfUtc,
         AnnouncementPolicy announcementPolicy,
         int historySessions,
-        bool fundamentals)
+        bool fundamentals,
+        LabelledDatasetRequest? labelled = null)
     {
         UniverseCode = universeCode;
         Membership = membership;
@@ -87,6 +89,7 @@ public sealed record DatasetRequest
         AnnouncementPolicy = announcementPolicy;
         HistorySessions = historySessions;
         Fundamentals = fundamentals;
+        Labelled = labelled;
     }
 
     /// <summary>Gets the universe the instrument set comes from.</summary>
@@ -147,6 +150,12 @@ public sealed record DatasetRequest
     public bool Fundamentals { get; }
 
     /// <summary>
+    /// Gets the labelled-dataset request the export was resolved from, or null
+    /// (ADR-034). Recorded in the manifest and in the dataset id.
+    /// </summary>
+    public LabelledDatasetRequest? Labelled { get; }
+
+    /// <summary>
     /// Gets the identifier these parameters name.
     /// </summary>
     /// <remarks>
@@ -204,6 +213,62 @@ public sealed record DatasetRequest
             announcementPolicy,
             historySessions,
             fundamentals);
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a labelled-dataset request into a point-in-time export
+    /// (ADR-034 §2): its universe, window, interval and fundamentals, with the
+    /// history its largest lookback needs, always adjusted and strict.
+    /// </summary>
+    /// <param name="labelled">The labelled-dataset request.</param>
+    /// <param name="request">The export request when successful.</param>
+    /// <param name="problem">A caller-safe explanation when it is refused.</param>
+    /// <returns><see langword="true"/> when the request is usable.</returns>
+    public static bool TryResolve(
+        LabelledDatasetRequest labelled,
+        [NotNullWhen(true)] out DatasetRequest? request,
+        [NotNullWhen(false)] out string? problem)
+    {
+        ArgumentNullException.ThrowIfNull(labelled);
+        request = null;
+
+        if (labelled.Problem() is { } refused)
+        {
+            problem = refused;
+            return false;
+        }
+
+        if (!UniverseCode.TryCreate(labelled.Universe, out var universe))
+        {
+            problem = $"'{labelled.Universe}' is not a universe code.";
+            return false;
+        }
+
+        if (!BarIntervalParser.TryParse(labelled.Interval, out var interval))
+        {
+            problem = $"'{labelled.Interval}' is not a bar resolution this system records.";
+            return false;
+        }
+
+        if (!TryValidate(universe, interval, labelled.From, labelled.To, AnnouncementPolicy.Strict, labelled.HistorySessions, out problem))
+        {
+            return false;
+        }
+
+        request = new DatasetRequest(
+            universe,
+            DatasetMembership.PointInTime,
+            universeAsOf: null,
+            interval,
+            labelled.From,
+            labelled.To,
+            adjusted: true,
+            knownAsOfUtc: null,
+            AnnouncementPolicy.Strict,
+            labelled.HistorySessions,
+            labelled.Fundamentals,
+            labelled);
         return true;
     }
 
@@ -377,6 +442,13 @@ public static class DatasetIdentity
             canonical += "|fundamentals";
         }
 
+        // And for a labelled-dataset request (ADR-034 §3): the same request
+        // names the same dataset, and an export without one keeps its id.
+        if (request.Labelled is { } labelled)
+        {
+            canonical += "|" + RequestPart(labelled);
+        }
+
         return Digest(canonical)[..IdLength];
     }
 
@@ -404,6 +476,9 @@ public static class DatasetIdentity
 
         // Version 4's fundamentals object likewise (ADR-031).
         var withFundamentals = manifest.SchemaVersion >= DatasetManifest.FundamentalsSchemaVersion;
+
+        // Version 5's request likewise (ADR-034).
+        var withRequest = manifest.SchemaVersion >= DatasetManifest.RequestSchemaVersion;
 
         // Deliberately excludes DatasetVersion along with the two timestamps.
         // Version says which build this is, not what the data is, so including
@@ -438,6 +513,11 @@ public static class DatasetIdentity
         if (withFundamentals)
         {
             AppendFundamentals(builder, manifest.Fundamentals);
+        }
+
+        if (withRequest)
+        {
+            builder.Append(manifest.Request is { } labelled ? RequestPart(labelled) : "request:none|");
         }
 
         foreach (var instrument in manifest.Instruments)
@@ -521,6 +601,34 @@ public static class DatasetIdentity
         }
 
         builder.Append('|');
+    }
+
+    /// <summary>
+    /// Renders a labelled-dataset request in a fixed order (ADR-034 §3), its
+    /// features ordered by name by ordinal comparison, whatever order the file
+    /// holds. The same rendering enters the content hash and the dataset id.
+    /// </summary>
+    private static string RequestPart(LabelledDatasetRequest request)
+    {
+        var builder = new StringBuilder("request:")
+            .Append(request.Universe).Append(',')
+            .Append(Format(request.From)).Append(',')
+            .Append(Format(request.To)).Append(',')
+            .Append(request.Interval).Append(',')
+            .Append(request.Fundamentals).Append(',')
+            .Append(request.RebalanceEvery.ToString(CultureInfo.InvariantCulture)).Append(',')
+            .Append(request.Label.Horizon.ToString(CultureInfo.InvariantCulture)).Append(',')
+            .Append(request.Label.Basis).Append(';');
+
+        foreach (var feature in request.Features.OrderBy(feature => feature.Name, StringComparer.Ordinal))
+        {
+            builder
+                .Append(feature.Name).Append(':')
+                .Append(feature.Version.ToString(CultureInfo.InvariantCulture)).Append(':')
+                .Append(feature.Lookback.ToString(CultureInfo.InvariantCulture)).Append(',');
+        }
+
+        return builder.Append('|').ToString();
     }
 
     private static string Format(DateOnly date) =>

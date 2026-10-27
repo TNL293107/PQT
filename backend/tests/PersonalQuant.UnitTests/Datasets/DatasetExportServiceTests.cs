@@ -600,11 +600,11 @@ public sealed class DatasetExportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task An_export_without_fundamentals_writes_a_version_4_manifest_with_none()
+    public async Task An_export_without_fundamentals_writes_a_current_manifest_with_none()
     {
         var manifest = (await new Harness(root).ExportAsync()).Manifest!;
 
-        Assert.Equal(DatasetManifest.FundamentalsSchemaVersion, manifest.SchemaVersion);
+        Assert.Equal(DatasetManifest.CurrentSchemaVersion, manifest.SchemaVersion);
         Assert.Null(manifest.Fundamentals);
         Assert.Equal([IDatasetStore.BarsFileName], manifest.Files.Select(file => file.Name));
     }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using PersonalQuant.Application.CorporateActions;
 using PersonalQuant.Application.Datasets;
 using PersonalQuant.Application.MarketData;
@@ -34,6 +35,19 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
     /// <summary>Width the manifest summary aligns its labels to.</summary>
     private const int LabelWidth = 22;
 
+    /// <summary>The options a request file decides, which may not be given beside it.</summary>
+    private static readonly string[] RequestOptions =
+        ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy", "history", "fundamentals"];
+
+    /// <summary>How a request file is spelled: the manifest's snake case, every field required.</summary>
+    private static readonly JsonSerializerOptions RequestJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        RespectRequiredConstructorParameters = true,
+        RespectNullableAnnotations = true,
+        UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow,
+    };
+
     /// <summary>
     /// Dispatches a <c>dataset</c> verb.
     /// </summary>
@@ -57,11 +71,16 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         CancellationToken cancellationToken)
     {
         if (!command.Validate(
-                ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy", "history", "fundamentals"],
+                ["universe", "as-of", "interval", "from", "to", "raw", "known-as-of", "policy", "history", "fundamentals", "request"],
                 out var problem))
         {
             output.Problem(problem);
             return ExitCode.Usage;
+        }
+
+        if (command.Value("request") is { } file)
+        {
+            return await ExportRequestAsync(command, file, cancellationToken).ConfigureAwait(false);
         }
 
         if (!command.TryRequired("universe", out var universe, out var missing))
@@ -170,6 +189,56 @@ internal sealed class DatasetCommands(Lazy<IDatasetExportService> datasets, Outp
         var export = await datasets.Value
             .ExportAsync(request, cancellationToken)
             .ConfigureAwait(false);
+
+        if (export.Manifest is not { } manifest)
+        {
+            output.Problem(export.Problem ?? "The export produced nothing.");
+            return ExitCode.Refused;
+        }
+
+        Describe(manifest, export.InstrumentsWithoutBars);
+        return ExitCode.Ok;
+    }
+
+    /// <summary>
+    /// Exports from a labelled-dataset request file (ADR-034): the request
+    /// names everything, so no other option may be given beside it.
+    /// </summary>
+    private async Task<int> ExportRequestAsync(CommandArguments command, string file, CancellationToken cancellationToken)
+    {
+        if (RequestOptions.FirstOrDefault(command.HasFlag) is { } extra)
+        {
+            output.Problem($"--{extra} cannot be given with --request: the request names the export.");
+            return ExitCode.Usage;
+        }
+
+        LabelledDatasetRequest? labelled;
+
+        try
+        {
+            labelled = JsonSerializer.Deserialize<LabelledDatasetRequest>(
+                await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false),
+                RequestJson);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        {
+            output.Problem($"The request file could not be read: {error.Message}");
+            return ExitCode.Usage;
+        }
+
+        if (labelled is null)
+        {
+            output.Problem("The request file is empty.");
+            return ExitCode.Usage;
+        }
+
+        if (!DatasetRequest.TryResolve(labelled, out var request, out var refused))
+        {
+            output.Problem(refused);
+            return ExitCode.Usage;
+        }
+
+        var export = await datasets.Value.ExportAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (export.Manifest is not { } manifest)
         {
