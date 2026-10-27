@@ -73,6 +73,9 @@ def test_a_cross_section_seen_in_between_does_not_change_the_next_result() -> No
     winsorise_zscore(b)
 
     assert winsorise_zscore(a) == first
+    # Absolute too: a transform pooled across the whole test run would agree
+    # with itself here and still be wrong (the hand-computed e of 5 names).
+    assert first["e"] == pytest.approx(1.5966169055220263, abs=1e-12)
 
 
 def test_a_zero_mad_leaves_the_outlier_unclipped() -> None:
