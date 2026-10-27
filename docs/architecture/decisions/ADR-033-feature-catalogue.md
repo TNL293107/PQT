@@ -58,8 +58,11 @@ session).
 
 - A dataset without `--fundamentals` makes a fundamentals feature refuse to
   run, with the reason, rather than return an empty cross-section.
-- `ratio_version` below 2 is refused by the value features: the dividend and
-  capital-step rules of ADR-032 are what make P/E-based values worth reading.
+- `ratio_version` below 2 is refused by `History.fundamentals` itself, so by
+  every fundamentals feature, not only the value features: the dividend and
+  capital-step rules of ADR-032 are what make P/E-based values worth reading,
+  and `size` reads `shares`, which the capital-step rule also governs. One
+  check instead of four (amended 2026-10-27, Tester + Audit at `abd8cad`).
 - Features never compute a ratio themselves. They divide two values the service
   already produced, so there is one share count and one TTM rule.
 - Fundamentals rows exist only for membership sessions (ADR-031), which is also
