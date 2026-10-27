@@ -93,6 +93,9 @@ rules stay (pause 3, at most two collectors, no code edits during a collection).
   later. The roadmap assigns calibration/EV and Alpha158 to Phase 7, so if they
   do not fit, Phase 7 closes in sprint 11 and Phase 8 shifts one sprint. That
   is stated here rather than hidden.
+  **Decided 2026-10-27 (Moderator):** all three stretch items (`RUNS` view,
+  calibration/EV, Alpha158 and the Qlib run mapper) move to sprint 11, so
+  Phase 7 closes in sprint 11 and Phase 8 shifts one sprint.
 
 Phase 8 (Vietnamese-rules backtest, then validation) starts after Phase 7.
 
