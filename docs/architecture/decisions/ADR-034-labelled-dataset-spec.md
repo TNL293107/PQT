@@ -183,7 +183,8 @@ cross-sections of at most 30 names, exploratory.
 - Python: `SUPPORTED_SCHEMA_VERSIONS` gains 5; `content_hash_of` renders the
   request exactly as the C# does; `LabelledDataset` in
   `personal_quant.research`; a small builder that writes a request from the
-  registry.
+  registry (deferred to sprint 10, Lead 2026-10-27: sprint 9 writes requests by
+  hand, and the reader already refuses one that disagrees with the registry).
 - After the bump, every export is schema 5. Re-exporting a v4 build's
   parameters gives the same dataset id and a new version with a different
   content hash, because the schema number and `request:none|` are in it. The
