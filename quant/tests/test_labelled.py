@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from personal_quant.factors.catalogue import CATALOGUE
 from personal_quant.factors.momentum import Momentum
 from personal_quant.research.datasets import DatasetIntegrityError, LocalDatasetProvider
 from personal_quant.research.labelled import LabelledDataset, LabelledDatasetError
@@ -182,6 +183,39 @@ def test_without_engines_the_request_is_checked_against_the_catalogue(tmp_path: 
 
     with pytest.raises(LabelledDatasetError, match="last_close"):
         LabelledDataset.open(LocalDatasetProvider(tmp_path / "other"), DATASET)
+
+
+def _catalogued(bumped: str | None = None) -> list[dict[str, Any]]:
+    # Every catalogue entry as the registry states it; one at version 2 if named.
+    return [
+        {
+            "name": entry.engine.name,
+            "version": int(entry.engine.version) + (entry.engine.name == bumped),
+            "lookback": entry.engine.lookback.sessions,
+        }
+        for entry in CATALOGUE
+    ]
+
+
+def test_a_request_naming_every_catalogue_entry_opens_against_the_default(tmp_path: Path) -> None:
+    _write(tmp_path, _request(features=_catalogued()))
+
+    labelled = LabelledDataset.open(LocalDatasetProvider(tmp_path), DATASET)
+
+    assert len(CATALOGUE) == 8
+    assert sorted(feature.name for feature in labelled.request.features) == sorted(
+        entry.engine.name for entry in CATALOGUE
+    )
+
+
+@pytest.mark.parametrize("bumped", [entry.engine.name for entry in CATALOGUE])
+def test_a_catalogue_entry_at_another_version_is_refused_by_the_default(
+    tmp_path: Path, bumped: str
+) -> None:
+    _write(tmp_path, _request(features=_catalogued(bumped)))
+
+    with pytest.raises(LabelledDatasetError, match=f"{bumped} version 2"):
+        LabelledDataset.open(LocalDatasetProvider(tmp_path), DATASET)
 
 
 def test_a_build_without_a_request_is_refused(tmp_path: Path) -> None:
