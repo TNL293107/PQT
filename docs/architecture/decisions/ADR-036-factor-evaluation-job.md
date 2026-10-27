@@ -1,6 +1,6 @@
 # ADR-036: The factor evaluation job — one run per trial, on a labelled dataset
 
-**Status:** Proposed (Lead, 2026-10-27; QA + QC review applied: 1 blocker, 6 minor) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.2 (Phase 7)
+**Status:** Accepted (Lead, 2026-10-27, after QA + QC review: 1 blocker, 7 minor, all applied) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.2 (Phase 7)
 
 ## Context
 
@@ -93,7 +93,7 @@ where it takes an index without changing the evaluation's `trial_count`.
   refused before it runs is not a trial.
 - A reproduction (same dataset version, parameters, code) is recorded with
   `reproduces_run_id` and no index, as today. A changed transform version,
-  quantile count or dataset is a new trial.
+  quantile count, dataset or any other payload field is a new trial.
 - `RunRecord` is built from a plain metrics mapping; the import of
   `SliceResult` moves into the momentum handler, so `experiments.py` no longer
   depends on one strategy.

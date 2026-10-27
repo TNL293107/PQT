@@ -1,6 +1,6 @@
 # ADR-035: Cross-sectional transforms — winsorise and z-score, per rebalance, versioned
 
-**Status:** Proposed (Lead, 2026-10-27; QA + QC review applied) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.1 (Phase 7)
+**Status:** Accepted (Lead, 2026-10-27, after QA + QC review) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.1 (Phase 7)
 
 ## Context
 

@@ -43,8 +43,8 @@ reasoning at the time is preserved.
 | [032](ADR-032-ratios-version-2.md)                          | Ratios version 2: capital steps without an action, recorded dividend coverage | Accepted |
 | [033](ADR-033-feature-catalogue.md)                         | The feature catalogue: what an entry declares, and the first eight | Accepted |
 | [034](ADR-034-labelled-dataset-spec.md)                     | The labelled-dataset specification: a request recorded in the manifest (v5) | Accepted |
-| [035](ADR-035-cross-sectional-transforms.md)               | Cross-sectional transforms: winsorise and z-score per rebalance, versioned | Proposed |
-| [036](ADR-036-factor-evaluation-job.md)                     | The factor evaluation job: one run per trial on a labelled dataset | Proposed |
+| [035](ADR-035-cross-sectional-transforms.md)               | Cross-sectional transforms: winsorise and z-score per rebalance, versioned | Accepted |
+| [036](ADR-036-factor-evaluation-job.md)                     | The factor evaluation job: one run per trial on a labelled dataset | Accepted |
 
 ## Format
 
