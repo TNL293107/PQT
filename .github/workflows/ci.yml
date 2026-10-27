@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, uat, staging]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, uat, staging]
   workflow_dispatch:
 
 # A new push to the same branch cancels the previous run: only the latest
@@ -307,6 +307,27 @@ jobs:
         run: |
           if ! grep -q '^LIVE_TRADING_ENABLED=false$' .env.example; then
             echo "::error::LIVE_TRADING_ENABLED must default to false in .env.example."
+            exit 1
+          fi
+
+      # Room rule (Moderator, 2026-10-27): no Claude attribution in a commit
+      # message, a PR title or a PR body. Scans all history, so a rewritten or
+      # web-edited commit is caught too; the local hooks cover the same rule
+      # before a push.
+      - name: Fail on Claude attribution
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          pattern='co-authored-by:.*claude|generated with \[?claude'
+          bad=$(git log --all --format='%h %s' -i -E --grep="$pattern")
+          if [ -n "$bad" ]; then
+            echo "::error::Commits carry Claude attribution:"
+            echo "$bad"
+            exit 1
+          fi
+          if printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -qiE "$pattern"; then
+            echo "::error::The pull request title or body carries Claude attribution."
             exit 1
           fi
 
