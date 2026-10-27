@@ -91,6 +91,12 @@ where it takes an index without changing the evaluation's `trial_count`.
   all absent, and one whose job failed after the payload was accepted (recorded
   with status `failed`): both are configurations that were tried. A payload
   refused before it runs is not a trial.
+- Two failures are not trials (amended 2026-10-27, QA + QC on PR #1): a
+  `PointInTimeError` from the harness, which is a defect in the feature and is
+  fixed before any result exists (§6); and a lost lease, because the job is run
+  again when the lease expires and that run is the one counted.
+- A reproduction whose re-run fails is recorded as a failed reproduction, with
+  `reproduces_run_id` set and no index, so it never adds to `trial_count`.
 - A reproduction (same dataset version, parameters, code) is recorded with
   `reproduces_run_id` and no index, as today. A changed transform version,
   quantile count, dataset or any other payload field is a new trial.
