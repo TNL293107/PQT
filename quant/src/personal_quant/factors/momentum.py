@@ -19,6 +19,10 @@ __all__ = ["Momentum"]
 
 _TRADING_YEAR = 252
 _TRADING_MONTH = 21
+_NAMES = {
+    (_TRADING_YEAR, _TRADING_MONTH): "momentum_12_1",
+    (_TRADING_YEAR // 2, _TRADING_MONTH): "momentum_6_1",
+}
 
 
 class Momentum:
@@ -44,11 +48,8 @@ class Momentum:
 
     @property
     def name(self) -> str:
-        """``momentum_12_1`` for the default window, otherwise the sessions."""
-        if (self._formation, self._skip) == (_TRADING_YEAR, _TRADING_MONTH):
-            return "momentum_12_1"
-
-        return f"momentum_{self._formation}_{self._skip}"
+        """``momentum_12_1`` or ``momentum_6_1`` for the catalogue's windows, else the sessions."""
+        return _NAMES.get((self._formation, self._skip), f"momentum_{self._formation}_{self._skip}")
 
     @property
     def version(self) -> str:

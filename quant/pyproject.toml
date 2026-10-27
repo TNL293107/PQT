@@ -26,7 +26,9 @@ license = { text = "Proprietary" }
 # nobody can argue for removing later.
 dependencies = [
     "pyarrow>=18",
-    "duckdb>=1.5",
+    # ponytail: duckdb 2.0 breaks the DuckDBPyRelation API the analytical tests call
+    # (mypy: "not callable"; 5 tests fail). Lift the cap when they are ported.
+    "duckdb>=1.5,<2",
     "psycopg[binary]>=3.2",
 ]
 

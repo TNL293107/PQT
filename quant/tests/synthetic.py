@@ -34,6 +34,7 @@ class SyntheticBar:
     session: date
     close: Decimal
     volume: int = 1_000
+    turnover: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,10 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
             "low": [str(bar.close) for bar in ordered],
             "close": [str(bar.close) for bar in ordered],
             "volume": pa.array([bar.volume for bar in ordered], type=pa.int64()),
-            "turnover": pa.array([None] * len(ordered), type=pa.string()),
+            "turnover": pa.array(
+                [None if bar.turnover is None else str(bar.turnover) for bar in ordered],
+                type=pa.string(),
+            ),
             "source": ["TEST"] * len(ordered),
             "revision": pa.array([0] * len(ordered), type=pa.int32()),
             "price_factor": ["1"] * len(ordered),

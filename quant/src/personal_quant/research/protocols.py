@@ -41,6 +41,7 @@ __all__ = [
     "ExperimentTracker",
     "FactorEngine",
     "FeatureEngine",
+    "FundamentalsRow",
     "History",
     "Lookback",
     "Model",
@@ -59,7 +60,9 @@ class Bar:
 
     Prices are :class:`~decimal.Decimal`, read from the strings the dataset
     stores them as. Nothing between the exchange and a factor goes through a
-    binary float; a factor may convert at its own boundary.
+    binary float; a factor may convert at its own boundary. ``turnover`` is
+    the cash value traded (VND) as recorded, never adjusted, and ``None``
+    where the source did not report it.
     """
 
     instrument_id: str
@@ -69,6 +72,23 @@ class Bar:
     low: Decimal
     close: Decimal
     volume: int
+    turnover: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FundamentalsRow:
+    """One row of ``fundamentals.parquet``: an instrument's ratios at one session (ADR-031).
+
+    ``values`` maps each value column to its :class:`~decimal.Decimal`, or to
+    ``None`` where it is absent; ``absent`` maps it to the dataset's reason,
+    or ``None`` where it is present. ``findings`` stays the dataset's JSON text.
+    """
+
+    instrument_id: str
+    session: date
+    values: Mapping[str, Decimal | None]
+    absent: Mapping[str, str | None]
+    findings: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +142,10 @@ class Dataset(Protocol):
         """Return the instruments that belonged to the universe on a session."""
         ...
 
+    def fundamentals_of(self, instrument_id: str) -> Mapping[date, FundamentalsRow]:
+        """Return one instrument's fundamentals rows by session; empty without any."""
+        ...
+
 
 class DataProvider(Protocol):
     """Locates versioned datasets. Never talks to a vendor."""
@@ -152,6 +176,14 @@ class History(Protocol):
         """Return the universe's members on the as-of session."""
         ...
 
+    def bars(self, instrument_id: str, sessions: int) -> Sequence[Bar | None]:
+        """Return the last ``sessions`` bars ending at the as-of, oldest first.
+
+        ``None`` stands for a session with no bar for the instrument, or one
+        before the dataset begins.
+        """
+        ...
+
     def closes(self, instrument_id: str, sessions: int) -> Sequence[Decimal | None]:
         """Return the last ``sessions`` closes ending at the as-of, oldest first.
 
@@ -162,6 +194,13 @@ class History(Protocol):
 
     def bar(self, instrument_id: str, session: date) -> Bar | None:
         """Return one bar within the window, or ``None`` when there is none."""
+        ...
+
+    def fundamentals(self, instrument_id: str) -> FundamentalsRow | None:
+        """Return the instrument's fundamentals row at the as-of, or ``None`` (ADR-033).
+
+        Refuses a build exported without fundamentals or below ``ratio_version`` 2.
+        """
         ...
 
 
