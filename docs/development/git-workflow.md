@@ -21,11 +21,20 @@ feature/phase-2-…                       ●──●──●
 | Branch      | Purpose                                                     | Lifetime  |
 | ----------- | ----------------------------------------------------------- | --------- |
 | `main`      | Known-good. Every commit builds and passes CI.               | permanent |
-| `develop`   | Integration. Where a phase is assembled.                     | permanent |
+| `develop`   | Integration. Every feature PR targets it.                    | permanent |
+| `uat`       | Acceptance: the operator checks a promoted `develop`.         | permanent |
+| `staging`   | Pre-release: the last state before `main`.                    | permanent |
 | `feature/*` | One unit of work — usually one phase, or one slice of one.   | temporary |
 | `fix/*`     | Bug fix.                                                     | temporary |
 | `chore/*`   | Tooling, dependencies, configuration.                        | temporary |
 | `docs/*`    | Documentation only.                                          | temporary |
+
+**Promotion (Moderator, 2026-10-27):** `feature/*` → `develop` → `uat` →
+`staging` → `main`. A feature is merged into `develop` through a PR (`gh pr
+create --base develop`), only by Lead and only after the Tester + Audit gate
+passes. Each later step is a fast-forward or `--no-ff` merge by Lead, and
+pushing `main` needs the Moderator's explicit OK. Commits and PRs carry no
+Claude attribution.
 
 Existing branches are created on demand. Eighteen empty phase branches created
 in advance would go stale, diverge from `develop`, and say nothing useful — a
