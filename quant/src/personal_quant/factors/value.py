@@ -4,6 +4,11 @@ Inverses, not multiples: a loss or negative equity is a negative number that
 still orders, where P/E and P/B would be absent or explode near zero. Both
 inputs come from the fundamentals row at the as-of, so the per-share values
 are the ratio service's and the close is on the same raw basis.
+
+ADR-030 counts treasury shares as outstanding, which understates E/P and B/P
+for an issuer holding them. For BCM, MSN, MWG, PLX, POW, VNM, VPL and VRE the
+share count rests on 24 corporate actions transcribed by hand from VSDC
+notices (ADR-032).
 """
 
 from __future__ import annotations

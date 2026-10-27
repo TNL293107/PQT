@@ -3,7 +3,9 @@
 Both come from the dataset's fundamentals row at the as-of (ADR-033), so the
 share count is the one the ratio service used and the close is on the same,
 unadjusted basis. ADR-030's treasury-share bias overstates it for an issuer
-holding treasury shares.
+holding treasury shares. For BCM, MSN, MWG, PLX, POW, VNM, VPL and VRE the
+share count rests on 24 corporate actions transcribed by hand from VSDC
+notices (ADR-032).
 """
 
 from __future__ import annotations
@@ -25,8 +27,8 @@ class Size:
     def compute(self, history: History) -> Mapping[str, float]:
         """Return each member's market capitalisation in VND.
 
-        A member without a fundamentals row, or whose shares or raw close is
-        absent, has no value.
+        A member without a fundamentals row, whose shares or raw close is
+        absent, or whose raw close is at or below zero, has no value.
 
         Args:
             history: The harness's view at the as-of.
@@ -44,7 +46,7 @@ class Size:
 
             shares, close = row.values["shares"], row.values["close_raw"]
 
-            if shares is None or close is None:
+            if shares is None or close is None or close <= 0:
                 continue
 
             values[instrument] = float(shares * close)

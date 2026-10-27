@@ -302,6 +302,20 @@ def test_a_value_or_quality_feature_is_absent_when_its_input_is(
     assert set(evaluate(engine, dataset, SESSIONS[0])) == {"ccc"}
 
 
+@pytest.mark.parametrize("close", ["0", "-1"])
+@pytest.mark.parametrize("engine", [Size(), EarningsToPrice(), BookToPrice()])
+def test_a_raw_close_at_or_below_zero_leaves_the_name_out(
+    tmp_path: Path, engine: FeatureEngine, close: str
+) -> None:
+    rows = [
+        SyntheticFundamentals("aaa", SESSIONS[0], values={"close_raw": close}),
+        SyntheticFundamentals("bbb", SESSIONS[0]),
+    ]
+    dataset = _dataset(tmp_path, _series("aaa", [1]) + _series("bbb", [1]), rows)
+
+    assert set(evaluate(engine, dataset, SESSIONS[0])) == {"bbb"}
+
+
 # --- restatement --------------------------------------------------------------
 
 

@@ -58,7 +58,7 @@ CATALOGUE: tuple[Entry, ...] = (
     Entry(
         Size(),
         ("shares", "close_raw"),
-        "No fundamentals row, or shares or close_raw absent.",
+        "No fundamentals row, shares or close_raw absent, or a close at or below zero.",
         "higher_is_larger",
     ),
     Entry(
