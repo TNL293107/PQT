@@ -283,6 +283,18 @@ def test_a_price_decimal_38_10_would_round_is_refused(tmp_path: Path) -> None:
         connect(LocalDatasetProvider(tmp_path), DATASET)
 
 
+def test_a_turnover_decimal_38_10_would_round_is_refused(tmp_path: Path) -> None:
+    spec = _spec()
+    first = spec.bars[0]
+    spec.bars[0] = SyntheticBar(
+        first.instrument_id, first.session, first.close, turnover=Decimal("5.00000000001")
+    )
+    write_dataset(tmp_path, spec)
+
+    with pytest.raises(UnrepresentablePriceError, match=r"turnover .* 5\.00000000001"):
+        connect(LocalDatasetProvider(tmp_path), DATASET)
+
+
 def test_trailing_zeros_beyond_the_scale_are_not_precision(tmp_path: Path) -> None:
     spec = _spec()
     spec.bars.append(SyntheticBar("ccc", SESSIONS[2], Decimal("1.500000000000")))
