@@ -102,7 +102,7 @@ def _write(tmp_path: Path, engines: list[Any] = SOUND) -> None:
     )
 
 
-def _evaluate(tmp_path: Path, feature: str, **changes: Any) -> Mapping[str, float | None]:
+def _evaluate(tmp_path: Path, feature: str) -> Mapping[str, float | None]:
     from personal_quant.worker.handlers import factor_evaluation_handler
 
     payload: dict[str, Any] = {
@@ -114,7 +114,6 @@ def _evaluate(tmp_path: Path, feature: str, **changes: Any) -> Mapping[str, floa
         "quantiles": 5,
         "decay_horizons": [HORIZON, 2 * HORIZON],
     }
-    payload.update(changes)
     outcome = factor_evaluation_handler(tmp_path, engines=ENGINES)(payload)
 
     assert outcome.run is not None
