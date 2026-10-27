@@ -260,6 +260,29 @@ public sealed class StatementNormaliserTests
         Assert.Empty(normalised.Dropped!);
     }
 
+    [Theory]
+    [InlineData("100", "60", "40")]
+    [InlineData("0", "0", "100")]
+    public void A_column_that_only_looks_shifted_is_kept(string line61, string line62, string line70)
+    {
+        // 61 = 60 - 62 filed honestly with 70 equal to the minority by chance;
+        // and a true zero profit to the parent with no minority (62 = 0).
+        var tables = new[]
+        {
+            Filings.Balance(("270", "5,000", "4,500"), ("440", "5,000", "4,500")),
+            new ProviderStatementTable(
+                "KQKD",
+                Filings.IncomeColumns,
+                [Filings.Row("60", "100", "", "", ""), Filings.Row("61", line61, "", "", ""), Filings.Row("62", line62, "", "", ""), Filings.Row("70", line70, "", "", "")]),
+        };
+
+        var normalised = Normalise(Filings.Quarterly(tables: tables));
+
+        Assert.Contains(normalised.Values, value => value.LineCode == "61");
+        Assert.Contains(normalised.Values, value => value.LineCode == "70");
+        Assert.Empty(normalised.Dropped!);
+    }
+
     [Fact]
     public void Charter_capital_that_fits_no_unit_refuses_the_filing() =>
         Assert.Equal(
