@@ -1,0 +1,176 @@
+{
+  "dataset_id": "5a1e0c9d3b7f2e64",
+  "dataset_version": 2,
+  "schema_version": 5,
+  "content_hash": "733502923f3857eb4a7f3ed4f726af8c814321064ae2001de8d69eed211277c1",
+  "known_as_of_utc": "2026-09-18T03:04:05.5+00:00",
+  "adjusted": true,
+  "announcement_policy": "strict",
+  "universe_code": "VN30",
+  "universe_as_of": null,
+  "instruments": [
+    {
+      "instrument_id": "0f3c1a52-7d10-4c6e-9a0b-1d2e3f405161",
+      "ticker_at_as_of": "AAA",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17",
+          "removal_announced_on": null
+        }
+      ],
+      "history_from": "2025-06-25"
+    },
+    {
+      "instrument_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      "ticker_at_as_of": "BBB",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-08-03",
+          "until": null,
+          "announced_on": "2026-07-15",
+          "removal_announced_on": null
+        }
+      ],
+      "history_from": "2025-07-28"
+    },
+    {
+      "instrument_id": "2b3c4d5e-6f70-4b8c-9dae-bf0011223344",
+      "ticker_at_as_of": "CCC",
+      "exchange": "HNX",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": "2026-08-03",
+          "announced_on": "2025-07-17",
+          "removal_announced_on": "2026-07-15"
+        }
+      ],
+      "history_from": "2025-06-25"
+    },
+    {
+      "instrument_id": "3c4d5e6f-7081-4c9d-aebf-c01122334455",
+      "ticker_at_as_of": "DDD",
+      "exchange": "HOSE",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": "2026-07-20",
+          "announced_on": null,
+          "removal_announced_on": null
+        },
+        {
+          "from": "2026-08-03",
+          "until": null,
+          "announced_on": "2026-07-15",
+          "removal_announced_on": null
+        }
+      ],
+      "history_from": "2025-06-25"
+    },
+    {
+      "instrument_id": "4d5e6f70-8192-4dae-bfc0-d12233445566",
+      "ticker_at_as_of": "EEE",
+      "exchange": "UPCOM",
+      "spells": [
+        {
+          "from": "2026-07-01",
+          "until": null,
+          "announced_on": "2025-07-17",
+          "removal_announced_on": null
+        }
+      ],
+      "history_from": null
+    }
+  ],
+  "interval": "1d",
+  "from_date": "2026-07-01",
+  "to_date": "2026-09-17",
+  "transformation_version": 1,
+  "validation_version": 1,
+  "adjustment_version": 2,
+  "sources": [
+    {
+      "code": "CAFEF",
+      "licence_note": "No licence granted. Retained under the absence of a prohibition rather than a permission. Not for redistribution."
+    }
+  ],
+  "files": [
+    {
+      "name": "bars.parquet",
+      "row_count": 1265,
+      "bytes": 41000,
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      "name": "fundamentals.parquet",
+      "row_count": 160,
+      "bytes": 23000,
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  ],
+  "created_at_utc": "2026-10-20T00:00:00+00:00",
+  "created_by_commit": null,
+  "membership": "point_in_time",
+  "history_sessions": 252,
+  "fundamentals": {
+    "ratio_version": 2,
+    "source": "IDS",
+    "licence_note": "No licence granted. Retained under the absence of a prohibition rather than a permission. Not for redistribution.",
+    "cut": "session_date_00utc",
+    "rows": 160,
+    "not_collected": [
+      {
+        "instrument_id": "2b3c4d5e-6f70-4b8c-9dae-bf0011223344",
+        "reason": "ids_capture_gap"
+      },
+      {
+        "instrument_id": "3c4d5e6f-7081-4c9d-aebf-c01122334455",
+        "reason": "out_of_scope"
+      },
+      {
+        "instrument_id": "4d5e6f70-8192-4dae-bfc0-d12233445566",
+        "reason": "not_imported"
+      }
+    ]
+  },
+  "row_count": 1425,
+  "request": {
+    "universe": "VN30",
+    "as_of": null,
+    "from": "2026-07-01",
+    "to": "2026-09-17",
+    "interval": "1d",
+    "fundamentals": true,
+    "rebalance_every": 21,
+    "features": [
+      {
+        "name": "value_ep",
+        "version": 1,
+        "lookback": 1
+      },
+      {
+        "name": "momentum_6_1",
+        "version": 1,
+        "lookback": 127
+      },
+      {
+        "name": "size",
+        "version": 1,
+        "lookback": 1
+      },
+      {
+        "name": "momentum_12_1",
+        "version": 1,
+        "lookback": 253
+      }
+    ],
+    "label": {
+      "horizon": 21,
+      "basis": "adjusted"
+    }
+  }
+}

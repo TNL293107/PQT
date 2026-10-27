@@ -22,6 +22,10 @@ or null when the export carried none. It enters the hash from schema 4 only,
 except its licence note, which no source's note does. A ``ratio_version`` this
 reader does not know is refused: the ratios would be read under rules it
 cannot name.
+
+Schema 5 adds ``request`` (ADR-034): the labelled-dataset request the build was
+exported from, with each feature's lookback, or null. It enters the hash from
+schema 5 only, right after the fundamentals part, its features sorted by name.
 """
 
 from __future__ import annotations
@@ -38,9 +42,11 @@ __all__ = [
     "DatasetFundamentals",
     "DatasetInstrument",
     "DatasetManifest",
+    "DatasetRequest",
     "DatasetSpell",
     "Membership",
     "NotCollected",
+    "RequestFeature",
     "UnsupportedManifestError",
     "content_hash_of",
     "dotnet_round_trip",
@@ -48,13 +54,16 @@ __all__ = [
 
 Membership = Literal["as_of", "point_in_time"]
 
-SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4, 5})
 
 HISTORY_SCHEMA_VERSION = 3
 """The first schema whose manifests carry history and removal announcements."""
 
 FUNDAMENTALS_SCHEMA_VERSION = 4
 """The first schema whose manifests carry the fundamentals object."""
+
+REQUEST_SCHEMA_VERSION = 5
+"""The first schema whose manifests carry the labelled-dataset request."""
 
 SUPPORTED_RATIO_VERSIONS = frozenset({1, 2})
 """The ratio rules this reader can name: ADR-030 is 1, ADR-032 is 2."""
@@ -164,6 +173,30 @@ class DatasetFundamentals:
 
 
 @dataclass(frozen=True, slots=True)
+class RequestFeature:
+    """One feature a request declares, as the registry named it (ADR-034)."""
+
+    name: str
+    version: int
+    lookback: int
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetRequest:
+    """The labelled-dataset request a schema 5 build was exported from (ADR-034)."""
+
+    universe: str
+    from_date: date
+    to_date: date
+    interval: str
+    fundamentals: bool
+    rebalance_every: int
+    features: tuple[RequestFeature, ...]
+    horizon: int
+    basis: str
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetManifest:
     """What a dataset build is, as its manifest states it."""
 
@@ -189,6 +222,7 @@ class DatasetManifest:
     files: tuple[DatasetFile, ...]
     history_sessions: int = 0
     fundamentals: DatasetFundamentals | None = None
+    request: DatasetRequest | None = None
 
     @staticmethod
     def from_json(raw: Mapping[str, Any]) -> DatasetManifest:
@@ -258,6 +292,7 @@ class DatasetManifest:
                 if version >= FUNDAMENTALS_SCHEMA_VERSION
                 else None
             ),
+            request=_request(raw.get("request")) if version >= REQUEST_SCHEMA_VERSION else None,
         )
 
 
@@ -318,6 +353,10 @@ def content_hash_of(manifest: DatasetManifest) -> str:
     # Schema 4 only, likewise.
     if manifest.schema_version >= FUNDAMENTALS_SCHEMA_VERSION:
         canonical += _fundamentals_part(manifest.fundamentals)
+
+    # Schema 5 only, likewise.
+    if manifest.schema_version >= REQUEST_SCHEMA_VERSION:
+        canonical += request_part(manifest.request)
 
     canonical += "".join(
         _instrument_part(instrument, with_history) for instrument in manifest.instruments
@@ -391,6 +430,56 @@ def _fundamentals_part(fundamentals: DatasetFundamentals | None) -> str:
         rendered += f"{gap.instrument_id}~{gap.reason};"
 
     return rendered + "|"
+
+
+def request_part(request: DatasetRequest | None) -> str:
+    """Render a request as the content hash and the dataset id take it (ADR-034 §3).
+
+    Args:
+        request: The request, or ``None`` for a build exported without one.
+
+    Returns:
+        The rendering, features ordered by name, whatever order the file holds.
+    """
+    if request is None:
+        return "request:none|"
+
+    rendered = (
+        f"request:{request.universe},{_format(request.from_date)},{_format(request.to_date)},"
+        f"{request.interval},{'True' if request.fundamentals else 'False'},"
+        f"{request.rebalance_every},{request.horizon},{request.basis};"
+    )
+
+    for feature in sorted(request.features, key=lambda feature: feature.name):
+        rendered += f"{feature.name}:{feature.version}:{feature.lookback},"
+
+    return rendered + "|"
+
+
+def _request(raw: Mapping[str, Any] | None) -> DatasetRequest | None:
+    if raw is None:
+        return None
+
+    label = raw["label"]
+
+    return DatasetRequest(
+        universe=str(raw["universe"]),
+        from_date=_required_date(raw["from"]),
+        to_date=_required_date(raw["to"]),
+        interval=str(raw["interval"]),
+        fundamentals=_boolean(raw["fundamentals"], "request.fundamentals"),
+        rebalance_every=_count(raw["rebalance_every"], "request.rebalance_every"),
+        features=tuple(
+            RequestFeature(
+                name=str(item["name"]),
+                version=_count(item["version"], "request.features.version"),
+                lookback=_count(item["lookback"], "request.features.lookback"),
+            )
+            for item in raw["features"]
+        ),
+        horizon=_count(label["horizon"], "request.label.horizon"),
+        basis=str(label["basis"]),
+    )
 
 
 def _fundamentals(raw: Mapping[str, Any] | None) -> DatasetFundamentals | None:

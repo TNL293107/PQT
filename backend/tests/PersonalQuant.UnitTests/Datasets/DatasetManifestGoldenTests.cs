@@ -27,12 +27,17 @@ namespace PersonalQuant.UnitTests.Datasets;
 /// them would fail every dataset already on disk.
 /// </para>
 /// <para>
-/// The version 3 fixture was written by this test's version 3 build and is
-/// now held like the two before it, by its hash. The version 4 fixture is
-/// built below and written by this test when <c>PQT_WRITE_GOLDEN=1</c>;
-/// otherwise the test asserts the committed file is exactly what this build
-/// would write. Neither carries prices, so committing them redistributes
-/// nothing.
+/// The version 3 and 4 fixtures were written by this test's builds of those
+/// versions and are now held like the two before them, by their hashes. The
+/// version 5 fixture, <c>v5-export.json</c>, is built below and written by
+/// this test when <c>PQT_WRITE_GOLDEN=1</c>; otherwise the test asserts the
+/// committed file is exactly what this build would write. None carries
+/// prices, so committing them redistributes nothing.
+/// </para>
+/// <para>
+/// <c>v5-request.json</c> is different: QA + QC built it by hand, with its
+/// canonical string beside it, so it pins both languages to ADR-034 rather
+/// than to either implementation.
 /// </para>
 /// </remarks>
 public sealed class DatasetManifestGoldenTests
@@ -41,12 +46,19 @@ public sealed class DatasetManifestGoldenTests
 
     private const string GoldenV4 = "v4-fundamentals.json";
 
+    // Written by this build, unlike v5-request.json, which is hand-built.
+    private const string GoldenV5 = "v5-export.json";
+
     [Theory]
     [InlineData("v1-as-of.json")]
     [InlineData("v2-point-in-time.json")]
     [InlineData("v2-known-as-of.json")]
     [InlineData(GoldenV3)]
     [InlineData(GoldenV4)]
+    // Hand-built from ADR-034 §3 (the canonical string is beside it), not
+    // written by this build: it pins the C# rendering to the Python one.
+    [InlineData("v5-request.json")]
+    [InlineData(GoldenV5)]
     public void A_committed_manifest_hashes_to_the_content_hash_it_records(string name)
     {
         var manifest = Read(name);
@@ -55,11 +67,11 @@ public sealed class DatasetManifestGoldenTests
     }
 
     [Fact]
-    public void The_version_four_fixture_is_exactly_what_this_build_writes()
+    public void The_version_five_fixture_is_exactly_what_this_build_writes()
     {
         var written = JsonSerializer.Serialize(GoldenManifest(), ParquetDatasetStore.ManifestJson)
             .ReplaceLineEndings("\n") + "\n";
-        var path = Path.Combine(FixtureDirectory(), GoldenV4);
+        var path = Path.Combine(FixtureDirectory(), GoldenV5);
 
         if (string.Equals(Environment.GetEnvironmentVariable("PQT_WRITE_GOLDEN"), "1", StringComparison.Ordinal))
         {
@@ -99,6 +111,31 @@ public sealed class DatasetManifestGoldenTests
         Assert.Equal(
             ["ids_capture_gap", "not_imported", "out_of_scope"],
             fundamentals.NotCollected.Select(gap => gap.Reason).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_version_five_manifest_hashes_its_request_and_a_version_four_one_does_not()
+    {
+        var manifest = GoldenManifest();
+        var request = manifest.Request!;
+
+        Assert.NotEqual(
+            DatasetIdentity.ContentHashOf(manifest),
+            DatasetIdentity.ContentHashOf(manifest with { Request = null }));
+        Assert.NotEqual(
+            DatasetIdentity.ContentHashOf(manifest),
+            DatasetIdentity.ContentHashOf(manifest with { Request = request with { Label = request.Label with { Horizon = 5 } } }));
+
+        // Features are rendered sorted, so the order the file holds them in is not the data.
+        Assert.Equal(
+            DatasetIdentity.ContentHashOf(manifest),
+            DatasetIdentity.ContentHashOf(manifest with { Request = request with { Features = [.. request.Features.Reverse()] } }));
+
+        var asVersionFour = Read(GoldenV4);
+
+        Assert.Equal(
+            DatasetIdentity.ContentHashOf(asVersionFour),
+            DatasetIdentity.ContentHashOf(asVersionFour with { Request = request }));
     }
 
     [Fact]
@@ -168,6 +205,19 @@ public sealed class DatasetManifestGoldenTests
             historySessions: 253,
             fundamentals: true),
             problem);
+
+        // Its request is recorded, not resolved: the id and window stay the
+        // version 4 fixture's, so only the request part differs from it.
+        LabelledDatasetRequest labelled = new(
+            "VN30",
+            null,
+            from,
+            to,
+            "1d",
+            true,
+            21,
+            [new LabelledDatasetFeature("size", 1, 1), new LabelledDatasetFeature("momentum_12_1", 1, 253)],
+            new LabelledDatasetLabel(21, LabelledDatasetRequest.AdjustedBasis));
 
         var manifest = new DatasetManifest(
             request.DatasetId,
@@ -250,7 +300,8 @@ public sealed class DatasetManifestGoldenTests
                     new DatasetNotCollected(Guid.Parse("2b3c4d5e-6f70-4b8c-9dae-bf0011223344"), "ids_capture_gap"),
                     new DatasetNotCollected(Guid.Parse("3c4d5e6f-7081-4c9d-aebf-c01122334455"), "out_of_scope"),
                     new DatasetNotCollected(Guid.Parse("4d5e6f70-8192-4dae-bfc0-d12233445566"), "not_imported"),
-                ]));
+                ]),
+            labelled);
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
     }

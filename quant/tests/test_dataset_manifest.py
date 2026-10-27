@@ -12,6 +12,7 @@ edited.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -22,9 +23,12 @@ import pytest
 
 from personal_quant.research.manifest import (
     DatasetManifest,
+    DatasetRequest,
+    RequestFeature,
     UnsupportedManifestError,
     content_hash_of,
     dotnet_round_trip,
+    request_part,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "manifests"
@@ -48,12 +52,30 @@ def _raw(name: str) -> dict[str, Any]:
         "v3-history.json",
         # Schema 4 with fundamentals: a not-collected name for each reason.
         "v4-fundamentals.json",
+        # Schema 5 with a request (ADR-034): hand-built, not written by .NET.
+        # Its hash comes from v5-request.canonical.txt, rendered by hand from
+        # ADR-034 §3, so it is an oracle neither implementation produced.
+        "v5-request.json",
+        # Schema 5 written by the .NET build, so the parity runs both ways.
+        "v5-export.json",
     ],
 )
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:
     manifest = DatasetManifest.from_json(_raw(name))
 
     assert content_hash_of(manifest) == manifest.content_hash
+
+
+def test_the_schema_5_fixture_hash_is_the_hand_rendered_canonical_string() -> None:
+    # Pins the oracle itself: the fixture's hash is the digest of the string
+    # written out from ADR-034 §3, features unsorted in the file and sorted
+    # ordinally in the string.
+    canonical = (FIXTURES / "v5-request.canonical.txt").read_text(encoding="utf-8")
+
+    assert (
+        hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        == _raw("v5-request.json")["content_hash"]
+    )
 
 
 def test_a_schema_1_manifest_reads_as_an_as_of_export() -> None:
@@ -102,9 +124,9 @@ def test_an_edited_spell_no_longer_matches_its_hash() -> None:
 
 def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
     raw = _raw("v4-fundamentals.json")
-    raw["schema_version"] = 5
+    raw["schema_version"] = 6
 
-    with pytest.raises(UnsupportedManifestError, match="schema version 5"):
+    with pytest.raises(UnsupportedManifestError, match="schema version 6"):
         DatasetManifest.from_json(raw)
 
 
@@ -316,3 +338,22 @@ def test_a_known_as_of_instant_is_read_as_utc() -> None:
     manifest = DatasetManifest.from_json(raw)
 
     assert manifest.known_as_of_utc == datetime(2026, 9, 18, 3, 4, 5, tzinfo=UTC)
+
+
+def test_request_features_are_rendered_in_ordinal_order() -> None:
+    # "B" (0x42) sorts before "a" (0x61) ordinally, as C# StringComparer.Ordinal does.
+    request = DatasetRequest(
+        universe="VN30",
+        from_date=date(2026, 7, 1),
+        to_date=date(2026, 9, 17),
+        interval="1d",
+        fundamentals=True,
+        rebalance_every=21,
+        features=(RequestFeature("a", 1, 1), RequestFeature("B", 1, 253)),
+        horizon=21,
+        basis="adjusted",
+    )
+
+    assert request_part(request) == (
+        "request:VN30,2026-07-01,2026-09-17,1d,True,21,21,adjusted;B:1:253,a:1:1,|"
+    )

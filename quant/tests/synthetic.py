@@ -77,6 +77,9 @@ class SyntheticDataset:
     fundamentals: list[SyntheticFundamentals] | None = None
     not_collected: Mapping[str, str] = field(default_factory=dict)
     ratio_version: int = 1
+    # A labelled-dataset request (ADR-034), as a schema 5 export with
+    # --request writes it; None writes no schema 5 build.
+    request: Mapping[str, Any] | None = None
 
 
 def weekdays(start: date, count: int) -> list[date]:
@@ -188,6 +191,11 @@ def write_dataset(root: Path, spec: SyntheticDataset) -> Path:
 
     if spec.fundamentals is not None:
         _write_fundamentals(build, spec, raw)
+
+    if spec.request is not None:
+        raw["schema_version"] = 5
+        raw.setdefault("fundamentals", None)
+        raw["request"] = dict(spec.request)
 
     raw["content_hash"] = content_hash_of(DatasetManifest.from_json(raw))
 

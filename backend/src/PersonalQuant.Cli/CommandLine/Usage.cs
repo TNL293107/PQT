@@ -41,6 +41,7 @@ internal static class Usage
         output.WriteLine("                     [--known-as-of yyyy-MM-dd] [--policy strict|permissive]");
         output.WriteLine("                     [--history N]  (bars before each name's admission; default 0)");
         output.WriteLine("                     [--fundamentals]  (each membership session's ratios, ADR-031)");
+        output.WriteLine("  pqt dataset export --request <FILE>  (a labelled-dataset request, ADR-034; no other option)");
         output.WriteLine("  pqt dataset verify <DATASET-ID> [--version N]");
         output.WriteLine();
         output.WriteLine("  pqt research submit momentum-slice --dataset <ID> [--version N]");

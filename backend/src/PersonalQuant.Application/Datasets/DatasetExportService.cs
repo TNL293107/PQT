@@ -571,7 +571,8 @@ internal sealed class DatasetExportService(
             build.Commit,
             request.Membership,
             request.HistorySessions,
-            fundamentals);
+            fundamentals,
+            request.Labelled);
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
     }

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json.Serialization;
 using PersonalQuant.Domain.CorporateActions;
 
 namespace PersonalQuant.Application.Datasets;
@@ -160,6 +162,10 @@ public sealed record DatasetSpell(
 /// What <c>fundamentals.parquet</c> holds, or null when the export carried no
 /// fundamentals. Absent before schema version 4 (ADR-031).
 /// </param>
+/// <param name="Request">
+/// The labelled-dataset request the export was resolved from, or null when it
+/// had none. Absent before schema version 5 (ADR-034).
+/// </param>
 public sealed record DatasetManifest(
     string DatasetId,
     int DatasetVersion,
@@ -183,7 +189,8 @@ public sealed record DatasetManifest(
     string? CreatedByCommit,
     DatasetMembership Membership = DatasetMembership.AsOf,
     int HistorySessions = 0,
-    DatasetFundamentals? Fundamentals = null)
+    DatasetFundamentals? Fundamentals = null,
+    LabelledDatasetRequest? Request = null)
 {
     /// <summary>
     /// The manifest shape this build writes and knows how to read.
@@ -210,8 +217,12 @@ public sealed record DatasetManifest(
     /// <c>fundamentals.parquet</c>, or null when the export carried none.
     /// See ADR-031.
     /// </para>
+    /// <para>
+    /// Version 5: <c>request</c>, the labelled-dataset request the export was
+    /// resolved from, or null. See ADR-034.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = FundamentalsSchemaVersion;
+    public const int CurrentSchemaVersion = RequestSchemaVersion;
 
     /// <summary>
     /// The first schema version whose manifests carry history and removal
@@ -224,6 +235,12 @@ public sealed record DatasetManifest(
     /// object, and hash it.
     /// </summary>
     public const int FundamentalsSchemaVersion = 4;
+
+    /// <summary>
+    /// The first schema version whose manifests carry the labelled-dataset
+    /// request, and hash it.
+    /// </summary>
+    public const int RequestSchemaVersion = 5;
 
     /// <summary>Gets the total rows across every file.</summary>
     public long RowCount => Files.Sum(file => file.RowCount);
@@ -284,3 +301,82 @@ public sealed record DatasetFundamentals(
 /// first import; <c>not_imported</c> for a name nobody has imported yet.
 /// </param>
 public sealed record DatasetNotCollected(Guid InstrumentId, string Reason);
+
+/// <summary>
+/// A labelled-dataset request (ADR-034): the universe, window and frequency,
+/// the features with their versions and lookbacks, and the label.
+/// </summary>
+/// <remarks>
+/// The backend does not know what a feature computes. It sizes the history
+/// from the lookbacks the request carries; the Python reader checks them
+/// against the registry.
+/// </remarks>
+/// <param name="Universe">The universe.</param>
+/// <param name="AsOf">Null in version 1: point-in-time membership.</param>
+/// <param name="From">The first scored session.</param>
+/// <param name="To">The last session.</param>
+/// <param name="Interval">The bar resolution.</param>
+/// <param name="Fundamentals">Whether the export carries fundamentals.</param>
+/// <param name="RebalanceEvery">Sessions between rebalances.</param>
+/// <param name="Features">The features, in the order the file holds them.</param>
+/// <param name="Label">The forward-return label.</param>
+public sealed record LabelledDatasetRequest(
+    string Universe,
+    DateOnly? AsOf,
+    DateOnly From,
+    DateOnly To,
+    string Interval,
+    bool Fundamentals,
+    int RebalanceEvery,
+    IReadOnlyList<LabelledDatasetFeature> Features,
+    LabelledDatasetLabel Label)
+{
+    /// <summary>The only label basis version 1 accepts.</summary>
+    public const string AdjustedBasis = "adjusted";
+
+    /// <summary>Gets the history the features need: the largest lookback less the as-of session.</summary>
+    [JsonIgnore]
+    public int HistorySessions => Features.Count == 0 ? 0 : Features.Max(feature => feature.Lookback) - 1;
+
+    /// <summary>Refuses what version 1 does not support (ADR-034 §2).</summary>
+    /// <returns>Why the request cannot be exported, or null when it can.</returns>
+    public string? Problem()
+    {
+        if (AsOf is not null)
+        {
+            return "A labelled-dataset request must have as_of null in version 1: membership is read point-in-time.";
+        }
+
+        if (Label is null || Features is null || Features.Count == 0)
+        {
+            return "A labelled-dataset request needs at least one feature and a label.";
+        }
+
+        if (RebalanceEvery < 1 || Features.Any(feature => feature.Lookback < 1))
+        {
+            return "A labelled-dataset request needs rebalance_every and every lookback to be at least 1.";
+        }
+
+        if (Label.Horizon != RebalanceEvery)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"The label horizon ({Label.Horizon}) must equal rebalance_every ({RebalanceEvery}) in version 1, so labels neither overlap nor leave gaps.");
+        }
+
+        return string.Equals(Label.Basis, AdjustedBasis, StringComparison.Ordinal)
+            ? null
+            : $"The label basis must be '{AdjustedBasis}' in version 1, not '{Label.Basis}'.";
+    }
+}
+
+/// <summary>One feature a labelled-dataset request declares.</summary>
+/// <param name="Name">The feature's name in the registry.</param>
+/// <param name="Version">Its version.</param>
+/// <param name="Lookback">Sessions it reads, counting the as-of.</param>
+public sealed record LabelledDatasetFeature(string Name, int Version, int Lookback);
+
+/// <summary>The forward-return label of a labelled-dataset request.</summary>
+/// <param name="Horizon">Sessions from the rebalance close to the label close.</param>
+/// <param name="Basis">The close it is valued on: <c>adjusted</c> in version 1.</param>
+public sealed record LabelledDatasetLabel(int Horizon, string Basis);
