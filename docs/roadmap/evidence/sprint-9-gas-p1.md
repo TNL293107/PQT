@@ -102,13 +102,28 @@ not what the data now says, because shifting the lines back would be a guess
 recorded as a fact (ADR-029).
 
 The dropped columns cover 2021Q1, 2021Q3, 2021Q4, 2022Q1, 2022Q3, 2022Q4, 2023Q1
-and 2024Q1. Three of them are stated again, correctly, in the prior-year column
-of a later form: 2021Q4 by `GAS-20220121-60668c51982d`, 2022Q3 by
-`GAS-20231030-7608662c06c9` and 2022Q4 by `GAS-20240130-2e944b619f77`. From the
-day each of those is known, that quarter has a profit again. The other five
-quarters have none, so a GAS session whose trailing year includes one of them
-has no TTM profit, EPS, P/E or ROE. Checked at 2023-06-01: absent, "profit for
-2021Q3 is not known", since `GAS-20231030` was not yet known then.
+and 2024Q1. Three of those quarters still have a profit to the parent (line 61,
+consolidated, quarter span), from a filing that is not one of the five
+(`tmp/gas-p1-run/q61.sql`, output `q61.txt`):
+
+| quarter | filing | disclosed | its period | column | 61 |
+| --- | --- | --- | --- | --- | --- |
+| 2021Q4 | `GAS-20220121-60668c51982d` | 2022-01-21 | 2021Q4 | this year | 1,963,897,651,610 |
+| 2022Q3 | `GAS-20231030-7608662c06c9` | 2023-10-30 | 2023Q3 | prior year | 3,029,234,899,053 |
+| 2022Q4 | `GAS-20240130-2e944b619f77` | 2024-01-30 | 2023Q4 | prior year | 3,250,037,615,669 |
+
+2021Q4 comes from GAS's own 2021Q4 form, filed **before** the shifted 2022Q4
+form (`GAS-20230130`, disclosed 2023-01-30) that dropped its comparative: its
+current-year column was never shifted. 2022Q3 and 2022Q4 come from the
+prior-year columns of later forms. Each value equals line 62 of the shifted
+column for that quarter, which held the profit to the parent, so the three
+agree with the evidence of sprint 8.3 §5.
+
+The other five quarters (2021Q1, 2021Q3, 2022Q1, 2023Q1, 2024Q1) have no
+profit, so a GAS session whose trailing year includes one of them has no TTM
+profit, EPS, P/E or ROE. 2022Q3 and 2022Q4 are known only from those later
+forms' disclosure dates. Checked at 2023-06-01: absent, "profit for 2021Q3 is
+not known".
 
 ## Point in time
 
