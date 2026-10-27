@@ -1,6 +1,6 @@
 # ADR-035: Cross-sectional transforms — winsorise and z-score, per rebalance, versioned
 
-**Status:** Proposed (Lead, 2026-10-27; for QA + QC review) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.1 (Phase 7)
+**Status:** Proposed (Lead, 2026-10-27; QA + QC review applied) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.1 (Phase 7)
 
 ## Context
 
@@ -32,7 +32,9 @@ nothing else: not other sessions, not other features, not the label.
 2. **Winsorise** at median ± 3 × MAD × 1.4826, the scaled median absolute
    deviation. Values beyond are set to the limit. Robust on 30 names, where a
    percentile clip would just remove the top and bottom name. If MAD is 0, the
-   values are left as they are.
+   values are left as they are: four equal values and one outlier are then
+   z-scored unclipped. Accepted; the outlier still ranks last or first, and a
+   cross-section that degenerate is rare among 30 names.
 3. **Z-score** with the sample mean and the sample standard deviation (n − 1)
    of the winsorised values. If the deviation is 0, the result is empty.
 4. **Absent stays absent.** A name not in the input is not in the output; no

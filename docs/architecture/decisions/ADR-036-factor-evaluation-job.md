@@ -1,6 +1,6 @@
 # ADR-036: The factor evaluation job — one run per trial, on a labelled dataset
 
-**Status:** Proposed (Lead, 2026-10-27; for QA + QC review) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.2 (Phase 7)
+**Status:** Proposed (Lead, 2026-10-27; QA + QC review applied: 1 blocker, 6 minor) · **Date:** 2026-10-27 · **Phase:** Sprint 10, item 10.2 (Phase 7)
 
 ## Context
 
@@ -19,8 +19,9 @@ every run in the U9 store counted in `trial_count`. What exists:
 
 ## Decision
 
-**A trial is one (feature, transform version, quantiles) on one labelled
-dataset. The job evaluates one trial and records one run.**
+**A trial is one `parameters_hash` on one dataset version: every field of the
+payload counts, so changing only the decay horizons is a new trial too. The job
+evaluates one trial and records one run.**
 
 ### 1. The job
 
@@ -40,11 +41,16 @@ refused, as the other handlers do.
 
 | Metric | Definition |
 | --- | --- |
-| `rank_ic` | Spearman correlation of the transformed feature with the label; the current function, renamed `rank_information_coefficient` (the old name stays as an alias for the slice) |
+| `rank_ic` | Spearman correlation of the transformed feature with the label: the existing `information_coefficient`, unchanged, its docstring stating that it is rank IC |
 | `ic` | Pearson correlation of the same pair; a new function, `pearson_information_coefficient` |
 | `spread` | mean label of the top quantile minus the bottom, by `quantile_buckets` |
-| `turnover` | share of the top quantile's names not in the previous rebalance's top quantile; absent at the first rebalance |
+| `turnover` | share of the top quantile's names not in the previous rebalance's top quantile; absent at the first rebalance and whenever the previous rebalance had no top quantile |
 | `coverage` | names with both a feature value and a label |
+
+Every metric reads the **transformed** feature. `wz-1` clips to its limits and
+creates ties, so its rank IC differs from that of `raw`; each is a separate
+trial. When a period has fewer names than `quantiles`, `quantile_buckets` would
+raise, so that period has no `spread` or `turnover` and the job does not stop.
 
 Each series is summarised with `summarise` (mean, deviation, IR, t-statistic)
 and recorded with its period count. Fewer than 3 names, or no spread, leaves a
@@ -62,8 +68,8 @@ varies the horizon, as ADR-034's Trade-offs say.
   period count.
 - For h > `rebalance_every` the labels overlap, so their IC are autocorrelated.
   **No t-statistic is reported for them in v1**, only the mean and the count.
-- At h = `rebalance_every`, decay must equal the main rank IC exactly. It is a
-  test that the two paths agree.
+- At h = `rebalance_every` and the same transform, decay must equal the main
+  rank IC exactly. It is a test that the two paths agree.
 
 ### 4. Factor correlation
 
@@ -71,7 +77,10 @@ Not a per-trial metric: it needs two features. A separate job,
 `factor_correlation`, takes a dataset and a transform version. Per rebalance it
 computes the Spearman correlation of every pair of features, then averages.
 Pooling across sessions is not used, because it mixes the cross-section with
-time. It is recorded as one run, which is not a trial: it ranks nothing.
+time. It ranks nothing, so it must not touch the evaluation's count. The store
+requires an index on every run that is not a reproduction (`ck_runs_trial`),
+so the run is recorded under its own experiment, `<experiment>-correlation`,
+where it takes an index without changing the evaluation's `trial_count`.
 
 ### 5. The run record and `trial_count`
 
@@ -79,7 +88,9 @@ time. It is recorded as one run, which is not a trial: it ranks nothing.
   `parameters` = the payload without `experiment`. `parameters_hash` makes the
   same configuration hash the same.
 - Every evaluation run takes a `trial_index`, including one whose metrics are
-  all absent: an empty result is still a configuration that was tried.
+  all absent, and one whose job failed after the payload was accepted (recorded
+  with status `failed`): both are configurations that were tried. A payload
+  refused before it runs is not a trial.
 - A reproduction (same dataset version, parameters, code) is recorded with
   `reproduces_run_id` and no index, as today. A changed transform version,
   quantile count or dataset is a new trial.
@@ -113,8 +124,9 @@ job must fail with the harness's error, not score it.
 
 ## Consequences
 
-- `analytics.information`: `rank_information_coefficient` (renamed, with an
-  alias) and `pearson_information_coefficient`.
+- `analytics.information`: `information_coefficient` stays (rank IC, as its
+  docstring says), plus `pearson_information_coefficient`. No rename, so the
+  momentum slice and its recorded runs are unchanged.
 - `worker.handlers`: `factor_evaluation` and `factor_correlation`, registered in
   `default_handlers`; `reproduce_run` accepts `factor_evaluation` runs.
 - `research.experiments`: no import of `momentum_slice`.
