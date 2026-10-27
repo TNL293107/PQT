@@ -7,16 +7,20 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 
 from personal_quant.factors.momentum import Momentum
+from personal_quant.research.datasets import LocalDatasetProvider
+from personal_quant.research.experiments import RecordedRun
 from personal_quant.research.protocols import FeatureEngine, History, Lookback
 from personal_quant.worker.handlers import (
     JobRejectedError,
     TrialFailedError,
     factor_correlation_handler,
     factor_evaluation_handler,
+    reproduce_run_handler,
 )
 from synthetic import SyntheticBar, SyntheticDataset, weekdays, write_dataset
 
@@ -226,3 +230,39 @@ def test_the_metrics_read_the_transformed_feature(tmp_path: Path) -> None:
     assert raw is not None
     assert wz is not None
     assert raw.metrics["ic_mean"] != wz.metrics["ic_mean"]
+
+
+class _Runs:
+    def __init__(self, run: RecordedRun) -> None:
+        self.run = run
+
+    def load(self, run_id: UUID) -> RecordedRun | None:
+        return self.run if run_id == self.run.run_id else None
+
+
+def test_a_reproduction_that_fails_is_not_a_new_trial(tmp_path: Path) -> None:
+    # The recorded run succeeded; its re-execution now fails. The failed run
+    # must name what it reproduced, so the store gives it no trial index.
+    _write(tmp_path, [_Crashes()])
+    manifest = LocalDatasetProvider(tmp_path).open(DATASET).manifest
+    recorded = RecordedRun(
+        run_id=uuid4(),
+        experiment="evaluation",
+        strategy="factor_evaluation",
+        status="succeeded",
+        dataset_id=DATASET,
+        dataset_version=1,
+        content_hash=manifest.content_hash,
+        factor_version="crashes@1",
+        parameters={
+            key: value for key, value in _payload(feature="crashes").items() if key != "experiment"
+        },
+        metrics={},
+        commit=None,
+    )
+
+    with pytest.raises(TrialFailedError) as failure:
+        reproduce_run_handler(tmp_path, _Runs(recorded), ENGINES)({"run_id": str(recorded.run_id)})
+
+    assert failure.value.run.status == "failed"
+    assert failure.value.run.reproduces_run_id == recorded.run_id

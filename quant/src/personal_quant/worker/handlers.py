@@ -337,9 +337,16 @@ def reproduce_run_handler(
                 f"{manifest.content_hash}, not the {recorded.content_hash} the run read."
             )
 
-        rerun = (momentum if recorded.strategy == MOMENTUM_SLICE else evaluation)(
-            {**recorded.parameters, "experiment": recorded.experiment}
-        )
+        try:
+            rerun = (momentum if recorded.strategy == MOMENTUM_SLICE else evaluation)(
+                {**recorded.parameters, "experiment": recorded.experiment}
+            )
+        except TrialFailedError as failure:
+            # A failed reproduction is not a trial (ADR-036 §5): it names the run
+            # it re-executed, keeps status failed and takes no index.
+            failure.run = replace(failure.run, reproduces_run_id=run_id)
+            raise
+
         assert rerun.run is not None  # noqa: S101 - both handlers always record one
 
         differences = compare_metrics(recorded.metrics, rerun.run.metrics)
