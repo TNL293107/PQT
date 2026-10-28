@@ -101,6 +101,11 @@ Decisions inside the table:
   traded) is basis-free and comparable across names, so the feature reads it.
   It is in `bars.parquet` but not yet in the Python `Bar` or the DuckDB `bars`
   view; adding it is a small reader change in sprint 9.
+  *Amended 2026-10-28:* the reader change landed, but CafeF reports no turnover
+  on any bar, so `liquidity_20` is absent everywhere. The Moderator left it out
+  of the Phase 7 report; the entry stays, unchanged, until a source reports
+  turnover. Close × volume is not a substitute: it is not basis-free across
+  corporate actions.
 
 ### 4. How a feature is shown to be point-in-time
 

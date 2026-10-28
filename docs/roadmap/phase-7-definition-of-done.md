@@ -13,7 +13,7 @@ not.
 | 1 | The labelled dataset is real (ADR-034) | A VN30 export from a request (`pqt dataset export --request`), verified in .NET and Python; `LabelledDataset.open` prints the window: first and last scored session, rebalances, names per rebalance (min, median, max) | |
 | 2 | The catalogue is complete (ADR-033) | All 8 entries in the registry with name, version, inputs, lookback, absence and direction; each with the four §4 tests, gated with every mutant killed | Sprint 9: gates `ba24601` … `5278c5e` (`evidence/sprint-9.md`) |
 | 3 | Transforms are versioned and per rebalance (ADR-035) | `raw` and `wz-1`; the hand-computed 5-name case; a change at another session does not change this session's output | |
-| 4 | Every factor is evaluated through the job (ADR-036) | One `factor_evaluation` run per feature × transform on the dataset of criterion 1: rank IC and IC series, decay, spread, turnover, coverage, each with its period count; one `factor_correlation` run. The evidence states whether the runs were made before or after the GAS re-import | |
+| 4 | Every factor is evaluated through the job (ADR-036) | One `factor_evaluation` run per feature × transform on the dataset of criterion 1, for the 7 features with data (`liquidity_20` is out, see Known limits): rank IC and IC series, decay, spread, turnover, coverage, each with its period count; one `factor_correlation` run. The evidence states whether the runs were made before or after the GAS re-import | |
 | 5 | The count is honest | Every run in `research.runs` with its `trial_index`; the experiment's latest `trial_count` (its highest `trial_index`) equals the number of configurations run, failed and empty ones included, and re-running a configuration without `reproduces_run_id` counts as a new trial; one evaluation run reproduced with `compare_metrics` identical | |
 | 6 | No leak | The look-ahead canary (a feature reading the t + h close) is refused through the job; decay past `to` is dropped; labels are read only outside the harness | |
 | 7 | The report says what it can | A first VN30 factor report generated from recorded runs: the window statement, the ADR-033 §5 sentence ("exploratory"), the `trial_count` beside every number, no ranking of factors by significance; the known limits below stated | |
@@ -22,6 +22,10 @@ not.
 
 ## Known limits that do not block Phase 7
 
+- `liquidity_20` is not evaluated and not in the Phase 7 report (Moderator,
+  2026-10-28). CafeF bars carry no turnover (0 of 22,545 daily bars since
+  2024), so the feature is absent at every rebalance. It stays in the catalogue
+  and comes back when a source reports turnover.
 - About 26 monthly cross-sections of at most 30 names; every result is
   exploratory (ADR-033 §5).
 - No sector-neutral transform: the dataset carries no point-in-time sector
