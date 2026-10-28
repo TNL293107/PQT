@@ -25,7 +25,9 @@ not.
 - `liquidity_20` is not evaluated and not in the Phase 7 report (Moderator,
   2026-10-28). CafeF bars carry no turnover (0 of 22,545 daily bars since
   2024), so the feature is absent at every rebalance. It stays in the catalogue
-  and comes back when a source reports turnover.
+  and comes back when a source reports turnover. If a request still names it,
+  its pairs in the `factor_correlation` run are absent (it has no values), and
+  the report says so rather than leaving them out silently.
 - About 26 monthly cross-sections of at most 30 names; every result is
   exploratory (ADR-033 §5).
 - No sector-neutral transform: the dataset carries no point-in-time sector
