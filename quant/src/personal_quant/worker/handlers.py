@@ -14,32 +14,40 @@ any other kind fails as having no handler.
 
 from __future__ import annotations
 
+import math
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
+from personal_quant.analytics.evaluation import evaluate_factor, factor_correlation
 from personal_quant.factors.momentum import Momentum
+from personal_quant.factors.transforms import TRANSFORMS
 from personal_quant.research.datasets import LocalDatasetProvider
 from personal_quant.research.experiments import (
     RecordedRun,
     RunRecord,
     code_commit,
     compare_metrics,
-    slice_metrics,
 )
+from personal_quant.research.history import PointInTimeError
+from personal_quant.research.labelled import LabelledDataset
 from personal_quant.research.momentum_slice import SliceResult, run_momentum_slice
+from personal_quant.research.protocols import FeatureEngine
 
 __all__ = [
     "Handler",
     "JobOutcome",
     "JobRejectedError",
     "RunReader",
+    "TrialFailedError",
     "default_handlers",
     "describe",
+    "factor_correlation_handler",
+    "factor_evaluation_handler",
     "momentum_slice_handler",
     "reproduce_run_handler",
 ]
@@ -52,8 +60,26 @@ _MOMENTUM_FIELDS = frozenset(
 _MAX_QUANTILES = 100
 _MAX_REBALANCE = 252
 
+_EVALUATION_FIELDS = frozenset(
+    {
+        "experiment",
+        "dataset_id",
+        "dataset_version",
+        "feature",
+        "transform_version",
+        "quantiles",
+        "decay_horizons",
+    }
+)
+_CORRELATION_FIELDS = frozenset(
+    {"experiment", "dataset_id", "dataset_version", "transform_version"}
+)
+_MAX_HORIZON = 252
+
 MOMENTUM_SLICE = "momentum_slice"
 REPRODUCE_RUN = "reproduce_run"
+FACTOR_EVALUATION = "factor_evaluation"
+FACTOR_CORRELATION = "factor_correlation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +95,18 @@ Handler = Callable[[Mapping[str, Any]], JobOutcome]
 
 class JobRejectedError(ValueError):
     """A job's payload cannot be run; the message says why."""
+
+
+class TrialFailedError(RuntimeError):
+    """A trial failed after its payload was accepted: it is still a trial (ADR-036 §5).
+
+    Carries the run to record with status ``failed``, so the attempt is counted.
+    """
+
+    def __init__(self, cause: Exception, run: RunRecord) -> None:
+        """Wrap what failed with the run that records it."""
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.run = run
 
 
 class RunReader(Protocol):
@@ -131,7 +169,118 @@ def momentum_slice_handler(dataset_root: Path) -> Handler:
     return handle
 
 
-def reproduce_run_handler(dataset_root: Path, runs: RunReader) -> Handler:
+def factor_evaluation_handler(
+    dataset_root: Path, engines: Sequence[FeatureEngine] | None = None
+) -> Handler:
+    """Build the handler that evaluates one feature on a labelled dataset (ADR-036).
+
+    One job is one trial: every payload field counts, and the run is recorded
+    with a trial index. The feature's version and lookback come from the
+    dataset's request, so the payload cannot name one the build was not made for.
+
+    Args:
+        dataset_root: The directory the backend exports datasets into.
+        engines: The features available; the catalogue's when ``None``.
+
+    Returns:
+        The handler.
+    """
+    provider = LocalDatasetProvider(dataset_root)
+
+    def handle(payload: Mapping[str, Any]) -> JobOutcome:
+        _exactly(payload, _EVALUATION_FIELDS)
+        experiment, dataset_id, version, transform = _labelled_payload(payload)
+        quantiles = _whole(payload, "quantiles", 0, 1, _MAX_QUANTILES)
+        horizons = payload["decay_horizons"]
+
+        if not isinstance(horizons, list) or not horizons:
+            raise JobRejectedError("'decay_horizons' must be a non-empty list of whole numbers.")
+
+        for horizon in horizons:
+            _whole({"decay_horizons": horizon}, "decay_horizons", 0, 1, _MAX_HORIZON)
+
+        started = datetime.now(UTC)
+        labelled = LabelledDataset.open(provider, dataset_id, engines, version)
+        declared = {feature.name: feature for feature in labelled.request.features}
+        feature = payload["feature"]
+
+        if feature not in declared:
+            raise JobRejectedError(
+                f"Dataset {dataset_id} v{version} was not built for '{feature}'; "
+                f"its request names {', '.join(sorted(declared))}."
+            )
+
+        parameters = {key: value for key, value in payload.items() if key != "experiment"}
+        factor_version = f"{feature}@{declared[feature].version}"
+
+        try:
+            metrics = evaluate_factor(labelled, feature, TRANSFORMS[transform], quantiles, horizons)
+        except PointInTimeError:
+            # A feature that read what it could not have had is a defect, not a
+            # trial: the job fails with the harness's own error (ADR-036 §6).
+            raise
+        except Exception as error:
+            failed = _labelled_run(
+                experiment, FACTOR_EVALUATION, factor_version, labelled, parameters, {}, started
+            )
+            raise TrialFailedError(error, replace(failed, status="failed")) from error
+
+        run = _labelled_run(
+            experiment, FACTOR_EVALUATION, factor_version, labelled, parameters, metrics, started
+        )
+
+        return JobOutcome(result={"feature": feature, "metrics": _json(metrics)}, run=run)
+
+    return handle
+
+
+def factor_correlation_handler(
+    dataset_root: Path, engines: Sequence[FeatureEngine] | None = None
+) -> Handler:
+    """Build the handler that averages pairwise feature correlations (ADR-036 §4).
+
+    It ranks nothing, so it is recorded under ``<experiment>-correlation`` and
+    leaves the evaluation's ``trial_count`` as it was.
+
+    Args:
+        dataset_root: The directory the backend exports datasets into.
+        engines: The features available; the catalogue's when ``None``.
+
+    Returns:
+        The handler.
+    """
+    provider = LocalDatasetProvider(dataset_root)
+
+    def handle(payload: Mapping[str, Any]) -> JobOutcome:
+        _exactly(payload, _CORRELATION_FIELDS)
+        experiment, dataset_id, version, transform = _labelled_payload(payload)
+
+        started = datetime.now(UTC)
+        labelled = LabelledDataset.open(provider, dataset_id, engines, version)
+        metrics = factor_correlation(labelled, TRANSFORMS[transform])
+        features = ",".join(
+            f"{feature.name}@{feature.version}"
+            for feature in sorted(labelled.request.features, key=lambda feature: feature.name)
+        )
+        parameters = {key: value for key, value in payload.items() if key != "experiment"}
+        run = _labelled_run(
+            f"{experiment}-correlation",
+            FACTOR_CORRELATION,
+            features[:128],
+            labelled,
+            parameters,
+            metrics,
+            started,
+        )
+
+        return JobOutcome(result={"metrics": _json(metrics)}, run=run)
+
+    return handle
+
+
+def reproduce_run_handler(
+    dataset_root: Path, runs: RunReader, engines: Sequence[FeatureEngine] | None = None
+) -> Handler:
     """Build the handler that re-executes a recorded run and diffs its metrics.
 
     Refuses when the run's input is gone or changed (a different content hash
@@ -143,12 +292,14 @@ def reproduce_run_handler(dataset_root: Path, runs: RunReader) -> Handler:
     Args:
         dataset_root: The directory the backend exports datasets into.
         runs: Where the recorded run is read.
+        engines: The features a factor evaluation may name; the catalogue's when ``None``.
 
     Returns:
         The handler.
     """
     provider = LocalDatasetProvider(dataset_root)
     momentum = momentum_slice_handler(dataset_root)
+    evaluation = factor_evaluation_handler(dataset_root, engines)
 
     def handle(payload: Mapping[str, Any]) -> JobOutcome:
         if set(payload) != {"run_id"}:
@@ -164,14 +315,16 @@ def reproduce_run_handler(dataset_root: Path, runs: RunReader) -> Handler:
         if recorded is None:
             raise JobRejectedError(f"No research run {run_id} is recorded.")
 
-        if recorded.strategy != MOMENTUM_SLICE:
+        if recorded.strategy not in (MOMENTUM_SLICE, FACTOR_EVALUATION):
             raise JobRejectedError(
                 f"Run {run_id} ran '{recorded.strategy}', which cannot be reproduced."
             )
 
+        # A factor evaluation's feature version is checked against the dataset's
+        # request when the labelled dataset is opened.
         current = _factor_version(Momentum())
 
-        if recorded.factor_version != current:
+        if recorded.strategy == MOMENTUM_SLICE and recorded.factor_version != current:
             raise JobRejectedError(
                 f"Run {run_id} used {recorded.factor_version}; this code computes {current}."
             )
@@ -184,8 +337,17 @@ def reproduce_run_handler(dataset_root: Path, runs: RunReader) -> Handler:
                 f"{manifest.content_hash}, not the {recorded.content_hash} the run read."
             )
 
-        rerun = momentum({**recorded.parameters, "experiment": recorded.experiment})
-        assert rerun.run is not None  # noqa: S101 - the momentum handler always records one
+        try:
+            rerun = (momentum if recorded.strategy == MOMENTUM_SLICE else evaluation)(
+                {**recorded.parameters, "experiment": recorded.experiment}
+            )
+        except TrialFailedError as failure:
+            # A failed reproduction is not a trial (ADR-036 §5): it names the run
+            # it re-executed, keeps status failed and takes no index.
+            failure.run = replace(failure.run, reproduces_run_id=run_id)
+            raise
+
+        assert rerun.run is not None  # noqa: S101 - both handlers always record one
 
         differences = compare_metrics(recorded.metrics, rerun.run.metrics)
         now = code_commit()
@@ -217,6 +379,8 @@ def default_handlers(dataset_root: Path, runs: RunReader) -> dict[str, Handler]:
     return {
         MOMENTUM_SLICE: momentum_slice_handler(dataset_root),
         REPRODUCE_RUN: reproduce_run_handler(dataset_root, runs),
+        FACTOR_EVALUATION: factor_evaluation_handler(dataset_root),
+        FACTOR_CORRELATION: factor_correlation_handler(dataset_root),
     }
 
 
@@ -289,6 +453,114 @@ def _record(
         started_at=started,
         finished_at=datetime.now(UTC),
     )
+
+
+def slice_metrics(result: SliceResult) -> dict[str, float | None]:
+    """Reduce a momentum-slice result to the metrics a run records.
+
+    Args:
+        result: The slice's result.
+
+    Returns:
+        The metrics by name.
+    """
+    info = result.information
+    spread = [item.value for item in result.series("spread")]
+
+    return {
+        "periods": float(len(result.periods)),
+        "ic_periods": float(info.periods),
+        "ic_mean": info.mean,
+        "ic_deviation": info.deviation,
+        "information_ratio": info.information_ratio,
+        "t_statistic": info.t_statistic,
+        "top_compounded": _compound(result, "top"),
+        "bottom_compounded": _compound(result, "bottom"),
+        "spread_mean": sum(spread) / len(spread) if spread else None,
+        "spread_positive_share": (
+            sum(value > 0 for value in spread) / len(spread) if spread else None
+        ),
+    }
+
+
+def _compound(result: SliceResult, which: str) -> float | None:
+    series = result.series(which)
+
+    if not series:
+        return None
+
+    return math.prod(1.0 + item.value for item in series) - 1.0
+
+
+def _labelled_payload(payload: Mapping[str, Any]) -> tuple[str, str, int, str]:
+    experiment = payload["experiment"]
+
+    if not isinstance(experiment, str) or _EXPERIMENT.fullmatch(experiment) is None:
+        raise JobRejectedError(f"'{experiment}' is not an experiment name.")
+
+    dataset_id = payload["dataset_id"]
+
+    if not isinstance(dataset_id, str) or _DATASET_ID.fullmatch(dataset_id) is None:
+        raise JobRejectedError(f"'{dataset_id}' is not a dataset id.")
+
+    version = _whole(payload, "dataset_version", 0, 1, None)
+    transform = payload["transform_version"]
+
+    if transform not in TRANSFORMS:
+        raise JobRejectedError(
+            f"'{transform}' is not a transform version ({', '.join(sorted(TRANSFORMS))})."
+        )
+
+    return experiment, dataset_id, version, str(transform)
+
+
+def _exactly(payload: Mapping[str, Any], fields: frozenset[str]) -> None:
+    unknown = sorted(set(payload) - fields)
+
+    if unknown:
+        raise JobRejectedError(f"Unknown payload field(s): {', '.join(unknown)}.")
+
+    missing = sorted(fields - set(payload))
+
+    if missing:
+        raise JobRejectedError(f"Missing payload field(s): {', '.join(missing)}.")
+
+
+def _labelled_run(
+    experiment: str,
+    strategy: str,
+    factor_version: str,
+    labelled: LabelledDataset,
+    parameters: Mapping[str, Any],
+    metrics: Mapping[str, float | None],
+    started: datetime,
+) -> RunRecord:
+    manifest = labelled.dataset.manifest
+
+    return RunRecord(
+        experiment=experiment,
+        strategy=strategy,
+        universe_code=manifest.universe_code,
+        universe_as_of=None,
+        membership=manifest.membership,
+        dataset_id=manifest.dataset_id,
+        dataset_version=manifest.dataset_version,
+        schema_version=manifest.schema_version,
+        content_hash=manifest.content_hash,
+        factor_version=factor_version,
+        parameters=parameters,
+        metrics=metrics,
+        started_at=started,
+        finished_at=datetime.now(UTC),
+    )
+
+
+def _json(metrics: Mapping[str, float | None]) -> dict[str, float | None]:
+    # jsonb has no NaN or infinity; such a metric is reported as absent.
+    return {
+        name: None if value is None or not math.isfinite(value) else value
+        for name, value in metrics.items()
+    }
 
 
 def _factor_version(factor: Momentum) -> str:

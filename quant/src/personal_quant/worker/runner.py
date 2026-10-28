@@ -18,7 +18,8 @@ import threading
 from collections.abc import Mapping
 from datetime import timedelta
 
-from personal_quant.worker.handlers import Handler, JobRejectedError
+from personal_quant.research.experiments import RunRecord
+from personal_quant.worker.handlers import Handler, JobRejectedError, TrialFailedError
 from personal_quant.worker.queue import Job, JobQueue, LeaseLostError
 
 __all__ = ["Worker"]
@@ -104,6 +105,10 @@ class Worker:
         except JobRejectedError as rejection:
             self._fail(job, f"Rejected: {rejection}")
             return
+        except TrialFailedError as failure:
+            _log.exception("Job %s failed as a trial.", job.id)
+            self._fail(job, str(failure), failure.run)
+            return
         except Exception as error:
             _log.exception("Job %s failed.", job.id)
             self._fail(job, f"{type(error).__name__}: {error}")
@@ -117,9 +122,9 @@ class Worker:
 
         _log.info("Job %s succeeded.", job.id)
 
-    def _fail(self, job: Job, error: str) -> None:
+    def _fail(self, job: Job, error: str, run: RunRecord | None = None) -> None:
         try:
-            self._queue.fail(job, self._name, error[:_MAX_ERROR_LENGTH])
+            self._queue.fail(job, self._name, error[:_MAX_ERROR_LENGTH], run)
         except LeaseLostError:
             _log.warning("Job %s failed after its lease was lost; error discarded.", job.id)
             return

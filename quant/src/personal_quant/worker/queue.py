@@ -64,8 +64,8 @@ class JobQueue(Protocol):
         """Record a job's result, and its run when it produced one."""
         ...
 
-    def fail(self, job: Job, worker: str, error: str) -> None:
-        """Record why a job failed."""
+    def fail(self, job: Job, worker: str, error: str, run: RunRecord | None = None) -> None:
+        """Record why a job failed, and the failed trial when it was one."""
         ...
 
 
@@ -161,18 +161,23 @@ class PostgresJobQueue:
                 {"result": Jsonb(recorded)},
             )
 
-    def fail(self, job: Job, worker: str, error: str) -> None:
-        """Record why a job failed.
+    def fail(self, job: Job, worker: str, error: str, run: RunRecord | None = None) -> None:
+        """Record why a job failed, and the failed trial when it was one.
 
         Args:
             job: The job.
             worker: This worker's name.
             error: What went wrong, for the operator.
+            run: The failed run, for a job that failed after its payload was
+                accepted as a trial (ADR-036 §5); recorded in the same transaction.
 
         Raises:
             LeaseLostError: The job is no longer this worker's.
         """
         with self._connection.transaction(), self._connection.cursor() as cursor:
+            if run is not None:
+                insert_run(cursor, self._schema, job.id, run)
+
             self._update(
                 cursor,
                 job,
