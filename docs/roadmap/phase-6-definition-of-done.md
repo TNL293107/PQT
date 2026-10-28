@@ -50,7 +50,7 @@ Moderator names one.
 | Flaky `Console.test.tsx` | DoD #8 | UI/UX phase |
 | GAS has no 2025Q1–Q3 forms, so every TTM after 2024Q4 has a gap, 2025Q4 included (a quarter's profit is derived from YTD, and the 2025Q3 YTD is missing); GAS `value_ep` and `quality_roe` are absent at every session of the 9.1 build | Tester + Audit, 2026-10-27, `tmp/audit-0e7d28336af399e1/gas25.txt` | later (collection) |
 | Circular 99 reports (the fiscal-2026 template) are held with no values: 99 in the database, 0 with values. Every name loses fundamentals from fiscal 2026 until they are read | Tester + Audit, 2026-10-27, `tmp/audit-0e7d28336af399e1/c99.txt` | later (affects all names) |
-| CafeF bars carry no turnover (0 of 22,545 daily bars since 2024), so `liquidity_20` is absent everywhere | Dev, 9.1 export, 2026-10-27 | decision pending (Moderator) |
+| CafeF bars carry no turnover (0 of 22,545 daily bars since 2024), so `liquidity_20` is absent everywhere; left out of the Phase 7 report (Moderator, 2026-10-28) | Dev, 9.1 export, 2026-10-27 | later (needs a turnover source) |
 | VN30 membership is sourced to 2026-09-17 while bars run to 2026-10-12; the next HOSE review table extends it | Dev, 9.1 export, 2026-10-27 | later (data) |
 
 Closed in sprint 9: P1, GAS's five shifted forms, purged and re-imported with the shifted lines absent (`evidence/sprint-9-gas-p1.md`).
