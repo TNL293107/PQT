@@ -39,7 +39,6 @@ Moderator names one.
 | STB and GVR not collected (IDS filing page fault) | ADR-029 note 2026-10-21 | later |
 | VNM 2025 Q2 and H1 not listed by IDS | ADR-029 note 2026-10-21 | later |
 | LPB: 11 unclassified quarterlies (2021Q4 → 2024Q2) stay refused | sprint-8-3.md §2 | later |
-| P1: GAS income lines shifted on five forms; profit 61 read as a known 0 | sprint-8-3.md §5 | sprint 9 (proposed) |
 | P2: VPB 2025Q4 form recorded as 2024Q4; a `PeriodConflict` rule | sprint-8-3.md §4 | sprint 9 (proposed) |
 | P3: ACB 2023 H1 separate form recorded as consolidated; rule 211 > 0 | sprint-8-3.md §3 | sprint 9 (proposed) |
 | P4: separate reports with consolidated-only lines and no twin (MBB 2021Q4, POW, VCB, VIC 2022, ACB 2024 annual) | sprint-8-3.md §3 | sprint 9 (proposed) |
@@ -48,6 +47,12 @@ Moderator names one.
 | MBB two capital values (repeated form); ACB 2022 Q1–Q3 forms with no values | sprint 7 backlog | later |
 | Whether `SharesAt` counts stock-dividend shares correctly between the ex-date and the issue (2–5 weeks) | sprint-8-1-steps.md | later |
 | Flaky `Console.test.tsx` | DoD #8 | UI/UX phase |
+| GAS has no 2025Q1–Q3 forms, so every TTM after 2024Q4 has a gap and GAS `value_ep` and `quality_roe` are absent at every session of the 9.1 build | Tester + Audit, 2026-10-27, `tmp/audit-0e7d28336af399e1` | later (collection) |
+| Circular 99 reports (the fiscal-2026 template) are held with no values: 99 in the database, 0 with values. Every name loses fundamentals from fiscal 2026 until they are read | Tester + Audit, 2026-10-27 | later (affects all names) |
+| CafeF bars carry no turnover (0 of 22,545 daily bars since 2024), so `liquidity_20` is absent everywhere | Dev, 9.1 export, 2026-10-27 | decision pending (Moderator) |
+| VN30 membership is sourced to 2026-09-17 while bars run to 2026-10-12; the next HOSE review table extends it | Dev, 9.1 export, 2026-10-27 | later (data) |
+
+Closed in sprint 9: P1, GAS's five shifted forms, purged and re-imported with the shifted lines absent (`evidence/sprint-9-gas-p1.md`).
 
 Closed in sprint 8: the ACB/SHB/SSB/VIB shared-form check (SHB, SSB, VIB are
 consolidated; ACB is P3); the 22 refusals (confirmed correct); the 111 dropped
