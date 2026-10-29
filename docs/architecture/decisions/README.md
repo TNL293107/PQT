@@ -45,6 +45,7 @@ reasoning at the time is preserved.
 | [034](ADR-034-labelled-dataset-spec.md)                     | The labelled-dataset specification: a request recorded in the manifest (v5) | Accepted |
 | [035](ADR-035-cross-sectional-transforms.md)               | Cross-sectional transforms: winsorise and z-score per rebalance, versioned | Accepted |
 | [036](ADR-036-factor-evaluation-job.md)                     | The factor evaluation job: one run per trial on a labelled dataset | Accepted |
+| [037](ADR-037-calibration-and-expected-value.md)            | The probability-calibration and expected-value substrate | Accepted |
 
 ## Format
 
