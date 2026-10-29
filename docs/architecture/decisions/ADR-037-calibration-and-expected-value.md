@@ -1,6 +1,6 @@
 # ADR-037: The probability-calibration and expected-value substrate
 
-**Status:** Proposed (Lead, 2026-10-29; QA + QC review applied: 2 blockers, 5 minor) · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.1 (Phase 7)
+**Status:** Accepted (Lead, 2026-10-29, after QA + QC review: 2 blockers and 5 minor points, all applied) · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.1 (Phase 7)
 
 ## Context
 
