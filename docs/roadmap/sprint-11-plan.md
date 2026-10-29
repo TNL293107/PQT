@@ -16,7 +16,7 @@ All four branches start at `b08c375` (`main` = `staging` = `uat` = `develop`).
 | 11.3 | **Alpha158 behind `FeatureEngine` and the Qlib run mapper** | Roadmap item; optional (it needs the Qlib environment). Native factors already carry the Phase 7 claims | Dev, optional |
 | 11.4 | **Read Circular 99 reports** (the fiscal-2026 template) | 99 reports are held with no values, so every name loses fundamentals from fiscal 2026. The largest data gap, and it widens each quarter | Dev, data |
 | 11.5 | **Queue `factor_evaluation` from the backend** | Sprint 10's runs were a direct call (`job_id` NULL); `ResearchJobService` has no such job kind | Dev, small |
-| 11.6 | **Close**: re-run the Phase 7 definition of done with 11.1–11.3 as criterion 9 | | Lead |
+| 11.6 | **Close**: a fresh labelled export (11.4 changes the fiscal-2026 fundamentals), the evaluations re-run through the queue (11.5) under a **new experiment name** so `trial_count` starts clean instead of adding to `phase-7-vn30`, the Phase 7 report refreshed, and the definition of done re-run with 11.1–11.3 as criterion 9 | Sprint 10's 14-trial evidence goes stale once 11.4 and 11.5 land (QA + QC, 2026-10-28) | Lead, Dev |
 
 Order: 11.4 and 11.1's ADR first, since they gate the rest; then 11.2 and 11.5;
 11.3 if time allows. If 11.3 does not fit, criterion 9 records it as moved
