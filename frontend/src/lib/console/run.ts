@@ -9,6 +9,7 @@ import {
   fetchQualityIssues,
 } from "../api/marketData";
 import { fetchRatios } from "../api/fundamentals";
+import { fetchResearchRuns } from "../api/research";
 import { fetchBreadth, fetchUniverses, UniverseApiError } from "../api/universes";
 import { parseEntry, readCount } from "./entry";
 import { liveOperatorServices, runKey, runWatchlist, runWorkspace, type OperatorServices } from "./operator";
@@ -30,6 +31,9 @@ export interface ConsoleServices {
   readonly health: typeof fetchSystemHealth;
   readonly universes: typeof fetchUniverses;
   readonly breadth: typeof fetchBreadth;
+
+  /** Recorded research runs. Absent means the live API. */
+  readonly runs?: typeof fetchResearchRuns;
 
   /** The key, watchlists and workspaces. Absent means the live ones. */
   readonly operator?: OperatorServices;
@@ -102,6 +106,9 @@ export async function runEntry(
 
       case "BREADTH":
         return { record: await breadth(entry.securityQuery, entry.options, services, signal) };
+
+      case "RUNS":
+        return { record: await researchRuns(entry.options, services, signal) };
 
       case "KEY":
         return { record: runKey(entry.securityQuery, services.operator ?? liveOperatorServices) };
@@ -176,6 +183,34 @@ export async function runEntry(
       ),
     };
   }
+}
+
+/**
+ * Reads recorded research runs (sprint 11.2).
+ *
+ * `--limit` must be a positive whole number; anything else is refused rather
+ * than silently replaced by the default.
+ */
+async function researchRuns(
+  options: Readonly<Record<string, string | null>>,
+  services: ConsoleServices,
+  signal?: AbortSignal,
+): Promise<ConsoleRecord> {
+  const limitText = options["limit"];
+  let limit: number | undefined;
+
+  if (limitText !== undefined) {
+    limit = Number(limitText);
+
+    if (limitText === null || !Number.isInteger(limit) || limit < 1 || limit > 500) {
+      return failure(`--limit ${limitText ?? ""} is not a whole number from 1 to 500.`.replace("  ", " "), "runs --limit 20");
+    }
+  }
+
+  const experiment = options["experiment"] ?? undefined;
+  const read = services.runs ?? fetchResearchRuns;
+
+  return { kind: "runs", runs: await read(experiment, limit, signal) };
 }
 
 async function find(
