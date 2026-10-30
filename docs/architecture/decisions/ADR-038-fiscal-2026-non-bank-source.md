@@ -1,6 +1,6 @@
 # ADR-038: Values for non-bank statements from fiscal 2026 — the IDS record dates them, a vendor supplies them
 
-**Status:** Proposed (Lead, 2026-10-29; needs the Moderator's choice and verification 1 below) · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.4 (Phase 7)
+**Status:** Proposed (Lead, 2026-10-29; QA + QC review applied: 1 blocker, 5 minor; needs the Moderator's choice and verifications 1 and 2 below) · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.4 (Phase 7)
 
 ## Context
 
@@ -54,29 +54,49 @@ decision 3 provides. Nothing else about the model changes.**
 3. **Join rule.** A vendor filing attaches to the IDS report of the same
    ticker, scope, fiscal year and period. The report's `ValuesFiled` stays
    false (the form was blank); its lines carry `Vendor`. A mismatch is a
-   finding, as ADR-029's trade-offs say.
-4. **Restatement leak, stated and bounded.** A vendor may show the latest
-   restatement against the first filing's date (ADR-029 trade-off). Every
-   value carries `Vendor`, so a read can say what share of what it served was
-   vendor-sourced, and the dataset's `fundamentals` object records the count.
+   finding, as ADR-029's trade-offs say. "The same period" includes the
+   period type: a vendor Q2 attaches to the IDS Q2 report and an H1 to the H1
+   report (the 2026 filings are 64 quarterly and 35 half-year), and a vendor
+   period with no IDS report of that type is a finding, never attached to a
+   neighbour. `reported_at` is always the IDS report's date; a vendor's own
+   date is never used.
+4. **Restatement leak: exposure and rate, measured separately.** A vendor
+   may show the latest restatement against the first filing's date (ADR-029
+   trade-off). Two different quantities:
+   - the **exposure**, the share of served values that are vendor-sourced:
+     every value carries `Vendor`, so a read reports it, and the dataset's
+     `fundamentals` object records the count;
+   - the **leak rate**, how often a vendor value is a restatement rather than
+     the first filing: it comes from verification 2's sample, not from any
+     count in the store.
+
    Where a later IDS form is filled (an issuer re-files, or IDS updates its
-   form), the `as_filed` value becomes a revision, not an overwrite.
-5. **Template mapping.** If Vietcap presents Circular 99 line codes, the five
-   canonical items (revenue, profit to the parent, total assets, equity to the
-   parent, basic EPS) are mapped once in `StatementLines` for the
-   `NonFinancialCircular99` template, the same way the C200 and bank columns
-   are mapped today. If it presents its own labels, the mapping is by label,
-   kept in a fixture, and an unmapped item is absent, never zero.
+   form), the `as_filed` reading supersedes the vendor line as a revision,
+   **even when the value is equal**: a change of basis from `Vendor` to
+   `AsFiled` is a revision, not a no-op (`StatementLine.Restate` changes the
+   value or the basis).
+5. **Template mapping.** The five canonical items (revenue, profit to the
+   parent, total assets, equity to the parent, basic EPS) are mapped once in
+   `StatementLines` for the `NonFinancialCircular99` template, the same way the
+   C200 and bank columns are mapped today. Verification 1 decides whether the
+   key is Vietcap's line codes or its labels, and only that one is built. An
+   unmapped item is absent, never zero.
 
 ### Verification before acceptance
 
-1. **Vietcap's statement pages for one VN30 non-bank (FPT), fiscal 2026 Q1
-   and Q2:** which statements, which line items and codes, which periods, and
-   whether a value is the first filing or a restatement (compare FPT 2025Q1
-   against its filled IDS form, which is exact to the đồng). Read-only, one
-   ticker, a person's pace; no collector until this ADR is accepted. This is
-   ADR-029's verification 1 (Vietcap column) and verification 3, deferred
-   there and now needed.
+Read-only, at a person's pace; no collector until this ADR is accepted.
+
+1. **What Vietcap presents** for one VN30 non-bank (FPT), fiscal 2026 Q1 and
+   Q2: which statements, which line items with their codes or labels, which
+   periods (quarter and half-year), consolidated or separate, and the units.
+   This is ADR-029's verification 1, Vietcap column.
+2. **Fidelity, ADR-029's verification 3**, which this decision now depends
+   on: 12 filled fiscal-2024 and 2025 statements, across at least 3 non-bank
+   names and several quarters, compared line by line on the five canonical
+   items against their IDS forms (exact to the đồng). Report n differ out of
+   n total and the reason for each difference (restatement, rounding, units,
+   scope). This is the leak rate in §4; one name and one quarter is not
+   enough to accept on.
 
 If Vietcap exposes no fiscal-2026 non-bank statements, the fallback is the
 alternative below that the Moderator picks, and this ADR is rewritten.
@@ -95,8 +115,11 @@ alternative below that the Moderator picks, and this ADR is rewritten.
 - **Hand-key the five canonical items from the PDFs** for 19 names × 4 periods
   a year. Exact and licence-clean, about 400 numbers a year, each a possible
   typo. Viable as a stop-gap for one or two quarters if the vendor fails
-  verification; recorded as `as_filed` with a `hand_keyed` finding, never
-  silently. Not chosen as the standing source.
+  verification, under a fixed procedure: every number is read twice by
+  independent readings (or once and checked against a vendor value where one
+  exists); it is recorded as `as_filed` with a `hand_keyed` finding, never
+  silently; and it is superseded the moment an `as_filed` form value or a
+  verified vendor value arrives. Not chosen as the standing source.
 - **Leave the gap.** Phase 7's value and quality factors go blind for every
   non-bank from 2026, and so do Phases 8–10. Rejected.
 
@@ -115,12 +138,16 @@ alternative below that the Moderator picks, and this ADR is rewritten.
 - Backend: `VietcapStatementProvider` (`Basis = Vendor`), its own
   `SourceCode`; the join in `FundamentalsImportService`; the C99 mapping in
   `StatementLines`; the dataset manifest's `fundamentals` object gains a
-  `vendor_rows` count. The `NonFinancialCircular99` comment and ADR-029 say
+  `vendor_rows` count. That count enters the content hash, so it is
+  **manifest schema 6**, hashed from schema 6 only (the rule of ADR-031 and
+  ADR-034), with C# and Python parity fixtures as for schema 5. The `NonFinancialCircular99` comment and ADR-029 say
   "a 2026 C200 form left empty" (Dev's small docs PR).
 - Collection: a vendor read for the 19 non-bank VN30 names, fiscal 2026
   onward, paced; the Moderator approves the first import, as for every live
   write.
-- Tests: the join refuses a vendor filing with no IDS record; a vendor value
-  never overwrites an `as_filed` one; an unmapped C99 item is absent; a read
-  reports its vendor share.
+- Tests: the join refuses a vendor filing with no IDS record, and one whose
+  period type has no IDS report; a vendor value never overwrites an
+  `as_filed` one; an `as_filed` reading of an equal value supersedes the
+  vendor line as a revision; an unmapped C99 item is absent; a read reports
+  its vendor share.
 - Phase 7's report states the vendor share of each value feature's inputs.
