@@ -71,13 +71,12 @@ def test_a_model_equal_to_each_bin_s_realised_frequency_has_no_gap_and_a_lower_b
     result = calibrate(predictions, outcomes)
 
     assert result.gap == pytest.approx(0.0, abs=1e-12)
+    assert result.brier is not None
     assert result.brier == pytest.approx(0.19, abs=1e-12)
     assert result.brier <= 0.25
-    assert [(item.count, item.realised) for item in result.bins] == [
-        (10, pytest.approx(0.2)),
-        (10, pytest.approx(0.5)),
-        (10, pytest.approx(0.8)),
-    ]
+    assert [item.count for item in result.bins] == [10, 10, 10]
+    for item, expected in zip(result.bins, [0.2, 0.5, 0.8], strict=True):
+        assert item.realised == pytest.approx(expected)
 
 
 def test_the_gap_is_weighted_by_each_bin_s_count() -> None:
@@ -179,9 +178,14 @@ def test_expected_value_is_absent_when_any_input_is_absent_never_zero(
 ) -> None:
     from personal_quant.analytics.calibration import CostModel, expected_value
 
-    cost = CostModel(buy_fee=0.0015, sell_fee=0.0015, sell_tax=None, spread=0.001, slippage=0.0)
+    incomplete = CostModel(
+        buy_fee=0.0015, sell_fee=0.0015, sell_tax=None, spread=0.001, slippage=0.0
+    )
     full = CostModel(buy_fee=0.0015, sell_fee=0.0015, sell_tax=0.001, spread=0.001, slippage=0.0)
-    inputs = {"p": 0.6, "gain": 0.05, "loss": 0.04, "cost": full}
-    inputs[missing] = cost if missing == "cost" else None
+    # Typed per argument, so mypy still checks each against expected_value's signature.
+    p: float | None = None if missing == "p" else 0.6
+    gain: float | None = None if missing == "gain" else 0.05
+    loss: float | None = None if missing == "loss" else 0.04
+    cost: CostModel | None = incomplete if missing == "cost" else full
 
-    assert expected_value(inputs["p"], inputs["gain"], inputs["loss"], inputs["cost"]) is None
+    assert expected_value(p, gain, loss, cost) is None
