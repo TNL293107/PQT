@@ -1,0 +1,9 @@
+{
+  "dataset_id": "fedcba9876543210",
+  "dataset_version": 1,
+  "feature": "momentum_3_0",
+  "transform_version": "raw",
+  "quantiles": 5,
+  "decay_horizons": [3, 6],
+  "experiment": "acceptance"
+}

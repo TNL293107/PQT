@@ -44,6 +44,14 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
 
     private async Task<int> SubmitAsync(CommandArguments command, CancellationToken cancellationToken)
     {
+        switch (command.Operands)
+        {
+            case ["factor-evaluation"]:
+                return await SubmitFactorEvaluationAsync(command, cancellationToken).ConfigureAwait(false);
+            case ["factor-correlation"]:
+                return await SubmitFactorCorrelationAsync(command, cancellationToken).ConfigureAwait(false);
+        }
+
         if (!command.Validate(
                 ["dataset", "version", "quantiles", "rebalance-every", "experiment", "hypothesis"],
                 out var problem))
@@ -105,6 +113,152 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
 
         output.Line($"{job.Id} queued: {job.Kind} over {datasetId}"
             + (version is { } v ? $" v{v.ToString(CultureInfo.InvariantCulture)}" : " (latest build)")
+            + ". The quant worker will claim it; follow it with 'pqt research show "
+            + $"{job.Id}'.");
+
+        return ExitCode.Ok;
+    }
+
+    private async Task<int> SubmitFactorEvaluationAsync(CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.Validate(
+                ["dataset", "version", "feature", "transform", "quantiles", "decay-horizons", "experiment", "hypothesis"],
+                out var problem))
+        {
+            output.Problem(problem);
+            return ExitCode.Usage;
+        }
+
+        if (!command.TryRequired("dataset", out var datasetId, out var missing)
+            || !command.TryRequired("feature", out var feature, out missing)
+            || !command.TryRequired("transform", out var transform, out missing)
+            || !command.TryRequired("decay-horizons", out var horizonsText, out missing))
+        {
+            output.Problem(missing
+                + " Usage: pqt research submit factor-evaluation --dataset <ID> --feature <NAME> "
+                + "--transform raw|wz-1 --decay-horizons 5,10,21 [--version N] [--quantiles 5] "
+                + "[--experiment NAME] [--hypothesis TEXT]");
+            return ExitCode.Usage;
+        }
+
+        if (!command.TryCount("quantiles", 5, out var quantiles, out var badQuantiles))
+        {
+            output.Problem(badQuantiles);
+            return ExitCode.Usage;
+        }
+
+        if (!TryHorizons(horizonsText, out var horizons))
+        {
+            output.Problem($"--decay-horizons {horizonsText} is not a comma-separated list of positive whole numbers.");
+            return ExitCode.Usage;
+        }
+
+        if (!TryVersion(command, out var version))
+        {
+            return ExitCode.Usage;
+        }
+
+        var submission = await jobs.Value
+            .SubmitFactorEvaluationAsync(
+                new FactorEvaluationRequest(
+                    datasetId,
+                    version,
+                    feature,
+                    transform,
+                    quantiles,
+                    horizons,
+                    command.Value("experiment"),
+                    command.Value("hypothesis")),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Queued(submission, $"{feature} ({transform}) over {datasetId}", version);
+    }
+
+    private async Task<int> SubmitFactorCorrelationAsync(CommandArguments command, CancellationToken cancellationToken)
+    {
+        if (!command.Validate(["dataset", "version", "transform", "experiment", "hypothesis"], out var problem))
+        {
+            output.Problem(problem);
+            return ExitCode.Usage;
+        }
+
+        if (!command.TryRequired("dataset", out var datasetId, out var missing)
+            || !command.TryRequired("transform", out var transform, out missing))
+        {
+            output.Problem(missing
+                + " Usage: pqt research submit factor-correlation --dataset <ID> --transform raw|wz-1 "
+                + "[--version N] [--experiment NAME] [--hypothesis TEXT]");
+            return ExitCode.Usage;
+        }
+
+        if (!TryVersion(command, out var version))
+        {
+            return ExitCode.Usage;
+        }
+
+        var submission = await jobs.Value
+            .SubmitFactorCorrelationAsync(
+                new FactorCorrelationRequest(
+                    datasetId,
+                    version,
+                    transform,
+                    command.Value("experiment"),
+                    command.Value("hypothesis")),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Queued(submission, $"pairwise correlations ({transform}) over {datasetId}", version);
+    }
+
+    private static bool TryHorizons(string text, out IReadOnlyList<int> horizons)
+    {
+        var parsed = new List<int>();
+
+        foreach (var part in text.Split(','))
+        {
+            if (!int.TryParse(part.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var horizon) || horizon <= 0)
+            {
+                horizons = [];
+                return false;
+            }
+
+            parsed.Add(horizon);
+        }
+
+        horizons = parsed;
+        return true;
+    }
+
+    private bool TryVersion(CommandArguments command, out int? version)
+    {
+        version = null;
+
+        if (command.Value("version") is null && !command.HasFlag("version"))
+        {
+            return true;
+        }
+
+        if (!command.TryCount("version", 1, out var named, out var badVersion))
+        {
+            output.Problem(badVersion);
+            return false;
+        }
+
+        version = named;
+        return true;
+    }
+
+    private int Queued(ResearchJobSubmission submission, string what, int? version)
+    {
+        if (submission.Job is not { } job)
+        {
+            output.Problem(submission.Refusal ?? "The job was refused.");
+            return ExitCode.Refused;
+        }
+
+        output.Line($"{job.Id} queued: {job.Kind}, {what}"
+            + (version is { } v ? $" v{v.ToString(CultureInfo.InvariantCulture)}" : " (latest build when queued)")
             + ". The quant worker will claim it; follow it with 'pqt research show "
             + $"{job.Id}'.");
 
