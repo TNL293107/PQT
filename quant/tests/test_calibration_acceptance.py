@@ -92,6 +92,26 @@ def test_the_gap_is_weighted_by_each_bin_s_count() -> None:
     assert result.gap == pytest.approx(2.0 / 30.0, abs=1e-12)
 
 
+def test_predictions_inside_0_4_to_0_6_are_split_at_their_own_terciles() -> None:
+    from personal_quant.analytics.calibration import calibrate
+
+    # The case ADR-037 §2 names: a running frequency sits near 0.4-0.6. Four
+    # predictions each at 0.42, 0.50 and 0.58 fall in three bins of 4 at their
+    # terciles. Fixed edges would not: 0.25/0.5/0.75 gives 0, 8, 4, 0 and
+    # 0.25/0.75 gives 0, 12, 0.
+    predictions = [0.42] * 4 + [0.50] * 4 + [0.58] * 4
+    # Realised 1, 2 and 3 times in four: 0.25, 0.50, 0.75.
+    outcomes = [1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0]
+
+    result = calibrate(predictions, outcomes)
+
+    assert [item.count for item in result.bins] == [4, 4, 4]
+    for item, expected in zip(result.bins, [0.42, 0.50, 0.58], strict=True):
+        assert item.predicted == pytest.approx(expected, abs=1e-12)
+    for item, expected in zip(result.bins, [0.25, 0.50, 0.75], strict=True):
+        assert item.realised == pytest.approx(expected, abs=1e-12)
+
+
 # --- ADR-037 §1 and §4: the running estimate and its guard -------------------
 
 
@@ -170,6 +190,18 @@ def test_expected_value_is_by_hand_and_loss_is_a_magnitude() -> None:
 
     # 0.6 x 0.05 - 0.4 x 0.04 - 0.005 = 0.030 - 0.016 - 0.005 = 0.009
     assert expected_value(0.6, 0.05, 0.04, cost) == pytest.approx(0.009, abs=1e-12)
+
+
+def test_a_negative_expected_value_is_kept_negative_not_clipped() -> None:
+    from personal_quant.analytics.calibration import CostModel, expected_value
+
+    # Round trip 0.0015 + 0.0015 + 0.001 + 0.001 + 2 x 0.0015 = 0.008.
+    # EV = 0.6 x (88/3000) - 0.4 x 0.02625 - 0.008
+    #    = 0.0176 - 0.0105 - 0.008 = -0.0009, exactly -9/10000.
+    cost = CostModel(buy_fee=0.0015, sell_fee=0.0015, sell_tax=0.001, spread=0.001, slippage=0.0015)
+
+    assert cost.round_trip == pytest.approx(0.008, abs=1e-15)
+    assert expected_value(0.6, 88 / 3000, 0.02625, cost) == pytest.approx(-0.0009, abs=1e-12)
 
 
 @pytest.mark.parametrize("missing", ["p", "gain", "loss", "cost"])
