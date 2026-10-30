@@ -165,6 +165,115 @@ public sealed class ResearchJobServiceTests
         Assert.Contains("No research run", submission.Refusal, StringComparison.Ordinal);
     }
 
+    // --- Sprint 11.5 acceptance (QA + QC, written before the code) -----------
+    //
+    // quant/tests/fixtures/jobs/<kind>.json is the one payload per kind. These
+    // tests pin the backend to writing exactly it; quant/tests/test_queue_acceptance.py
+    // pins the worker to accepting exactly it. Unlike the momentum slice, the
+    // worker requires dataset_version, so the backend resolves "latest" itself.
+
+    [Fact]
+    public async Task A_factor_evaluation_is_queued_with_the_payload_the_worker_reads()
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitFactorEvaluationAsync(
+            new FactorEvaluationRequest(
+                "fedcba9876543210",
+                Feature: "momentum_3_0",
+                TransformVersion: "raw",
+                Quantiles: 5,
+                DecayHorizons: [3, 6],
+                Experiment: "acceptance"),
+            TestContext.Current.CancellationToken);
+
+        var job = Assert.Single(harness.Jobs.Added);
+        Assert.True(submission.Queued, submission.Refusal);
+        Assert.Equal("factor_evaluation", job.Kind);
+        AssertSameJson(JobFixture("factor_evaluation"), job.Payload);
+        Assert.Equal(1, harness.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task A_factor_correlation_is_queued_with_the_payload_the_worker_reads()
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitFactorCorrelationAsync(
+            new FactorCorrelationRequest("fedcba9876543210", TransformVersion: "raw", Experiment: "acceptance"),
+            TestContext.Current.CancellationToken);
+
+        var job = Assert.Single(harness.Jobs.Added);
+        Assert.True(submission.Queued, submission.Refusal);
+        Assert.Equal("factor_correlation", job.Kind);
+        AssertSameJson(JobFixture("factor_correlation"), job.Payload);
+    }
+
+    [Theory]
+    [InlineData("", "raw", "feature")]
+    [InlineData("momentum_3_0", "zz-9", "transform")]
+    public async Task A_factor_evaluation_the_worker_would_refuse_creates_no_job(
+        string feature, string transform, string named)
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitFactorEvaluationAsync(
+            new FactorEvaluationRequest(
+                "fedcba9876543210", Feature: feature, TransformVersion: transform, Quantiles: 5, DecayHorizons: [3]),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Contains(named, submission.Refusal, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.Jobs.Added);
+        Assert.Equal(0, harness.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task A_factor_evaluation_over_a_dataset_with_no_build_creates_no_job()
+    {
+        var harness = new Harness(versions: []);
+
+        var submission = await harness.Service.SubmitFactorEvaluationAsync(
+            new FactorEvaluationRequest(
+                "fedcba9876543210", Feature: "momentum_3_0", TransformVersion: "raw", Quantiles: 5, DecayHorizons: [3]),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Empty(harness.Jobs.Added);
+    }
+
+    private static void AssertSameJson(string expected, string actual)
+    {
+        using var left = System.Text.Json.JsonDocument.Parse(expected);
+        using var right = System.Text.Json.JsonDocument.Parse(actual);
+
+        Assert.True(
+            System.Text.Json.Nodes.JsonNode.DeepEquals(
+                System.Text.Json.Nodes.JsonNode.Parse(expected),
+                System.Text.Json.Nodes.JsonNode.Parse(actual)),
+            $"expected {expected} but the backend wrote {actual}");
+    }
+
+    /// <summary>Reads the payload fixture the Python side is tested against.</summary>
+    private static string JobFixture(string kind)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "quant", "tests", "fixtures", "jobs", kind + ".json");
+
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException($"quant/tests/fixtures/jobs/{kind}.json was not found above the test binary.");
+    }
+
     private sealed class Harness
     {
         public Harness(IReadOnlyList<int> versions)

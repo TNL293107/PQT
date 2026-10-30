@@ -138,6 +138,65 @@ public sealed class ResearchCommandsTests
         Assert.NotEmpty(harness.Problems);
     }
 
+    // --- Sprint 11.5 acceptance (QA + QC, written before the code) -----------
+
+    [Fact]
+    public async Task A_factor_evaluation_submission_reaches_the_service_with_what_was_typed()
+    {
+        var harness = new Harness();
+
+        var code = await harness.RunAsync(
+            "research", "submit", "factor-evaluation",
+            "--dataset", "fedcba9876543210",
+            "--version", "1",
+            "--feature", "momentum_3_0",
+            "--transform", "raw",
+            "--quantiles", "5",
+            "--decay-horizons", "3,6",
+            "--experiment", "acceptance");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Equal(
+            new FactorEvaluationRequest(
+                "fedcba9876543210",
+                Version: 1,
+                Feature: "momentum_3_0",
+                TransformVersion: "raw",
+                Quantiles: 5,
+                DecayHorizons: [3, 6],
+                Experiment: "acceptance"),
+            harness.Jobs.LastEvaluation);
+        Assert.Contains("queued", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_factor_correlation_submission_reaches_the_service_with_what_was_typed()
+    {
+        var harness = new Harness();
+
+        var code = await harness.RunAsync(
+            "research", "submit", "factor-correlation",
+            "--dataset", "fedcba9876543210", "--transform", "raw", "--experiment", "acceptance");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Equal(
+            new FactorCorrelationRequest("fedcba9876543210", TransformVersion: "raw", Experiment: "acceptance"),
+            harness.Jobs.LastCorrelation);
+    }
+
+    [Theory]
+    [InlineData("research", "submit", "factor-evaluation", "--dataset", "fedcba9876543210", "--transform", "raw")]
+    [InlineData("research", "submit", "factor-evaluation", "--dataset", "fedcba9876543210", "--feature", "size", "--transform", "raw", "--decay-horizons", "3,x")]
+    [InlineData("research", "submit", "factor-correlation", "--dataset", "fedcba9876543210", "--transform", "raw", "--feature", "size")]
+    public async Task A_factor_command_line_the_operator_got_wrong_never_reaches_the_service(params string[] args)
+    {
+        var harness = Harness.WithNothingConstructible();
+
+        var code = await harness.RunAsync(args);
+
+        Assert.Equal(ExitCode.Usage, code);
+    }
+
     private sealed class Harness
     {
         private readonly ResearchCommands _commands;
@@ -178,6 +237,10 @@ public sealed class ResearchCommandsTests
 
         public MomentumSliceRequest? LastRequest { get; private set; }
 
+        public FactorEvaluationRequest? LastEvaluation { get; private set; }
+
+        public FactorCorrelationRequest? LastCorrelation { get; private set; }
+
         public Guid? LastReproduction { get; private set; }
 
         public void RefuseWith(string reason) => _refusal = reason;
@@ -202,6 +265,30 @@ public sealed class ResearchCommandsTests
                 _refusal is { } reason
                     ? new ResearchJobSubmission(null, reason)
                     : new ResearchJobSubmission(ResearchJob.Submit("momentum_slice", "{}", Now), null));
+        }
+
+        public Task<ResearchJobSubmission> SubmitFactorEvaluationAsync(
+            FactorEvaluationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastEvaluation = request;
+
+            return Task.FromResult(
+                _refusal is { } reason
+                    ? new ResearchJobSubmission(null, reason)
+                    : new ResearchJobSubmission(ResearchJob.Submit("factor_evaluation", "{}", Now), null));
+        }
+
+        public Task<ResearchJobSubmission> SubmitFactorCorrelationAsync(
+            FactorCorrelationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastCorrelation = request;
+
+            return Task.FromResult(
+                _refusal is { } reason
+                    ? new ResearchJobSubmission(null, reason)
+                    : new ResearchJobSubmission(ResearchJob.Submit("factor_correlation", "{}", Now), null));
         }
 
         public Task<ResearchJob?> FindAsync(ResearchJobId id, CancellationToken cancellationToken = default) =>
