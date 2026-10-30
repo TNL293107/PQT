@@ -101,6 +101,50 @@ Read-only, at a person's pace; no collector until this ADR is accepted.
 If Vietcap exposes no fiscal-2026 non-bank statements, the fallback is the
 alternative below that the Moderator picks, and this ADR is rewritten.
 
+## Verification record
+
+### 1 · What Vietcap presents · 2026-10-30 (Dev, read-only)
+
+`tmp/adr-038-verification/NOTES.md`. `GET iq.vietcap.com.vn/api/iq-insight-service/v1/company/{ticker}/financial-statement?section=INCOME_STATEMENT|BALANCE_SHEET|CASH_FLOW|NOTE`,
+no account. One row per period: `data.quarters` (`lengthReport` 1–4, the
+quarter alone) and `data.years`. **No half-year row, and no scope field**: the
+values are consolidated only. Fields are Vietcap's own (`isa*`, `bsa*`), not
+Circular 200 or 99 codes, named in a `metrics` dictionary. The five items:
+`isa3` net sales, `isa22` profit to the parent, `isa23` basic EPS, `bsa53`
+total assets, `bsa78` equity including minorities. Units VND, as JSON numbers
+(to be parsed as decimals). FPT has 2018Q1 to **2026Q3**, with 2026Q1–Q3
+filled: the gap this ADR exists for is covered for FPT.
+
+**One value per period, the latest.** `updateDate` moves (FPT 2026Q1's balance
+sheet was updated five weeks after `publicDate`), and no earlier reading is
+kept.
+
+### 2 · Fidelity · partial, FPT only
+
+4 statements × 5 items: **11 match to the đồng, 9 differ.** FPT 2025Q1 and
+2025Q3 are 10 of 10 exact. Every 2024Q2 and 2024Q4 balance-sheet difference
+equals the later restated IDS reading (the reviewed half-year, the audited
+annual), and both profit differences equal the next year's comparative.
+**Vietcap always shows the latest restated value, never the first.** EPS is
+unreliable: 2 of 4 differ from every IDS reading. HPG and VNM are not yet read
+(see the read rule below), so the 12-statement sample is not complete.
+
+### Consequences of the record for the decision
+
+- **Dated at fetch, never at `publicDate`.** Because a restated figure carries
+  no date of its own, a vendor line is recorded as a reading observed when it
+  was fetched. It never back-dates to the vendor's `publicDate`. With
+  decision 1 that means a 2026 non-bank value is known from the later of the
+  IDS filing date and the fetch.
+- **EPS is computed, not read.** `isa23` is not used; EPS comes from profit to
+  the parent and the share count, as the per-share ratios already do.
+- **Half-years.** With no half-year row, the 35 half-year IDS reports get no
+  vendor values; the quarters carry the year.
+- **Read rule.** Every read identifies itself as the ADR-015 adapter does
+  (`PersonalQuantTerminal/0.1 (+research)`, no browser `User-Agent`, no
+  `Referer`). If the endpoint answers only a browser, Vietcap fails ADR-015's
+  bounds and this ADR falls back to the hand-keyed stop-gap.
+
 ## Alternatives
 
 - **HOSE's public disclosure listing.** Free to read, but it lists filings and
