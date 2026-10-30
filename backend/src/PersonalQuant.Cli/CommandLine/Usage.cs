@@ -47,6 +47,9 @@ internal static class Usage
         output.WriteLine("  pqt research submit momentum-slice --dataset <ID> [--version N]");
         output.WriteLine("                     [--quantiles 10] [--rebalance-every 21]");
         output.WriteLine("                     [--experiment NAME] [--hypothesis TEXT]");
+        output.WriteLine("  pqt research submit factor-evaluation --dataset <ID> --feature <NAME> --transform raw|wz-1");
+        output.WriteLine("                      --decay-horizons 5,10,21 [--version N] [--quantiles 5]  (ADR-036)");
+        output.WriteLine("  pqt research submit factor-correlation --dataset <ID> --transform raw|wz-1 [--version N]");
         output.WriteLine("  pqt research list [--limit 20]");
         output.WriteLine("  pqt research show <JOB-ID>");
         output.WriteLine("  pqt research runs [--experiment NAME] [--limit 20]");
