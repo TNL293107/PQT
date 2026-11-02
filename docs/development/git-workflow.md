@@ -32,9 +32,11 @@ feature/phase-2-…                       ●──●──●
 **Promotion (Moderator, 2026-10-27):** `feature/*` → `develop` → `uat` →
 `staging` → `main`. A feature is merged into `develop` through a PR (`gh pr
 create --base develop`), only by Lead and only after the Tester + Audit gate
-passes. Each later step is a fast-forward or `--no-ff` merge by Lead, and
-pushing `main` needs the Moderator's explicit OK. Commits and PRs carry no
-Claude attribution.
+passes. Each later step (`develop` → `uat` → `staging` → `main`) is a
+fast-forward by Lead, and **each step past `develop` needs the Moderator's
+OK**. Commits and PRs carry no Claude attribution. This is enforced by the
+`commit-msg` and `pre-push` hooks in the shared `.git/hooks` and by the CI
+step "Fail on Claude attribution", which runs on all four branches.
 
 Existing branches are created on demand. Eighteen empty phase branches created
 in advance would go stale, diverge from `develop`, and say nothing useful — a
