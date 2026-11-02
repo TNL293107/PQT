@@ -197,6 +197,60 @@ public sealed class ResearchCommandsTests
         Assert.Equal(ExitCode.Usage, code);
     }
 
+    // --- The calibration job kind (sprint 11.1): QA + QC, before the code ---
+
+    [Fact]
+    public async Task A_calibration_submission_reaches_the_service_with_what_was_typed()
+    {
+        var harness = new Harness();
+
+        var code = await harness.RunAsync(
+            "research", "submit", "calibration",
+            "--dataset", "0a1b2c3d4e5f6a7b",
+            "--version", "1",
+            "--feature", "momentum_3_0",
+            "--transform", "raw",
+            "--quantiles", "3",
+            "--cost-model", "v1",
+            "--buy-fee", "0.0015",
+            "--sell-fee", "0.0015",
+            "--sell-tax", "0.001",
+            "--spread", "0.001",
+            "--slippage", "0",
+            "--experiment", "acceptance");
+
+        Assert.Equal(ExitCode.Ok, code);
+        Assert.Equal(
+            new CalibrationRequest(
+                "0a1b2c3d4e5f6a7b",
+                Version: 1,
+                Feature: "momentum_3_0",
+                TransformVersion: "raw",
+                Quantiles: 3,
+                CostModelVersion: "v1",
+                BuyFee: 0.0015m,
+                SellFee: 0.0015m,
+                SellTax: 0.001m,
+                Spread: 0.001m,
+                Slippage: 0m,
+                Experiment: "acceptance"),
+            harness.Jobs.LastCalibration);
+        Assert.Contains("queued", harness.Result, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("research", "submit", "calibration", "--dataset", "0a1b2c3d4e5f6a7b", "--transform", "raw", "--cost-model", "v1", "--buy-fee", "0.0015", "--sell-fee", "0.0015", "--sell-tax", "0.001", "--spread", "0.001", "--slippage", "0")]
+    [InlineData("research", "submit", "calibration", "--dataset", "0a1b2c3d4e5f6a7b", "--feature", "size", "--transform", "raw", "--cost-model", "v1", "--buy-fee", "x", "--sell-fee", "0.0015", "--sell-tax", "0.001", "--spread", "0.001", "--slippage", "0")]
+    [InlineData("research", "submit", "calibration", "--dataset", "0a1b2c3d4e5f6a7b", "--feature", "size", "--transform", "raw", "--cost-model", "v1", "--buy-fee", "0.0015", "--sell-fee", "0.0015", "--sell-tax", "0.001", "--spread", "0.001")]
+    public async Task A_calibration_command_line_the_operator_got_wrong_never_reaches_the_service(params string[] args)
+    {
+        var harness = Harness.WithNothingConstructible();
+
+        var code = await harness.RunAsync(args);
+
+        Assert.Equal(ExitCode.Usage, code);
+    }
+
     private sealed class Harness
     {
         private readonly ResearchCommands _commands;
@@ -241,6 +295,8 @@ public sealed class ResearchCommandsTests
 
         public FactorCorrelationRequest? LastCorrelation { get; private set; }
 
+        public CalibrationRequest? LastCalibration { get; private set; }
+
         public Guid? LastReproduction { get; private set; }
 
         public void RefuseWith(string reason) => _refusal = reason;
@@ -277,6 +333,18 @@ public sealed class ResearchCommandsTests
                 _refusal is { } reason
                     ? new ResearchJobSubmission(null, reason)
                     : new ResearchJobSubmission(ResearchJob.Submit("factor_evaluation", "{}", Now), null));
+        }
+
+        public Task<ResearchJobSubmission> SubmitCalibrationAsync(
+            CalibrationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastCalibration = request;
+
+            return Task.FromResult(
+                _refusal is { } reason
+                    ? new ResearchJobSubmission(null, reason)
+                    : new ResearchJobSubmission(ResearchJob.Submit("calibration", "{}", Now), null));
         }
 
         public Task<ResearchJobSubmission> SubmitFactorCorrelationAsync(

@@ -242,6 +242,83 @@ public sealed class ResearchJobServiceTests
         Assert.Empty(harness.Jobs.Added);
     }
 
+    // --- The calibration job kind (sprint 11.1, ADR-037 §5): QA + QC, before the code ---
+
+    [Fact]
+    public async Task A_calibration_is_queued_with_the_payload_the_worker_reads()
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            new CalibrationRequest(
+                "0a1b2c3d4e5f6a7b",
+                Feature: "momentum_3_0",
+                TransformVersion: "raw",
+                Quantiles: 3,
+                CostModelVersion: "v1",
+                BuyFee: 0.0015m,
+                SellFee: 0.0015m,
+                SellTax: 0.001m,
+                Spread: 0.001m,
+                Slippage: 0m,
+                Experiment: "acceptance"),
+            TestContext.Current.CancellationToken);
+
+        var job = Assert.Single(harness.Jobs.Added);
+        Assert.True(submission.Queued, submission.Refusal);
+        Assert.Equal("calibration", job.Kind);
+        AssertSameJson(JobFixture("calibration"), job.Payload);
+        Assert.Equal(1, harness.UnitOfWork.SaveCount);
+    }
+
+    [Theory]
+    [InlineData("", "raw", "cal-1", "0.0015", "feature")]
+    [InlineData("momentum_3_0", "zz-9", "cal-1", "0.0015", "transform")]
+    [InlineData("momentum_3_0", "raw", "cal-9", "0.0015", "calibration")]
+    [InlineData("momentum_3_0", "raw", "cal-1", "-0.001", "buy_fee")]
+    [InlineData("momentum_3_0", "raw", "cal-1", "1", "buy_fee")]
+    public async Task A_calibration_the_worker_would_refuse_creates_no_job(
+        string feature, string transform, string calibrationVersion, string buyFee, string named)
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            new CalibrationRequest(
+                "0a1b2c3d4e5f6a7b",
+                Feature: feature,
+                TransformVersion: transform,
+                Quantiles: 3,
+                CalibrationVersion: calibrationVersion,
+                CostModelVersion: "v1",
+                BuyFee: decimal.Parse(buyFee, System.Globalization.CultureInfo.InvariantCulture),
+                SellFee: 0.0015m,
+                SellTax: 0.001m,
+                Spread: 0.001m,
+                Slippage: 0m),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Contains(named, submission.Refusal, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.Jobs.Added);
+        Assert.Equal(0, harness.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task A_calibration_over_a_dataset_with_no_build_creates_no_job()
+    {
+        var harness = new Harness(versions: []);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            new CalibrationRequest(
+                "0a1b2c3d4e5f6a7b", Feature: "momentum_3_0", TransformVersion: "raw", Quantiles: 3,
+                CostModelVersion: "v1", BuyFee: 0.0015m, SellFee: 0.0015m, SellTax: 0.001m, Spread: 0.001m,
+                Slippage: 0m),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Empty(harness.Jobs.Added);
+    }
+
     private static void AssertSameJson(string expected, string actual)
     {
         using var left = System.Text.Json.JsonDocument.Parse(expected);
