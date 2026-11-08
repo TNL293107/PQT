@@ -86,6 +86,10 @@ internal static class ResearchEndpoints
         string experiment,
         CancellationToken cancellationToken)
     {
+        // ponytail: reads the experiment's newest MaxLimit (500) runs only, so an
+        // experiment with more than 500 runs whose highest index is older than
+        // that would be under-counted. Fine at Phase 7's ~16 runs; add a
+        // repository query for max(trial_index) per experiment when one passes 500.
         var own = await research.ListRunsAsync(experiment, MaxLimit, cancellationToken).ConfigureAwait(false);
 
         return own.Select(view => view.Run.TrialIndex ?? 0).DefaultIfEmpty(0).Max();

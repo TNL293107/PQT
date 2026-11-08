@@ -107,12 +107,23 @@ describe("runEntry — RUNS", () => {
     expect(result.record.kind).toBe("runs");
   });
 
-  it("refuses a limit that is not a positive whole number without reaching the API", async () => {
+  it.each(["0", "501", "2.5", "x"])(
+    "refuses --limit %s without reaching the API",
+    async (limit) => {
+      const runs = vi.fn(async () => RUNS);
+
+      const result = await runEntry(`runs --limit ${limit}`, services(runs));
+
+      expect(result.record.kind).toBe("error");
+      expect(runs).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts the largest limit the API allows", async () => {
     const runs = vi.fn(async () => RUNS);
 
-    const result = await runEntry("runs --limit 0", services(runs));
+    await runEntry("runs --limit 500", services(runs));
 
-    expect(result.record.kind).toBe("error");
-    expect(runs).not.toHaveBeenCalled();
+    expect(runs).toHaveBeenCalledWith(undefined, 500, undefined);
   });
 });

@@ -87,6 +87,8 @@ public sealed class ResearchEndpointTests(DependencyContainerFixture containers)
         var limited = await GetAsync(host.Client, "/research/runs?limit=1");
         var unknown = await GetAsync(host.Client, "/research/runs?experiment=nothing-here");
         var refused = await host.Client.GetAsync(new Uri("/research/runs?limit=0", UriKind.Relative), TestContext.Current.CancellationToken);
+        var tooMany = await host.Client.GetAsync(new Uri("/research/runs?limit=501", UriKind.Relative), TestContext.Current.CancellationToken);
+        var every = await GetAsync(host.Client, "/research/runs");
 
         Assert.Equal(2, only.Runs.Count);
         Assert.All(only.Runs, run => Assert.Equal("phase-7-vn30", run.Experiment));
@@ -98,6 +100,34 @@ public sealed class ResearchEndpointTests(DependencyContainerFixture containers)
 
         Assert.Empty(unknown.Runs);
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+
+        // One response holding both experiments: each row carries its own
+        // experiment's count, 2 for the evaluation and 1 for the correlation.
+        Assert.Equal(3, every.Runs.Count);
+        Assert.All(every.Runs.Where(run => run.Experiment == "phase-7-vn30"), run => Assert.Equal(2, run.TrialCount));
+        Assert.Equal(1, Assert.Single(every.Runs, run => run.Experiment == "phase-7-vn30-correlation").TrialCount);
+    }
+
+    [Theory]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    [InlineData("DELETE")]
+    [InlineData("PATCH")]
+    public async Task The_runs_route_has_no_write_method(string method)
+    {
+        // Read-only by construction: a write path added here must fail this test.
+        Assert.SkipWhen(containers.UnavailableReason is not null, containers.UnavailableReason ?? string.Empty);
+
+        await using var host = await HostAsync("re_write");
+
+        using var request = new HttpRequestMessage(new HttpMethod(method), new Uri("/research/runs", UriKind.Relative))
+        {
+            Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json"),
+        };
+        var response = await host.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
     }
 
     [Fact]
