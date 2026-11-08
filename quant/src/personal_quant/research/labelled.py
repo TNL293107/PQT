@@ -148,14 +148,19 @@ class LabelledDataset:
         """The request the build was exported from."""
         return self._request
 
-    def rebalances(self) -> Iterator[Rebalance]:
+    def rebalances(self, only: str | None = None) -> Iterator[Rebalance]:
         """Yield each rebalance with its feature cross-sections and its label.
+
+        Args:
+            only: Compute just this feature, for a job that reads one; every
+                feature the request names when ``None``.
 
         Yields:
             One per rebalance session whose exit session is in the build.
         """
         horizon = self._request.horizon
         sessions = list(self._dataset.sessions)
+        engines = [engine for engine in self._engines if only is None or engine.name == only]
 
         for session in self._sessions:
             # ponytail: index() per rebalance is O(n^2); fine at ~26 rebalances,
@@ -167,8 +172,7 @@ class LabelledDataset:
                 session=session,
                 exit=exit_session,
                 features={
-                    engine.name: evaluate(engine, self._dataset, session)
-                    for engine in self._engines
+                    engine.name: evaluate(engine, self._dataset, session) for engine in engines
                 },
                 label=forward_returns(self._dataset, session, exit_session, members),
             )
