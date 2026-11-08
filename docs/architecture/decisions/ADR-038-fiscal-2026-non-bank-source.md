@@ -1,6 +1,6 @@
 # ADR-038: Values for non-bank statements from fiscal 2026 — the IDS record dates them, a vendor supplies them
 
-**Status:** Proposed (Lead, 2026-10-29; QA + QC review applied: 1 blocker, 5 minor). **Source chosen by the Moderator on 2026-11-02: Vietcap, option (c).** Accepted once verification 2 is complete (FPT done; HPG and VNM pending) · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.4 (Phase 7)
+**Status:** Proposed (Lead, 2026-10-29; QA + QC review applied: 1 blocker, 5 minor). **Source chosen by the Moderator on 2026-11-02: Vietcap, option (c).** Verification 2 completed 2026-11-02 (12 statements, 3 names); for QA + QC review, then Accepted · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.4 (Phase 7)
 
 ## Context
 
@@ -119,15 +119,46 @@ filled: the gap this ADR exists for is covered for FPT.
 sheet was updated five weeks after `publicDate`), and no earlier reading is
 kept.
 
-### 2 · Fidelity · partial, FPT only
+### 2 · Fidelity · 2026-11-02 (Dev, read-only), complete
 
 4 statements × 5 items: **11 match to the đồng, 9 differ.** FPT 2025Q1 and
 2025Q3 are 10 of 10 exact. Every 2024Q2 and 2024Q4 balance-sheet difference
 equals the later restated IDS reading (the reviewed half-year, the audited
 annual), and both profit differences equal the next year's comparative.
 **Vietcap always shows the latest restated value, never the first.** EPS is
-unreliable: 2 of 4 differ from every IDS reading. HPG and VNM are not yet read
-(see the read rule below), so the 12-statement sample is not complete.
+unreliable: 2 of 4 differ from every IDS reading.
+
+HPG and VNM were then read with the project's own agent
+(`PersonalQuantTerminal/0.1 (+research)`, no `Referer` or `Origin`), after
+the Moderator approved the reads; **all four answered 200**, so the endpoint
+needs no browser identity. The full sample is **12 statements over 3 names,
+60 items** (FPT 2024Q2, 2024Q4, 2025Q1, 2025Q3; HPG 2024Q1, 2025Q1, 2025Q2,
+2025Q4, with 2025Q1 standing in for an HPG 2024Q3 that IDS does not hold;
+VNM 2024Q2, 2024Q4, 2025Q1, 2025Q3), in `tmp/adr-038-verification/`.
+
+| Name | Items that differ | Explained by a later IDS reading |
+| --- | --- | --- |
+| FPT | 9 / 20 | 7 (half-year review, audited annual, next-year comparative) |
+| HPG | 4 / 20 | 1 (2025Q4 total assets = the audited annual) |
+| VNM | 4 / 20 | 2 (2024Q4 total assets and equity = the audited annual) |
+
+**17 of 60 items differ; 8 of 12 statements match on all five items.** The
+leak rate of §4 for this sample: 10 of the 17 differences are restatements
+the vendor shows against the first filing's date. The rest:
+
+- **EPS** differs from every IDS reading on 3 statements (FPT 2024Q2 and Q4,
+  HPG 2025Q4, where HPG files line 70 as 0). EPS is computed, never read
+  (decision below).
+- **Profit to the parent** differs on 2 of 12 statements (HPG 2025Q2 and
+  2025Q4) and equals no IDS reading. This is why a vendor value stays its own
+  basis and never overwrites an `as_filed` one.
+- **VNM 2024Q4's IDS form holds placeholders**: revenue exactly
+  20,000,000,000,000 and profit exactly 2,000,000,000,000. Vietcap's
+  15,477,073,125,441 and 2,123,649,268,482 are the real figures. Here the
+  filed form is wrong and the vendor right. A filed placeholder is an
+  `as_filed` value PQT stores today; finding such values is a data-quality
+  item of its own (backlog), not part of this ADR.
+- FPT 2024Q4 revenue differs by 1 đồng.
 
 ### Consequences of the record for the decision
 
@@ -143,7 +174,8 @@ unreliable: 2 of 4 differ from every IDS reading. HPG and VNM are not yet read
 - **Read rule.** Every read identifies itself as the ADR-015 adapter does
   (`PersonalQuantTerminal/0.1 (+research)`, no browser `User-Agent`, no
   `Referer`). If the endpoint answers only a browser, Vietcap fails ADR-015's
-  bounds and this ADR falls back to the hand-keyed stop-gap.
+  bounds and this ADR falls back to the hand-keyed stop-gap. Verification 2
+  showed it answers the honest agent.
 
 ## Alternatives
 
