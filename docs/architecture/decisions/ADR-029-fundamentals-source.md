@@ -37,7 +37,9 @@ What the Vietnamese disclosure regime gives, checked against the source texts:
   deadline is therefore not an upper bound on when a fact became public.
 - **Where filings are lodged.** Public companies file on the State Securities
   Commission's Information Disclosure System (IDS). Under Decision
-  450/QĐ-UBCK (2021) the IDS has two parts. Filings are submitted at
+  450/QĐ-UBCK (2021) the IDS has two parts. *(Note 2026-11-08: 450 has since
+  been superseded, last by 820/QĐ-UBCK of 23/10/2025, which names the portal
+  `ids.ssc.gov.vn`; see ADR-038's legal review.)* Filings are submitted at
   `ids.ssc.gov.vn` and published at `congbothongtin.ssc.gov.vn`. The decision
   distinguishes *ngày báo cáo*, the day IDS received a filing, from *ngày công
   bố thông tin*, the day it appeared. Financial statements are entered through
