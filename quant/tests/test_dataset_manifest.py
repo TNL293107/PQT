@@ -58,6 +58,10 @@ def _raw(name: str) -> dict[str, Any]:
         "v5-request.json",
         # Schema 5 written by the .NET build, so the parity runs both ways.
         "v5-export.json",
+        # Schema 6 (ADR-038): fundamentals.vendor_rows, hashed from schema 6 only,
+        # as `vendor:{n},` after the row count. Hand-built from v5-request; its
+        # hash comes from v6-vendor.canonical.txt, rendered by hand.
+        "v6-vendor.json",
     ],
 )
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:
@@ -76,6 +80,27 @@ def test_the_schema_5_fixture_hash_is_the_hand_rendered_canonical_string() -> No
         hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         == _raw("v5-request.json")["content_hash"]
     )
+
+
+def test_the_schema_6_fixture_hash_is_the_hand_rendered_canonical_string() -> None:
+    canonical = (FIXTURES / "v6-vendor.canonical.txt").read_text(encoding="utf-8")
+
+    assert (
+        hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        == _raw("v6-vendor.json")["content_hash"]
+    )
+
+
+def test_vendor_rows_enter_the_hash_from_schema_6_only() -> None:
+    # A schema 5 manifest is hashed as it was written, so a vendor_rows key it
+    # never carried cannot change its hash; at schema 6 an edited count breaks it.
+    v5 = _raw("v5-request.json")
+    v5["fundamentals"]["vendor_rows"] = 99
+    assert content_hash_of(DatasetManifest.from_json(v5)) == v5["content_hash"]
+
+    v6 = _raw("v6-vendor.json")
+    v6["fundamentals"]["vendor_rows"] = 38
+    assert content_hash_of(DatasetManifest.from_json(v6)) != v6["content_hash"]
 
 
 def test_a_schema_1_manifest_reads_as_an_as_of_export() -> None:
@@ -124,9 +149,9 @@ def test_an_edited_spell_no_longer_matches_its_hash() -> None:
 
 def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
     raw = _raw("v4-fundamentals.json")
-    raw["schema_version"] = 6
+    raw["schema_version"] = 7
 
-    with pytest.raises(UnsupportedManifestError, match="schema version 6"):
+    with pytest.raises(UnsupportedManifestError, match="schema version 7"):
         DatasetManifest.from_json(raw)
 
 

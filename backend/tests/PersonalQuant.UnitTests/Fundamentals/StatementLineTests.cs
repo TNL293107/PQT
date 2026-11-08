@@ -85,6 +85,21 @@ public sealed class StatementLineTests
     }
 
     [Fact]
+    public void An_equal_as_filed_value_supersedes_a_vendor_reading_as_a_revision()
+    {
+        // ADR-038 §4: a change of basis from Vendor to AsFiled is a revision even
+        // when the value is equal; it is not a no-op.
+        var vendor = Observe(Report(), FinancialStatement.IncomeStatement, "10", Q1, PeriodSpan.Quarter, 5m)
+            .Restate(7m, ValueBasis.Vendor, Vendor, Read.AddDays(1));
+
+        Assert.False(vendor.States(7m, ValueBasis.AsFiled));
+        var filed = vendor.Restate(7m, ValueBasis.AsFiled, FinancialReportTests.Ids, Read.AddDays(2));
+
+        Assert.Equal((false, true), (vendor.IsCurrent, filed.IsCurrent));
+        Assert.Equal((7m, ValueBasis.AsFiled, 2), (filed.Value, filed.Basis, filed.Revision));
+    }
+
+    [Fact]
     public void A_superseded_reading_cannot_be_restated_again()
     {
         var line = Observe(Report(), FinancialStatement.IncomeStatement, "10", Q1, PeriodSpan.Quarter, 5m);
