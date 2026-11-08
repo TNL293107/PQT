@@ -59,6 +59,9 @@ public sealed class DatasetManifestGoldenTests
     // written by this build: it pins the C# rendering to the Python one.
     [InlineData("v5-request.json")]
     [InlineData(GoldenV5)]
+    // Schema 6 (ADR-038): hand-built from v5-request.json with vendor_rows; the
+    // canonical string beside it pins the rendering in both languages.
+    [InlineData("v6-vendor.json")]
     public void A_committed_manifest_hashes_to_the_content_hash_it_records(string name)
     {
         var manifest = Read(name);

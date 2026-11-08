@@ -44,6 +44,12 @@ public enum FilingRejectionReason
 
     /// <summary>A line stating an implausible value was dropped; the rest of the filing was read.</summary>
     ImplausibleLine = 11,
+
+    /// <summary>A vendor period with no IDS report of that ticker, scope, year and period type (ADR-038 §1, §3).</summary>
+    NoDisclosureRecord = 12,
+
+    /// <summary>A vendor filing for a report already holding values filed on IDS, which a vendor never overwrites (ADR-038 §4).</summary>
+    AsFiledHeld = 13,
 }
 
 /// <summary>A filing that was not recorded, and why.</summary>

@@ -17,7 +17,9 @@ namespace PersonalQuant.Application.Fundamentals;
 /// does not add up),
 /// equity 400 less non-controlling interest 429, profit to the parent 61 (60
 /// on separate statements, which have no 61). Bank: charter capital 411,
-/// equity 500, profit after tax 21 less minority interest 22.
+/// equity 500, profit after tax 21 less minority interest 22. Circular 99,
+/// from a vendor (ADR-038): profit to the parent isa22, equity bsa78 less
+/// non-controlling interest bsa210; no charter capital, and EPS is never read.
 /// </para>
 /// </remarks>
 internal sealed class StatementLines
@@ -48,7 +50,7 @@ internal sealed class StatementLines
         // The latest balance sheet's form, or with no balance sheet known yet
         // the latest form of any statement, so a quarter's profit is still
         // read before the first balance sheet arrives.
-        var readable = values.Where(value => value.Template is FinancialTemplate.NonFinancialCircular200 or FinancialTemplate.Bank).ToList();
+        var readable = values.Where(value => value.Template is FinancialTemplate.NonFinancialCircular200 or FinancialTemplate.Bank or FinancialTemplate.NonFinancialCircular99).ToList();
         var template = (readable.Any(value => value.Statement == FinancialStatement.BalanceSheet)
                 ? readable.Where(value => value.Statement == FinancialStatement.BalanceSheet)
                 : readable)
@@ -96,7 +98,8 @@ internal sealed class StatementLines
     /// <returns>The quarter, or null.</returns>
     public FiscalQuarter? LatestBalanceSheet() =>
         _values.Keys
-            .Where(key => key.Item1 == FinancialStatement.BalanceSheet && key.Item4 == PeriodSpan.Instant && CharterCapital(key.Item3) is not null)
+            .Where(key => key.Item1 == FinancialStatement.BalanceSheet && key.Item4 == PeriodSpan.Instant
+                && (Template == FinancialTemplate.NonFinancialCircular99 || CharterCapital(key.Item3) is not null))
             .Select(key => (FiscalQuarter?)key.Item3)
             .OrderBy(quarter => quarter)
             .LastOrDefault();
@@ -149,6 +152,7 @@ internal sealed class StatementLines
     {
         FinancialTemplate.NonFinancialCircular200 => Balance("400", quarter) is { } equity ? equity - (Balance("429", quarter) ?? 0m) : null,
         FinancialTemplate.Bank => Balance("500", quarter),
+        FinancialTemplate.NonFinancialCircular99 => Balance("bsa78", quarter) is { } equity ? equity - (Balance("bsa210", quarter) ?? 0m) : null,
         _ => null,
     };
 
@@ -227,6 +231,7 @@ internal sealed class StatementLines
             ? Income("61", quarter, span) ?? Income("60", quarter, span)
             : Income("61", quarter, span),
         FinancialTemplate.Bank => Income("21", quarter, span) is { } afterTax ? afterTax - (Income("22", quarter, span) ?? 0m) : null,
+        FinancialTemplate.NonFinancialCircular99 => Income("isa22", quarter, span),
         _ => null,
     };
 

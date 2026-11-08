@@ -113,7 +113,9 @@ public sealed class FundamentalsImportService(
 
         var run = new Run(source);
         var issuers = new Dictionary<string, Issuer?>(StringComparer.Ordinal);
-        var read = filings.ToDictionary(filing => filing, Read);
+        // A vendor's filings are joined to IDS reports, not read as forms.
+        var vendor = source.Basis == ValueBasis.Vendor;
+        var read = vendor ? [] : filings.ToDictionary(filing => filing, Read);
         var withheld = SharedForms.Find(read);
 
         foreach (var filing in filings)
@@ -132,6 +134,12 @@ public sealed class FundamentalsImportService(
             {
                 run.Rejections.Add(new FilingRejection(
                     filing.Reference, filing.Ticker, FilingRejectionReason.UnknownInstrument, $"'{filing.Ticker}' is not an active instrument."));
+                continue;
+            }
+
+            if (vendor)
+            {
+                await JoinAsync(run, filing, issuer, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
@@ -259,6 +267,105 @@ public sealed class FundamentalsImportService(
         {
             run.Late.Add(late);
         }
+    }
+
+    /// <summary>
+    /// Attaches a vendor filing's values to the blank IDS report of the same
+    /// ticker, scope, kind and period (ADR-038 §3), or says why not.
+    /// </summary>
+    private async Task JoinAsync(Run run, ProviderFiling filing, Issuer issuer, CancellationToken cancellationToken)
+    {
+        var classification = FilingClassifier.Classify(filing, out var refused);
+
+        if (classification is null)
+        {
+            run.Rejections.Add(refused!);
+            return;
+        }
+
+        var matches = (await fundamentals.ListReportsAsync([issuer.InstrumentId], cancellationToken).ConfigureAwait(false))
+            .Where(report => report.Source != run.Source.Code
+                && report.Scope == classification.Scope
+                && report.Kind == classification.Kind
+                && report.Period == classification.Period)
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            run.Rejections.Add(new FilingRejection(
+                filing.Reference, filing.Ticker, FilingRejectionReason.NoDisclosureRecord,
+                $"No {classification.Scope} {classification.Kind} report for {classification.Period} is held; a vendor period alone is not a fact."));
+            return;
+        }
+
+        // Never over values filed on IDS, even on a correction's sibling.
+        if (matches.Any(report => report.ValuesFiled))
+        {
+            run.Rejections.Add(new FilingRejection(
+                filing.Reference, filing.Ticker, FilingRejectionReason.AsFiledHeld,
+                $"The {classification.Period} report holds values filed on IDS, which a vendor value never overwrites."));
+            return;
+        }
+
+        // The latest blank report of the period: a correction's, when one was filed.
+        var report = matches.OrderBy(match => match.KnownFromUtc).ThenBy(match => match.RecordedAtUtc).Last();
+
+        if (report.Template != FinancialTemplate.NonFinancialCircular99)
+        {
+            run.Rejections.Add(new FilingRejection(
+                filing.Reference, filing.Ticker, FilingRejectionReason.Unreadable,
+                $"The {classification.Period} report is on the {report.Template} form, which vendor codes are not mapped to."));
+            return;
+        }
+
+        var now = clock.UtcNow;
+        var added = new List<StatementLine>();
+        var restated = new List<StatementLine>();
+        RawFundamentalsPayload raw;
+
+        try
+        {
+            var values = StatementNormaliser.Vendor(filing, classification.Period);
+            var current = (await fundamentals.ListCurrentLinesForUpdateAsync(report.Id, cancellationToken).ConfigureAwait(false))
+                .ToDictionary(line => (line.Statement, line.LineCode, line.Period, line.Span));
+
+            raw = RawFundamentalsPayload.Retain(
+                run.Source.Code, filing.Reference, issuer.InstrumentId, filing.RawPayload, filing.ContentType, filing.FetchedAtUtc);
+
+            foreach (var value in values)
+            {
+                if (!current.TryGetValue((value.Statement, value.LineCode, value.Period, value.Span), out var line))
+                {
+                    added.Add(StatementLine.Observe(
+                        report, value.Statement, value.LineCode, value.Period, value.Span, value.Value, ValueBasis.Vendor, run.Source.Code, now));
+                }
+                else if (line.Basis == ValueBasis.Vendor && !line.States(value.Value, ValueBasis.Vendor))
+                {
+                    restated.Add(line.Restate(value.Value, ValueBasis.Vendor, run.Source.Code, now));
+                }
+            }
+        }
+        catch (DomainException error)
+        {
+            run.Rejections.Add(new FilingRejection(filing.Reference, filing.Ticker, FilingRejectionReason.Unreadable, error.Message));
+            return;
+        }
+
+        foreach (var line in added.Concat(restated))
+        {
+            fundamentals.Add(line);
+        }
+
+        if (!await fundamentals.HoldsPayloadAsync(run.Source.Code, filing.Reference, raw.Checksum, cancellationToken).ConfigureAwait(false))
+        {
+            fundamentals.Add(raw);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        run.AlreadyHeld++;
+        run.LinesRecorded += added.Count;
+        run.LinesRestated += restated.Count;
     }
 
     private void Record(

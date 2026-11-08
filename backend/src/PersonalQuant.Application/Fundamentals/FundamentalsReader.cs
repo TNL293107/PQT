@@ -153,7 +153,7 @@ public sealed class FundamentalsReader(IFundamentalsRepository fundamentals) : I
             .ToList();
 
         var lines = (await fundamentals
-                .ListLinesAsync([.. held.Where(report => report.ValuesFiled).Select(report => report.Id)], cancellationToken)
+                .ListLinesAsync([.. held.Select(report => report.Id)], cancellationToken)
                 .ConfigureAwait(false))
             .Where(line => ReadAt(line, observedAsOfUtc))
             .ToLookup(line => line.ReportId);
@@ -240,9 +240,14 @@ public sealed class FundamentalsHistory
 
         var served = new Dictionary<(FinancialTemplate, FinancialStatement, string, FiscalQuarter, PeriodSpan), FundamentalValue>();
 
-        foreach (var report in known.Where(report => report.ValuesFiled))
+        // A blank report's only lines are a vendor's (ADR-038 §3).
+        foreach (var report in known)
         {
-            foreach (var line in _lines[report.Id])
+            // A blank report's vendor values have no date of their own: they are
+            // known from their fetch, never back-dated to the IDS filing
+            // (ADR-038). A vendor restatement of a filed value is ADR-029's
+            // measured leak, served as before.
+            foreach (var line in _lines[report.Id].Where(line => report.ValuesFiled || line.ObservedFromUtc <= knownAsOfUtc))
             {
                 var key = (report.Template, line.Statement, line.LineCode, line.Period, line.Span);
                 var restated = served.TryGetValue(key, out var earlier) && (earlier.Restated || earlier.Value != line.Value);

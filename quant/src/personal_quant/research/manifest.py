@@ -54,7 +54,7 @@ __all__ = [
 
 Membership = Literal["as_of", "point_in_time"]
 
-SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4, 5})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4, 5, 6})
 
 HISTORY_SCHEMA_VERSION = 3
 """The first schema whose manifests carry history and removal announcements."""
@@ -64,6 +64,9 @@ FUNDAMENTALS_SCHEMA_VERSION = 4
 
 REQUEST_SCHEMA_VERSION = 5
 """The first schema whose manifests carry the labelled-dataset request."""
+
+VENDOR_SCHEMA_VERSION = 6
+"""The first schema whose fundamentals object counts vendor rows (ADR-038)."""
 
 SUPPORTED_RATIO_VERSIONS = frozenset({1, 2})
 """The ratio rules this reader can name: ADR-030 is 1, ADR-032 is 2."""
@@ -170,6 +173,8 @@ class DatasetFundamentals:
     cut: str
     rows: int
     not_collected: tuple[NotCollected, ...]
+    vendor_rows: int | None = None
+    """Rows built on any vendor value (ADR-038); read and hashed from schema 6 only."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +293,7 @@ class DatasetManifest:
             # Read only from schema 4, for the reason history is read only
             # from schema 3: an older hash does not cover it.
             fundamentals=(
-                _fundamentals(raw["fundamentals"])
+                _fundamentals(raw["fundamentals"], with_vendor=version >= VENDOR_SCHEMA_VERSION)
                 if version >= FUNDAMENTALS_SCHEMA_VERSION
                 else None
             ),
@@ -425,6 +430,10 @@ def _fundamentals_part(fundamentals: DatasetFundamentals | None) -> str:
         f"{fundamentals.cut},{fundamentals.rows},"
     )
 
+    # Schema 6 only: older manifests never carried the count, so it is None there.
+    if fundamentals.vendor_rows is not None:
+        rendered += f"vendor:{fundamentals.vendor_rows},"
+
     # Ordered by id, as the exporter renders them, whatever order the file holds.
     for gap in sorted(fundamentals.not_collected, key=lambda gap: gap.instrument_id):
         rendered += f"{gap.instrument_id}~{gap.reason};"
@@ -482,7 +491,9 @@ def _request(raw: Mapping[str, Any] | None) -> DatasetRequest | None:
     )
 
 
-def _fundamentals(raw: Mapping[str, Any] | None) -> DatasetFundamentals | None:
+def _fundamentals(
+    raw: Mapping[str, Any] | None, *, with_vendor: bool
+) -> DatasetFundamentals | None:
     if raw is None:
         return None
 
@@ -517,6 +528,9 @@ def _fundamentals(raw: Mapping[str, Any] | None) -> DatasetFundamentals | None:
         cut=cut,
         rows=_count(raw["rows"], "fundamentals.rows"),
         not_collected=tuple(gaps),
+        vendor_rows=(
+            _count(raw["vendor_rows"], "fundamentals.vendor_rows") if with_vendor else None
+        ),
     )
 
 

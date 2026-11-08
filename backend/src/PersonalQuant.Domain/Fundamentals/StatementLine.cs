@@ -161,7 +161,8 @@ public sealed class StatementLine
         ArgumentNullException.ThrowIfNull(report);
         ArgumentNullException.ThrowIfNull(source);
 
-        if (!report.ValuesFiled)
+        // A blank form states nothing itself; a vendor may fill it (ADR-038 §3).
+        if (!report.ValuesFiled && basis != ValueBasis.Vendor)
         {
             throw new DomainStateException(
                 $"Report {report.SourceReference} was recorded without values, so it states no lines.");
@@ -219,6 +220,8 @@ public sealed class StatementLine
     /// IDS writes <c>01</c>, <c>411a</c> and, on one insurer's form,
     /// <c>.37</c>. The digits keep at least two places, since the income
     /// statement's codes are two-digit, and a trailing letter is lower-cased.
+    /// Vietcap's field names (<c>isa3</c>, <c>bsa210</c>) are kept as they
+    /// are, lower-cased (ADR-038).
     /// </remarks>
     /// <param name="lineCode">The code as written.</param>
     /// <returns>The normalised code.</returns>
@@ -226,6 +229,13 @@ public sealed class StatementLine
     public static string NormaliseLineCode(string? lineCode)
     {
         var text = lineCode?.Trim().TrimStart('.').ToLowerInvariant() ?? string.Empty;
+
+        if (text.Length is > 3 and <= MaxLineCodeLength
+            && (text.StartsWith("isa", StringComparison.Ordinal) || text.StartsWith("bsa", StringComparison.Ordinal))
+            && text[3..].All(char.IsAsciiDigit))
+        {
+            return text;
+        }
         var digits = text.TrimEnd('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h');
         var suffix = text[digits.Length..];
 
