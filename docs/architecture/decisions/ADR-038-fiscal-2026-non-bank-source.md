@@ -230,9 +230,9 @@ not a checked fact until read on vbpl.vn or congbao.chinhphu.vn.
 | Quyết định 450/QĐ-UBCK (IDS) | Reported superseded: 245/QĐ-UBCK (2024), 877/QĐ-UBCK (2024), then 820/QĐ-UBCK (23/10/2025), which reportedly names the portal `ids.ssc.gov.vn` | cited |
 | Luật Sở hữu trí tuệ (as amended 2022, and 131/2025/QH15 from 01/04/2026) | Điều 15: no copyright in bare data (*số liệu*). Điều 22: a data collection is protected only for a creative selection or arrangement. No separate database right was found. Điều 25: one copy for personal, non-commercial research | Điều 22 read; others cited |
 | Luật Chứng khoán 54/2019 (amended 56/2024), Nghị định 155/2020 | Nothing found that restricts an individual collecting public disclosures for private use | partly read |
-| Bộ luật Hình sự Điều 289 (unauthorised access) | Requires overcoming warnings, passwords or firewalls, "or other means", plus taking control, interfering or taking data | cited |
-| Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15, Nghị định 356/2025/NĐ-CP | In force 01/01/2026; personal data only | cited |
-| Luật An ninh mạng 116/2025/QH15 | From 01/07/2026; its collection ban concerns personal data | cited |
+| Bộ luật Hình sự Điều 289 (unauthorised access) | Reported to require overcoming warnings, passwords or firewalls, "or other means", plus taking control, interfering or taking data | cited |
+| Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15, Nghị định 356/2025/NĐ-CP | Reported in force 01/01/2026; personal data only | cited |
+| Luật An ninh mạng 116/2025/QH15 | Reported in force from 01/07/2026; its collection ban reportedly concerns personal data | cited |
 | Luật Dữ liệu 60/2024/QH15 | **Not checked** | — |
 
 No text was found that makes reading publicly accessible data unlawful in
