@@ -138,13 +138,17 @@ VNM 2024Q2, 2024Q4, 2025Q1, 2025Q3), in `tmp/adr-038-verification/`.
 
 | Name | Items that differ | Explained by a later IDS reading |
 | --- | --- | --- |
-| FPT | 9 / 20 | 7 (half-year review, audited annual, next-year comparative) |
+| FPT | 9 / 20 | 6 (2024Q2 and 2024Q4: lines 270 and 400 = the half-year review or the audited annual, line 61 = the next year's comparative; `fpt-later-readings.txt`) |
 | HPG | 4 / 20 | 1 (2025Q4 total assets = the audited annual) |
 | VNM | 4 / 20 | 2 (2024Q4 total assets and equity = the audited annual) |
 
-**17 of 60 items differ; 8 of 12 statements match on all five items.** The
-leak rate of §4 for this sample: 10 of the 17 differences are restatements
-the vendor shows against the first filing's date. The rest:
+**17 of 60 items differ; 7 of 12 statements match on all five items** (FPT
+2025Q1 and 2025Q3; HPG 2024Q1 and 2025Q1; VNM 2024Q2, 2025Q1 and 2025Q3). The
+leak rate of §4 for this sample: **9 of the 17 differences are restatements**
+the vendor shows against the first filing's date (FPT 6, HPG 1, VNM 2). The
+other 8: EPS 3, HPG profit 2, VNM placeholders 2, FPT 1 đồng. Counted by
+script from `fidelity-all.txt`; its matcher checked later readings for HPG
+and VNM only, so FPT's restatements come from `fpt-later-readings.txt`.
 
 - **EPS** differs from every IDS reading on 3 statements (FPT 2024Q2 and Q4,
   HPG 2025Q4, where HPG files line 70 as 0). EPS is computed, never read
@@ -157,7 +161,8 @@ the vendor shows against the first filing's date. The rest:
   15,477,073,125,441 and 2,123,649,268,482 are the real figures. Here the
   filed form is wrong and the vendor right. A filed placeholder is an
   `as_filed` value PQT stores today; finding such values is a data-quality
-  item of its own (backlog), not part of this ADR.
+  item of its own, recorded in the Phase 6 backlog table
+  (`docs/roadmap/phase-6-definition-of-done.md`), not part of this ADR.
 - FPT 2024Q4 revenue differs by 1 đồng.
 
 ### Consequences of the record for the decision
