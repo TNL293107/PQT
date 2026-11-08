@@ -1,6 +1,6 @@
 # ADR-038: Values for non-bank statements from fiscal 2026 — the IDS record dates them, a vendor supplies them
 
-**Status:** Proposed (Lead, 2026-10-29; QA + QC review applied: 1 blocker, 5 minor). **Source chosen by the Moderator on 2026-11-02: Vietcap, option (c).** Verification 2 completed 2026-11-02 (12 statements, 3 names); for QA + QC review, then Accepted · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.4 (Phase 7)
+**Status:** Accepted. Drafted by Lead 2026-10-29; QA + QC review applied (1 blocker, 5 minor). **Source chosen by the Moderator on 2026-11-02: Vietcap, option (c).** Verification 2 completed 2026-11-02 (12 statements, 3 names). **Accepted** (Lead, 2026-11-08, after QA + QC review of the verification) · **Date:** 2026-10-29 · **Phase:** Sprint 11, item 11.4 (Phase 7)
 
 ## Context
 
@@ -36,7 +36,7 @@ What ADR-029 already decided and what exists:
 - Extracting numbers from the filed PDFs was rejected in ADR-029: many are
   scans, and OCR on financial figures breaks the exact-decimal rule.
 
-## Decision (source chosen 2026-11-02; verification pending)
+## Decision
 
 **For non-bank statements from fiscal 2026, the IDS filing keeps dating the
 fact and a vendor supplies the numbers, labelled `vendor`, exactly as ADR-029
