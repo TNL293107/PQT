@@ -79,7 +79,10 @@ class _Crashes:
 ENGINES: list[FeatureEngine] = [TRAILING, _Crashes()]
 
 
-def _write(tmp_path: Path) -> None:
+def _write(tmp_path: Path, *, flat: bool = False) -> None:
+    # flat=True adds "flat", a name whose close never moves, so every label it
+    # carries is exactly 0: the case that pins the event as return > 0.
+    names = [*RATES, "flat"] if flat else list(RATES)
     bars = [
         SyntheticBar(
             name,
@@ -90,12 +93,14 @@ def _write(tmp_path: Path) -> None:
         for name, rate in RATES.items()
         for index, session in enumerate(SESSIONS)
     ]
+    if flat:
+        bars += [SyntheticBar("flat", session, Decimal("100")) for session in SESSIONS]
     write_dataset(
         tmp_path,
         SyntheticDataset(
             dataset_id=DATASET,
             bars=bars,
-            spells={name: [(SESSIONS[0], None)] for name in RATES},
+            spells={name: [(SESSIONS[0], None)] for name in names},
             request={
                 "universe": "TEST30",
                 "as_of": None,
@@ -329,3 +334,36 @@ def test_the_metrics_carry_their_observation_counts(tmp_path: Path) -> None:
     assert metrics["brier"] is not None
     assert metrics["ev_count"] is not None
     assert 0 < metrics["ev_count"] <= observations
+
+
+# --- the event is return > 0 (ADR-037 §1) -------------------------------------
+
+
+def test_a_label_of_exactly_zero_is_not_a_win(tmp_path: Path) -> None:
+    from personal_quant.research.labelled import LabelledDataset
+
+    # "flat" never moves, so each of its labels is exactly 0. Wins counted from
+    # the bins (realised frequency x count) must equal the scored labels that
+    # are strictly positive; counting 0 as a win would add flat's scored labels.
+    _write(tmp_path, flat=True)
+    rebalances = list(
+        LabelledDataset.open(LocalDatasetProvider(tmp_path), DATASET, ENGINES).rebalances(
+            only=TRAILING.name
+        )
+    )
+    assert {item.label["flat"] for item in rebalances} == {0.0}
+
+    outcome = _handler(tmp_path)(_payload())
+    assert outcome.run is not None
+    metrics = outcome.run.metrics
+
+    wins = sum(
+        (metrics[f"bin_{index}_realised"] or 0.0) * (metrics[f"bin_{index}_count"] or 0.0)
+        for index in (1, 2, 3)
+    )
+    # Derived by hand, not by the code under test: recomputing the closes from
+    # the bar formula, bucketing momentum_3_0 into thirds and applying the
+    # 20-observation floor gives 65 scored predictions, 26 of them with a label
+    # > 0. Ten of the 65 are "flat"'s zeros; a ">= 0" rule would make it 36.
+    assert metrics["observations"] == 65
+    assert wins == pytest.approx(26, abs=1e-9)
