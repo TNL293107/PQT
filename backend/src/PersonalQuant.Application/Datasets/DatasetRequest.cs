@@ -512,7 +512,7 @@ public static class DatasetIdentity
 
         if (withFundamentals)
         {
-            AppendFundamentals(builder, manifest.Fundamentals);
+            AppendFundamentals(builder, manifest.Fundamentals, manifest.SchemaVersion >= DatasetManifest.VendorSchemaVersion);
         }
 
         if (withRequest)
@@ -575,11 +575,11 @@ public static class DatasetIdentity
 
     /// <summary>
     /// Renders the fundamentals object in a fixed order: the ratio version,
-    /// the source, the cut, the rows, and each instrument not collected with
+    /// the source, the cut, the rows, the vendor rows from schema 6, and each instrument not collected with
     /// its reason, ordered by id. Its licence note is not rendered, as no
     /// source's note is: it records the deployment's terms, not the data.
     /// </summary>
-    private static void AppendFundamentals(StringBuilder builder, DatasetFundamentals? fundamentals)
+    private static void AppendFundamentals(StringBuilder builder, DatasetFundamentals? fundamentals, bool withVendor)
     {
         builder.Append("fundamentals:");
 
@@ -594,6 +594,12 @@ public static class DatasetIdentity
             .Append(fundamentals.Source).Append(',')
             .Append(fundamentals.Cut).Append(',')
             .Append(fundamentals.Rows.ToString(CultureInfo.InvariantCulture)).Append(',');
+
+        // From schema 6 only, so every older manifest hashes as it did.
+        if (withVendor)
+        {
+            builder.Append("vendor:").Append((fundamentals.VendorRows ?? 0).ToString(CultureInfo.InvariantCulture)).Append(',');
+        }
 
         foreach (var gap in fundamentals.NotCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal))
         {

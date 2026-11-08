@@ -226,6 +226,35 @@ internal static class StatementNormaliser
             ]);
     }
 
+    /// <summary>Reads a vendor filing's values: one quarter, one column, Vietcap's codes (ADR-038).</summary>
+    /// <param name="filing">The vendor filing.</param>
+    /// <param name="period">The quarter it states.</param>
+    /// <returns>The values, already in đồng.</returns>
+    /// <exception cref="DomainValidationException">A table or cell is not one a vendor filing has.</exception>
+    public static IReadOnlyList<NormalisedValue> Vendor(ProviderFiling filing, FiscalQuarter period)
+    {
+        ArgumentNullException.ThrowIfNull(filing);
+
+        return
+        [
+            .. filing.Tables.SelectMany(table =>
+            {
+                var (statement, span) = table.Name switch
+                {
+                    "INCOME_STATEMENT" => (FinancialStatement.IncomeStatement, PeriodSpan.Quarter),
+                    "BALANCE_SHEET" => (FinancialStatement.BalanceSheet, PeriodSpan.Instant),
+                    _ => throw new DomainValidationException($"'{table.Name}' is not a vendor statement this importer reads."),
+                };
+
+                return table.Rows
+                    .Where(row => row.Values.Count > 0)
+                    .Select(row => (row, value: Parse(row.Values[0], row.Code, table.Name)))
+                    .Where(pair => pair.value is not null)
+                    .Select(pair => new NormalisedValue(statement, StatementLine.NormaliseLineCode(pair.row.Code), period, span, pair.value!.Value));
+            }),
+        ];
+    }
+
     /// <summary>Finds income columns whose lines from 61 down sit one row too low.</summary>
     /// <remarks>
     /// Five of GAS's consolidated Circular 200 forms (2022Q1 to 2024Q1) carry
