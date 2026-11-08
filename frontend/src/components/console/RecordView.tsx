@@ -6,6 +6,7 @@ import { PriceChart } from "./PriceChart";
 import { BreadthView, UniversesView } from "./BreadthView";
 import { CoverageView } from "./CoverageView";
 import { FundamentalsView } from "./FundamentalsView";
+import { RunsView } from "./RunsView";
 import { WatchlistView, WatchlistsView, WorkspaceView, WorkspacesView } from "./OperatorStateView";
 
 /** Renders whatever a command produced. */
@@ -94,6 +95,9 @@ export function RecordView({ record }: { readonly record: ConsoleRecord }) {
           quoteProblem={record.quoteProblem}
         />
       );
+
+    case "runs":
+      return <RunsView runs={record.runs} />;
 
     case "workspaces":
       return <WorkspacesView listing={record.listing} />;

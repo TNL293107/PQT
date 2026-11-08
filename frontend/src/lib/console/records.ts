@@ -12,6 +12,7 @@ import type { InstrumentCoverage } from "../../types/coverage";
 import type { FundamentalRatios } from "../../types/fundamentals";
 import type { Watchlist, WatchlistList, WatchlistQuotes } from "../../types/watchlist";
 import type { Workspace, WorkspaceList } from "../../types/workspace";
+import type { ResearchRuns } from "../../types/research";
 
 /**
  * What a command produced.
@@ -75,6 +76,7 @@ export type ConsoleRecord =
       /** Why there are no quotes, in the server's words, when they were refused. */
       readonly quoteProblem?: string;
     }
+  | { readonly kind: "runs"; readonly runs: ResearchRuns }
   | { readonly kind: "workspaces"; readonly listing: WorkspaceList }
   | { readonly kind: "workspace"; readonly workspace: Workspace };
 
