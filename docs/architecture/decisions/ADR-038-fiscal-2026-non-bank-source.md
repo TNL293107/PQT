@@ -194,18 +194,24 @@ congbao.chinhphu.vn.
 ### Vietcap's terms of use (read)
 
 `https://www.vietcap.com.vn/dieu-khoan-su-dung-chinh-sach-bao-mat`, read
-2026-11-08. No date or version is stated.
+2026-11-08 by Lead and re-read the same day by QA + QC. The terms of use carry
+no date or version; the privacy policy on the same page postdates 31/12/2025
+(it cites Nghị định 356/2025/NĐ-CP of that date) while the footer says ©2023,
+so the terms may be older than the policy beside them.
 
-- **Scope:** "trang web này" (this website); it names
-  `trading.vietcap.com.vn` in passing. It does not name Vietcap IQ, but
+- **Scope:** "trang web này" (this website); the rule below names
+  `trading.vietcap.com.vn` itself. It does not name Vietcap IQ, but
   `iq.vietcap.com.vn` now redirects to `trading.vietcap.com.vn/iq`, so the IQ
   pages sit under the domain the terms name. Terms shown only inside the
   JavaScript application could not be read.
-- **Permitted:** only "tải xuống và in các thông tin được yêu cầu để sử dụng
-  cho mục đích cá nhân" (downloading and printing for personal use).
-- **Forbidden:** "sao chép, dẫn liên kết …, phân phối, kinh doanh hoặc xuất
-  bản các nội dung của trang web dưới bất kỳ hình thức nào" (copying, linking,
-  distributing, trading or publishing the content in any form). All rights are
+- **The rule, one sentence:** "Ngoại trừ việc tải xuống và in các thông tin
+  được yêu cầu để sử dụng cho mục đích cá nhân, Người sử dụng không được phép
+  sao chép, dẫn liên kết: https://trading.vietcap.com.vn, phân phối, kinh doanh
+  hoặc xuất bản các nội dung của trang web dưới bất kỳ hình thức nào." The
+  **ban is the rule** (no copying, linking to trading.vietcap.com.vn,
+  distributing, trading or publishing the content in any form), and
+  downloading and printing for personal use is the **only exception** to it,
+  not a standalone grant. Open point 1 turns on that exception. All rights are
   reserved.
 - **Automated access:** not mentioned. No clause permits or forbids scraping,
   bots or programmatic access.
@@ -214,11 +220,14 @@ congbao.chinhphu.vn.
 
 ### Vietnamese law (summary of a research pass)
 
+**For a "cited" row, the status is what commentary reports, unverified**: it is
+not a checked fact until read on vbpl.vn or congbao.chinhphu.vn.
+
 | Text | Status found | Basis |
 | --- | --- | --- |
-| Thông tư 99/2025/TT-BTC | Issued 27/10/2025, in force 01/01/2026, for financial years from that date; replaces Thông tư 200/2014 (not 133/2016) | cited |
-| Thông tư 96/2020/TT-BTC (disclosure) | In force, **amended** by Thông tư 68/2024, 18/2025 and 08/2026 (consolidated 10/VBHN-BTC 2026); deadlines in Điều 14 reported unchanged | 2020 text read; amendments cited |
-| Quyết định 450/QĐ-UBCK (IDS) | **Superseded**: 245/QĐ-UBCK (2024), 877/QĐ-UBCK (2024), then **820/QĐ-UBCK (23/10/2025)**, which names the portal `ids.ssc.gov.vn` | cited |
+| Thông tư 99/2025/TT-BTC | Reported: issued 27/10/2025, in force 01/01/2026, for financial years from that date; replaces Thông tư 200/2014 (not 133/2016) | cited |
+| Thông tư 96/2020/TT-BTC (disclosure) | In force (2020 text read). Reported amended by Thông tư 68/2024, 18/2025 and 08/2026 (consolidated 10/VBHN-BTC 2026); deadlines in Điều 14 reported unchanged | 2020 text read; amendments cited |
+| Quyết định 450/QĐ-UBCK (IDS) | Reported superseded: 245/QĐ-UBCK (2024), 877/QĐ-UBCK (2024), then 820/QĐ-UBCK (23/10/2025), which reportedly names the portal `ids.ssc.gov.vn` | cited |
 | Luật Sở hữu trí tuệ (as amended 2022, and 131/2025/QH15 from 01/04/2026) | Điều 15: no copyright in bare data (*số liệu*). Điều 22: a data collection is protected only for a creative selection or arrangement. No separate database right was found. Điều 25: one copy for personal, non-commercial research | Điều 22 read; others cited |
 | Luật Chứng khoán 54/2019 (amended 56/2024), Nghị định 155/2020 | Nothing found that restricts an individual collecting public disclosures for private use | partly read |
 | Bộ luật Hình sự Điều 289 (unauthorised access) | Requires overcoming warnings, passwords or firewalls, "or other means", plus taking control, interfering or taking data | cited |
@@ -227,7 +236,7 @@ congbao.chinhphu.vn.
 | Luật Dữ liệu 60/2024/QH15 | **Not checked** | — |
 
 No text was found that makes reading publicly accessible data unlawful in
-itself.
+itself, in the texts checked; Luật Dữ liệu 60/2024/QH15 was not checked.
 
 ### What this changes in the decision
 
@@ -240,9 +249,9 @@ itself.
   distributed or sold.
 - **Personal data:** statements can carry officers' or shareholders' names.
   The provider stores none of them.
-- **ADR-029 cites Quyết định 450/QĐ-UBCK as current; it is superseded by
-  820/QĐ-UBCK (2025).** ADR-029's reasoning is unchanged; the reference is
-  corrected there.
+- **ADR-029 cites Quyết định 450/QĐ-UBCK as current; it is reported
+  superseded by 820/QĐ-UBCK (2025)** (cited, unverified). ADR-029's reasoning
+  is unchanged; a note is added there.
 
 ### Open: needs a Vietnamese lawyer before the first import
 
