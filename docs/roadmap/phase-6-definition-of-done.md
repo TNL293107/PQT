@@ -48,6 +48,7 @@ Moderator names one.
 | MBB two capital values (repeated form); ACB 2022 Q1–Q3 forms with no values | sprint 7 backlog | later |
 | Whether `SharesAt` counts stock-dividend shares correctly between the ex-date and the issue (2–5 weeks) | sprint-8-1-steps.md | later |
 | Flaky `Console.test.tsx` | DoD #8 | UI/UX phase |
+| Filed placeholders stored as `as_filed`: VNM's 2024Q4 IDS form states revenue exactly 20,000,000,000,000 and profit exactly 2,000,000,000,000 (the real figures are 15,477,073,125,441 and 2,123,649,268,482). Round placeholder values on a filed form are not detected today | ADR-038 verification 2, 2026-11-02 | later (data quality) |
 | GAS has no 2025Q1–Q3 forms, so every TTM after 2024Q4 has a gap, 2025Q4 included (a quarter's profit is derived from YTD, and the 2025Q3 YTD is missing); GAS `value_ep` and `quality_roe` are absent at every session of the 9.1 build | Tester + Audit, 2026-10-27, `tmp/audit-0e7d28336af399e1/gas25.txt` | later (collection) |
 | Circular 99 reports (the fiscal-2026 template) are held with no values: 99 in the database, 0 with values. Every name loses fundamentals from fiscal 2026 until they are read | Tester + Audit, 2026-10-27, `tmp/audit-0e7d28336af399e1/c99.txt` | later (affects all names) |
 | CafeF bars carry no turnover (0 of 22,545 daily bars since 2024), so `liquidity_20` is absent everywhere; left out of the Phase 7 report (Moderator, 2026-10-28) | Dev, 9.1 export, 2026-10-27 | later (needs a turnover source) |
