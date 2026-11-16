@@ -378,7 +378,11 @@ public sealed class FundamentalRatioService(
     /// <remarks>
     /// Judged by quarter rather than by line, so a vendor value of a quarter
     /// the row reads counts even when no ratio used that line: the count may
-    /// overstate the vendor share, never understate it.
+    /// overstate the vendor share, never understate it. That holds while a
+    /// vendor states quarter-span profit and no charter capital, as Vietcap
+    /// does: a vendor year-to-date row would be read for the quarter before
+    /// the trailing year, and a vendor capital in the step checks, outside
+    /// this set (QA v6 L1).
     /// </remarks>
     private static bool BuiltOnVendor(
         IReadOnlyList<FundamentalValue> values,
