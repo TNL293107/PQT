@@ -34,10 +34,10 @@ public sealed class VendorStatementLinesTests
         // bsa210 the minority interest (like 429): the parent's share is the
         // difference, as the C200 mapping does with 400 - 429.
         var lines = Lines(
-            (FinancialStatement.BalanceSheet, "bsa78", PeriodSpan.Instant, 37_896_654_696_942m),
+            (FinancialStatement.BalanceSheet, "bsa78", PeriodSpan.Instant, 38_000_000_000_000m),
             (FinancialStatement.BalanceSheet, "bsa210", PeriodSpan.Instant, 100_000_000_000m));
 
-        Assert.Equal(37_796_654_696_942m, lines.EquityToParent(Q1));
+        Assert.Equal(37_900_000_000_000m, lines.EquityToParent(Q1));
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class VendorStatementLinesTests
     public void An_unmapped_item_is_absent_never_zero()
     {
         // Only total assets is present: profit and equity are absent, not 0.
-        var lines = Lines((FinancialStatement.BalanceSheet, "bsa53", PeriodSpan.Instant, 73_997_673_121_789m));
+        var lines = Lines((FinancialStatement.BalanceSheet, "bsa53", PeriodSpan.Instant, 74_000_000_000_000m));
 
         // The template is recognised (its balance sheet is the latest held)...
         Assert.Equal(Q1, lines.LatestBalanceSheet());

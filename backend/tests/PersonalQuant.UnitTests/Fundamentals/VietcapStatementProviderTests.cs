@@ -17,7 +17,7 @@ namespace PersonalQuant.UnitTests.Fundamentals;
 /// <c>data.years</c>, one row per period, <c>yearReport</c>, <c>lengthReport</c>
 /// 1–4 for a quarter and 5 for a year, <c>publicDate</c>, and Vietcap's own
 /// fields <c>isa*</c> / <c>bsa*</c>, numbers written as JSON doubles such as
-/// <c>2.3213536857725E13</c>.
+/// <c>1.234567890123E13</c>.
 /// </para>
 /// <para>
 /// The <em>numbers</em> are invented. The data policy forbids vendor data in Git
@@ -54,7 +54,7 @@ public sealed class VietcapStatementProviderTests
           "years":[],
           "quarters":[
             {"ticker":"AAA","yearReport":2026,"lengthReport":1,"publicDate":"2026-04-28T00:00:00",
-             "bsa53":7.3997673121789E13,"bsa78":3.7896654696942E13,"bsa210":1.0E11},
+             "bsa53":7.4123456789012E13,"bsa78":3.8E13,"bsa210":1.0E11},
             {"ticker":"AAA","yearReport":2026,"lengthReport":2,"publicDate":"2026-08-22T00:00:00",
              "bsa53":75000000000000.0,"bsa78":38000000000000.0,"bsa210":1.0E11}]}}
         """;
@@ -165,7 +165,7 @@ public sealed class VietcapStatementProviderTests
 
         Assert.Equal(12_345_678_901_230m, Value(filings.Single(f => f.FiscalQuarter == 1), "isa3"));
         Assert.Equal(12_500_000_000_001m, Value(filings.Single(f => f.FiscalQuarter == 2), "isa3"));
-        Assert.Equal(73_997_673_121_789m, Value(filings.Single(f => f.FiscalQuarter == 1), "bsa53"));
+        Assert.Equal(74_123_456_789_012m, Value(filings.Single(f => f.FiscalQuarter == 1), "bsa53"));
     }
 
     [Fact]
