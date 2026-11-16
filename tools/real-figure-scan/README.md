@@ -40,8 +40,9 @@ and the Moderator ruled real on 2026-11-16.
 scanner read (`tmp/adr-038-verification/`, roughly 10,000 figures) was lost
 with the old working copy, and the four were recovered from the numbers
 `9befc39` removed. It is not being re-fetched until the legal review of the
-Vietcap terms allows it (ADR-038). Until then the scan protects against these
-four, not against any other real figure.
+Vietcap terms allows it (ADR-038). Until then the scan, **CI included**,
+protects against these four and no other real figure: a green "Repository
+checks" means none of the four came back, not that a fixture is invented.
 
 **Brute force.** A digest is salted and slow, but the space it hides is small:
 a 13- to 14-digit figure whose rough size is known can be found by trying

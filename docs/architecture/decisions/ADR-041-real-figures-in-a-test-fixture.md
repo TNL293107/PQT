@@ -90,5 +90,10 @@ them merges. The scanner must print PASS after the fix.
 - The scanner lives in `tools/real-figure-scan/`, so fixture authors can run it
   (rule 3). The first one, in `tmp/`, was lost. CI's "Repository checks" runs it
   over every test file and fixture against `denylist.txt`, which holds salted
-  scrypt digests of the known real figures, so CI needs no real data and never
-  prints a figure. Docs are not scanned in CI yet.
+  scrypt digests of real figures, so CI needs no real data and never prints a
+  figure. Docs are not scanned in CI yet.
+- **CI protects only the four figures of this incident.** As of 2026-11-16,
+  `denylist.txt` holds those four and nothing else. The verification data was
+  lost, and the Moderator decided not to re-fetch it before the legal review, so
+  any other real figure passes CI. A rescaled figure (written in millions) and
+  anything under 10^9 are not detected at all (README, "Limits").
