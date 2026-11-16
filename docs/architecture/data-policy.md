@@ -21,7 +21,9 @@ the rules below are what keep it that way.
    test deterministic. If a fixture would be recognisable as a real vendor
    extract, it is too large and probably not licensed for the purpose.
    Fixture values are invented, never copied from a real response; a gate
-   scans changed fixtures against any real data held in `tmp/` (ADR-041).
+   (`tools/real-figure-scan/`) scans changed fixtures against the real data
+   held in the repository root's git-ignored `tmp/`, for example
+   `tmp/adr-038-verification/`, not the dataset scratch `data/tmp/` (ADR-041).
 4. **Attribution where required.** Several providers require visible
    attribution in any interface displaying their data. That obligation is
    recorded per provider when one is adopted.
