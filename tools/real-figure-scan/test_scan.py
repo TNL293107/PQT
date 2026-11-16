@@ -275,6 +275,17 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("backend/tests/B.cs:1: skipped", err.getvalue())
         self.assertIn("FAIL: 1 real figure(s)", out.getvalue())
 
+    def test_a_non_ascii_path_is_scanned_in_every_mode(self) -> None:
+        # QA's L3: git quotes such paths by default, and the file was skipped or failed.
+        (self.repo / "backend" / "tests" / "Đơn giá.cs").write_text(f"var x = {FIGURE};\n", encoding="utf-8")
+        _git(self.repo, "add", ".")
+        _git(self.repo, "commit", "-q", "-m", "non-ascii")
+        for mode in ((), ("--rev", "HEAD"), ("--diff", "base", "HEAD")):
+            with self.subTest(mode=mode):
+                code, out = self._run(*mode)
+                self.assertEqual(1, code)
+                self.assertIn("backend/tests/Đơn giá.cs:1: a real figure (14 digits)", out)
+
     def test_an_unknown_revision_is_an_error_not_a_pass(self) -> None:
         self.assertEqual(2, self._run("--rev", "no-such-rev")[0])
 

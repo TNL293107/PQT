@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import io
 import re
 import subprocess
 import sys
@@ -285,7 +286,8 @@ def scan_lines(path: str, lines: Iterable[tuple[int, str]], figures: Figures) ->
 
 def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", "-C", str(repo), *args],
+        # quotepath off: a non-ASCII path comes back as itself, not "\303\220..." (QA L3).
+        ["git", "-C", str(repo), "-c", "core.quotepath=off", *args],
         capture_output=True,
         check=False,
         encoding="utf-8",
@@ -306,7 +308,7 @@ def added_lines(diff: str) -> dict[str, list[tuple[int, str]]]:
     line = 0
     for raw in diff.splitlines():
         if raw.startswith("+++ "):
-            target = raw[4:]
+            target = raw[4:].rstrip("\t")  # git adds a tab after a path with a space
             path = None if target == "/dev/null" else target.removeprefix("b/")
             continue
         hunk = _HUNK.match(raw)
@@ -333,8 +335,8 @@ def scan_diff(repo: Path, base: str, head: str, patterns: tuple[str, ...], figur
 
 def scan_tree(repo: Path, rev: str | None, patterns: tuple[str, ...], figures: Figures) -> tuple[int, list[Hit]]:
     """Scan every line of every file in scope, at a revision or in the working tree."""
-    listing = _git(repo, "ls-tree", "-r", "--name-only", rev) if rev else _git(repo, "ls-files")
-    paths = [path for path in listing.splitlines() if in_scope(path, patterns)]
+    listing = _git(repo, "ls-tree", "-r", "-z", "--name-only", rev) if rev else _git(repo, "ls-files", "-z")
+    paths = [path for path in listing.split("\0") if path and in_scope(path, patterns)]
     hits: list[Hit] = []
     for path in paths:
         if rev:
@@ -376,6 +378,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the scan; see the module docstring."""
+    # A non-ASCII path must not crash a cp1252 console mid-report.
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(errors="backslashreplace")
     args = _parser().parse_args(argv)
     if args.candidates:
         return _list_candidates(args)
