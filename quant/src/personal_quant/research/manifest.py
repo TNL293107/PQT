@@ -521,16 +521,31 @@ def _fundamentals(
 
         gaps.append(NotCollected(instrument_id=str(item["instrument_id"]), reason=reason))
 
+    rows = _count(raw["rows"], "fundamentals.rows")
+    vendor_rows: int | None = None
+
+    if with_vendor:
+        # From schema 6 the count is required: a missing one is not 0.
+        if "vendor_rows" not in raw:
+            raise UnsupportedManifestError(
+                "Schema 6 requires fundamentals.vendor_rows; this manifest has none."
+            )
+
+        vendor_rows = _count(raw["vendor_rows"], "fundamentals.vendor_rows")
+
+        if vendor_rows > rows:
+            raise UnsupportedManifestError(
+                f"fundamentals.vendor_rows ({vendor_rows}) exceeds fundamentals.rows ({rows})."
+            )
+
     return DatasetFundamentals(
         ratio_version=ratio_version,
         source=str(raw["source"]),
         licence_note=str(raw["licence_note"]),
         cut=cut,
-        rows=_count(raw["rows"], "fundamentals.rows"),
+        rows=rows,
         not_collected=tuple(gaps),
-        vendor_rows=(
-            _count(raw["vendor_rows"], "fundamentals.vendor_rows") if with_vendor else None
-        ),
+        vendor_rows=vendor_rows,
     )
 
 

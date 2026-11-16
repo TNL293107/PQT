@@ -724,6 +724,33 @@ public sealed class DatasetExportServiceTests : IDisposable
         Assert.Equal(0L, manifest.Fundamentals.VendorRows);
     }
 
+    [Theory]
+    // QA v6-M1: schema 6 requires the count; a file with it removed is refused,
+    // not hashed as though it said 0.
+    [InlineData("\"vendor_rows\": 0", "", "requires fundamentals.vendor_rows")]
+    // QA v6-L: a vendor row is a row of the file.
+    [InlineData("\"vendor_rows\": 0", "\"vendor_rows\": 6", "exceeds")]
+    public async Task A_schema_6_manifest_with_an_impossible_vendor_count_fails_verification(string written, string forged, string problem)
+    {
+        var harness = new Harness(root);
+        harness.FileReport(harness.InstrumentId);
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+        var path = Path.Combine(root, manifest.DatasetId, "v1", IDatasetStore.ManifestFileName);
+        var json = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Contains(written, json, StringComparison.Ordinal);
+        // Removing the key also removes the comma before it, so the JSON stays valid.
+        var edited = forged.Length == 0
+            ? System.Text.RegularExpressions.Regex.Replace(json, ",\\s*\"vendor_rows\": 0", string.Empty)
+            : json.Replace(written, forged, StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, edited, TestContext.Current.CancellationToken);
+
+        var verification = await harness.VerifyAsync(manifest.DatasetId, 1);
+
+        Assert.False(verification.IsIntact);
+        Assert.Contains(verification.Problems, found => found.Contains(problem, StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Changing_the_fundamentals_object_breaks_the_content_hash()
     {

@@ -124,6 +124,25 @@ def test_a_vendor_row_count_of_zero_is_hashed_not_dropped() -> None:
     assert content_hash_of(manifest) != hashlib.sha256(without.encode("utf-8")).hexdigest()
 
 
+def test_a_schema_6_manifest_without_vendor_rows_is_refused() -> None:
+    # QA v6-M1: the schema requires the count from 6. A file with it removed
+    # is not a manifest this reader can hash, not a KeyError.
+    v6 = _raw("v6-vendor.json")
+    del v6["fundamentals"]["vendor_rows"]
+
+    with pytest.raises(UnsupportedManifestError, match="vendor_rows"):
+        DatasetManifest.from_json(v6)
+
+
+def test_more_vendor_rows_than_rows_is_refused() -> None:
+    # QA v6-L: a vendor row is a row of fundamentals.parquet.
+    v6 = _raw("v6-vendor.json")
+    v6["fundamentals"]["vendor_rows"] = v6["fundamentals"]["rows"] + 1
+
+    with pytest.raises(UnsupportedManifestError, match="vendor_rows"):
+        DatasetManifest.from_json(v6)
+
+
 def test_a_schema_1_manifest_reads_as_an_as_of_export() -> None:
     # Version 1 predates the membership field; every v1 export was as-of.
     manifest = DatasetManifest.from_json(_raw("v1-as-of.json"))
