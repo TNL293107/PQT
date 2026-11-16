@@ -75,7 +75,7 @@ _BINARY_SUFFIXES = frozenset(
 
 # Thousands separators other than '_', ',' and '.': space, no-break space,
 # narrow no-break space, and the apostrophes some locales use.
-_GROUP_SEPARATORS = "   '’"
+_GROUP_SEPARATORS = " \u00a0\u202f'\u2019"
 
 # A number token. Thousands separators are only taken as such when every
 # group after the first has exactly three digits, so "405161,2025" is two
@@ -84,12 +84,11 @@ _GROUP_SEPARATORS = "   '’"
 _NUMBER = re.compile(
     r"""
     (?<![\w.])                       # starts a token; embedded runs are read separately
-    (?<![0-9A-Fa-f]-)                # not a UUID or hash segment (…d6-4e41-…)
     (?P<mantissa>
         \d{1,3}(?:_\d{3})+           # 1_234_567
       | \d{1,3}(?:,\d{3})+(?!\d)     # 1,234,567
       | \d{1,3}(?:\.\d{3}){2,}(?![\d.]) # 1.234.567 (Vietnamese style)
-      | \d{1,3}(?:[   '’]\d{3}){2,}(?!\d) # 1 234 567, 1'234'567
+      | \d{1,3}(?:[ \u00a0\u202f'\u2019]\d{3}){2,}(?!\d) # 1 234 567, 1'234'567
       | \d+(?:_\d+)*(?:\.\d+)?       # 1234567, 1234.5, 1_2345
       | \.\d+
     )
@@ -97,10 +96,14 @@ _NUMBER = re.compile(
     (?P<suffix>[mMdDfFlLn]|[uU][lL]|[lL][uU])?
     (?:VND|vnd)?
     (?![0-9A-Za-z_])                 # a non-ASCII letter (đ, ₫) may follow
-    (?!-[0-9A-Fa-f])
     """,
     re.VERBOSE,
 )
+
+# A UUID is masked with spaces of the same length before tokenising, so its
+# segments (…d6-4e41-…, …-c01122334455) are never read and columns stay put.
+# A hyphen is otherwise ordinary: VCB-12,345,678,901,234 is read whole.
+_UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 
 # A run of ten or more digits anywhere, e.g. inside an identifier such as
 # Revenue_12345678901234_test or after a dot. Read only where no token covers it.
@@ -177,6 +180,7 @@ def numbers(text: str, on_skip: Callable[[str], None] | None = None) -> Iterator
     one inside an identifier, so nothing is read twice. A number above
     10^MAX_EXPONENT is no figure: it is skipped, and ``on_skip`` is told.
     """
+    text = _UUID.sub(lambda uuid: " " * len(uuid.group()), text)
     covered: list[tuple[int, int]] = []
     for match in _NUMBER.finditer(text):
         covered.append(match.span())

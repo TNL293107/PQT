@@ -33,8 +33,8 @@ FORMS = [
     "12345678901234₫",
     "12345678901234VND",
     "12 345 678 901 234",
-    "12 345 678 901 234",
-    "12 345 678 901 234",
+    "12\u00a0345\u00a0678\u00a0901\u00a0234",
+    "12\u202f345\u202f678\u202f901\u202f234",
     "12'345'678'901'234",
     "12.345.678.901.234,00",
 ]
@@ -102,6 +102,30 @@ class CanonicalTests(unittest.TestCase):
         skipped: list[str] = []
         self.assertEqual([], list(scan.numbers('"ae6813d6-1629-4e41-acc2-1f52ccff66c7"', skipped.append)))
         self.assertEqual([], skipped)
+
+    def test_a_uuid_with_an_all_digit_segment_yields_nothing(self) -> None:
+        self.assertEqual([], list(scan.numbers("run 0a1b2c3d-1629-4e41-acc2-c01122334455 done")))
+
+    def test_a_formatted_figure_next_to_a_hyphen_is_read_whole(self) -> None:
+        # QA re-review M-A: VN tickers often end in a hex letter (VCB, ACB, HDB), and
+        # ranges are written a-b. The figure must be read whole, never truncated.
+        for text in [
+            "VCB-12,345,678,901,234",
+            "VCB-1.2345678901234E13",
+            "ACB-12_345_678_901_234",
+            "HDB-12 345 678 901 234",
+            "12,345,678,901,234-A",
+            "1,000-12,345,678,901,234",
+            "12_345_678_901_234m-1m",
+            "VCB-12345678901234",
+            "0-12345678901234",
+            "e-12345678901234",
+            "12345678901234-1",
+        ]:
+            with self.subTest(text=text):
+                found = list(scan.numbers(text))
+                self.assertIn(FIGURE, found)
+                self.assertTrue(all(value == FIGURE or len(value) < 10 for value in found), found)
 
     def test_a_long_digit_string_without_an_exponent_is_a_hash_and_skipped_quietly(self) -> None:
         skipped: list[str] = []
