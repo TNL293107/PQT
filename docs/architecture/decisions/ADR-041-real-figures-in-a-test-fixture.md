@@ -63,6 +63,18 @@ are replaced with invented values in a new commit, every assertion and comment
 included, and that commit is carried onto each affected branch before any of
 them merges. The scanner must print PASS after the fix.
 
+"Not rewritten" holds only for the feature branches. **`73588e3` must never
+become an ancestor of `develop`, `uat`, `staging` or `main`.** A merge commit
+would carry it, and with it all four figures, into their history. So:
+
+- PR #20 (`feature/phase-7-vietcap-statements-code`), the schema-6 writer
+  branch (`feature/phase-7-manifest-v6-writer`), and **every other branch that
+  contains `73588e3`**, remote or local, merge only by **squash**, or after a
+  rebase that drops `73588e3`.
+- Before and after each such merge, the merger checks
+  `git merge-base --is-ancestor 73588e3 origin/develop`, which must fail (exit
+  1). As of 2026-11-16 it fails for `develop`, `uat`, `staging` and `main`.
+
 ## The check that prevents it
 
 1. **Fixtures are invented, never copied.** A fixture value is written to be
