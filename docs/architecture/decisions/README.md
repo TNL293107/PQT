@@ -47,7 +47,7 @@ reasoning at the time is preserved.
 | [036](ADR-036-factor-evaluation-job.md)                     | The factor evaluation job: one run per trial on a labelled dataset | Accepted |
 | [037](ADR-037-calibration-and-expected-value.md)            | The probability-calibration and expected-value substrate | Accepted |
 | [038](ADR-038-fiscal-2026-non-bank-source.md)              | Values for non-bank statements from fiscal 2026: IDS dates them, a vendor supplies them | Accepted |
-| [041](ADR-041-real-figures-in-a-test-fixture.md)            | Two real figures in a test fixture: what happened and the check that prevents it | Accepted |
+| [041](ADR-041-real-figures-in-a-test-fixture.md)            | Three real figures in a test fixture: what happened and the check that prevents it | Accepted |
 
 ## Format
 
