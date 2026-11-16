@@ -95,18 +95,16 @@ class FiguresTests(unittest.TestCase):
 
 class DiffTests(unittest.TestCase):
     def test_only_added_lines_are_read_with_their_new_line_numbers(self) -> None:
-        diff = "\n".join(
-            [
-                "diff --git a/backend/tests/A.cs b/backend/tests/A.cs",
-                "--- a/backend/tests/A.cs",
-                "+++ b/backend/tests/A.cs",
-                "@@ -3,0 +4,2 @@",
-                "+first",
-                "+second",
-                "@@ -9 +11 @@",
-                "-old",
-                "+third",
-            ]
+        diff = (
+            "diff --git a/backend/tests/A.cs b/backend/tests/A.cs\n"
+            "--- a/backend/tests/A.cs\n"
+            "+++ b/backend/tests/A.cs\n"
+            "@@ -3,0 +4,2 @@\n"
+            "+first\n"
+            "+second\n"
+            "@@ -9 +11 @@\n"
+            "-old\n"
+            "+third"
         )
         self.assertEqual(
             {"backend/tests/A.cs": [(4, "first"), (5, "second"), (11, "third")]},

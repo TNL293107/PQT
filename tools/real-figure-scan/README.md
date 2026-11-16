@@ -19,7 +19,24 @@ Standard library only, Python 3.12 or later. Nothing to install.
 | `--reference DIR` | Real responses in a git-ignored directory, e.g. `tmp/adr-038-verification/`. Every large number in every file | On the machine that holds the data |
 | `--denylist FILE` | Salted scrypt digests of real figures, made with `--make-denylist`. A digest does not reveal its figure | Anywhere, including CI |
 
-`denylist.txt` holds the digests of the three figures of the ADR-041 incident.
+`denylist.txt` holds the digests of the **four** figures of the ADR-041
+incident: the three the ADR names, and the equity-to-parent figure asserted in
+`VendorStatementLinesTests.cs`, which the same fix commit (`9befc39`) replaced
+and the Moderator ruled real on 2026-11-16.
+
+**That is the whole reference set today.** The verification data the first
+scanner read (`tmp/adr-038-verification/`, roughly 10,000 figures) was lost
+with the old working copy, and the four were recovered from the numbers
+`9befc39` removed. It is not being re-fetched until the legal review of the
+Vietcap terms allows it (ADR-038). Until then the scan protects against these
+four, not against any other real figure.
+
+**Brute force.** A digest is salted and slow, but the space it hides is small:
+a 13- to 14-digit figure whose rough size is known can be found by trying
+candidates. This is accepted because the figures are a listed company's own
+published statements; what ADR-041 prevents is the repository redistributing
+the vendor's data, and a digest does not do that.
+
 When real data is saved for a new verification, add its digests:
 
 ```bash
