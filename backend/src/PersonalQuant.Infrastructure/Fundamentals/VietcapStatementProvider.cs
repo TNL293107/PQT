@@ -34,7 +34,9 @@ namespace PersonalQuant.Infrastructure.Fundamentals;
 /// A run is all or nothing. A refused answer or a response that cannot be read
 /// stops it with a <see cref="MarketDataProviderException"/> naming the ticker
 /// and section, before anything is joined: no ticker is skipped and no other
-/// source stands in (QA M2). Rate limits and server errors are transient.
+/// source stands in (QA M2). Rate limits, server errors, network failures and
+/// timeouts are transient. Nothing retries today; a caller that does must keep
+/// <see cref="MinimumSpacing"/> between reads, retries included.
 /// </para>
 /// </remarks>
 internal sealed class VietcapStatementProvider(IHttpClientFactory clients, IClock clock, IDelayScheduler delays)
@@ -98,7 +100,7 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
 
                 first = false;
                 var path = $"company/{Uri.EscapeDataString(ticker)}/financial-statement?section={section}";
-                using var response = await client.GetAsync(new Uri(path, UriKind.Relative), cancellationToken).ConfigureAwait(false);
+                using var response = await GetAsync(client, path, ticker, section, cancellationToken).ConfigureAwait(false);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -155,6 +157,28 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
                 "{" + string.Join(',', rows[(year, quarter)]) + "}",
                 "application/json",
                 fetched);
+        }
+    }
+
+    private static async Task<HttpResponseMessage> GetAsync(
+        HttpClient client,
+        string path,
+        string ticker,
+        string section,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await client.GetAsync(new Uri(path, UriKind.Relative), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is HttpRequestException
+            || (error is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            // A cancellation the caller did not ask for is HttpClient's timeout.
+            throw new MarketDataProviderException(
+                $"Vietcap could not be reached for {ticker} {section} ({error.Message}); the run stopped and nothing was joined.",
+                isTransient: true,
+                error);
         }
     }
 

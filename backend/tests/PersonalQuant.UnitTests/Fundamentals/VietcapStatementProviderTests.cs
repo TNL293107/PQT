@@ -352,6 +352,40 @@ public sealed class VietcapStatementProviderTests
         Assert.Contains(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture), failure.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_network_failure_stops_the_run_as_a_transient_provider_failure()
+    {
+        var provider = Provider(new RoutingHandler(failure: new HttpRequestException("connection reset")));
+
+        var failure = await Assert.ThrowsAsync<MarketDataProviderException>(
+            () => provider.ListAsync(TestContext.Current.CancellationToken));
+
+        Assert.True(failure.IsTransient);
+        Assert.Contains("AAA", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_timeout_stops_the_run_as_a_transient_provider_failure()
+    {
+        // HttpClient reports its own timeout as a cancellation the caller did not ask for.
+        var provider = Provider(new RoutingHandler(failure: new TaskCanceledException("timed out", new TimeoutException())));
+
+        var failure = await Assert.ThrowsAsync<MarketDataProviderException>(
+            () => provider.ListAsync(TestContext.Current.CancellationToken));
+
+        Assert.True(failure.IsTransient);
+    }
+
+    [Fact]
+    public async Task A_cancellation_the_caller_asked_for_is_not_a_provider_failure()
+    {
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        var provider = Provider(new RoutingHandler());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.ListAsync(cancelled.Token));
+    }
+
     private static decimal Value(ProviderFiling filing, string code)
     {
         var row = filing.Tables.SelectMany(table => table.Rows).Single(row => row.Code == code);
@@ -396,7 +430,11 @@ public sealed class VietcapStatementProviderTests
     }
 
     /// <summary>Answers the income or balance section by its query, and records each request.</summary>
-    private sealed class RoutingHandler(string income = Income, string balance = Balance, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
+    private sealed class RoutingHandler(
+        string income = Income,
+        string balance = Balance,
+        HttpStatusCode status = HttpStatusCode.OK,
+        Exception? failure = null) : HttpMessageHandler
     {
         public List<(string UserAgent, string? Referer, bool HasOrigin)> Requests { get; } = [];
 
@@ -408,6 +446,13 @@ public sealed class VietcapStatementProviderTests
                 request.Headers.UserAgent.ToString(),
                 request.Headers.Referrer?.ToString(),
                 request.Headers.Contains("Origin")));
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (failure is not null)
+            {
+                return Task.FromException<HttpResponseMessage>(failure);
+            }
 
             var query = request.RequestUri?.Query ?? string.Empty;
             var body = query.Contains("BALANCE_SHEET", StringComparison.Ordinal) ? balance

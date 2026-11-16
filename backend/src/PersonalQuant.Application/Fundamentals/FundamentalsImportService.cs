@@ -168,7 +168,7 @@ public sealed class FundamentalsImportService(
 
         ApplicationLog.FundamentalsImported(
             logger, source.Code.Value, report.FilingsRead, report.ReportsRecorded, report.ReportsWithoutValues,
-            report.ReportsAlreadyHeld, report.LinesRecorded, report.LinesRestated, report.Late.Count);
+            report.ReportsAlreadyHeld, report.ReportsJoined, report.LinesRecorded, report.LinesRestated, report.Late.Count);
 
         foreach (var rejection in report.Rejections)
         {
