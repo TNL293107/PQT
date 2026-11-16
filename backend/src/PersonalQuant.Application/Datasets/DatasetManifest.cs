@@ -221,8 +221,12 @@ public sealed record DatasetManifest(
     /// Version 5: <c>request</c>, the labelled-dataset request the export was
     /// resolved from, or null. See ADR-034.
     /// </para>
+    /// <para>
+    /// Version 6: <c>fundamentals.vendor_rows</c>, the rows built on any
+    /// vendor value, stated even when 0. See ADR-038.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = RequestSchemaVersion;
+    public const int CurrentSchemaVersion = VendorSchemaVersion;
 
     /// <summary>
     /// The first schema version whose manifests carry history and removal
@@ -246,10 +250,6 @@ public sealed record DatasetManifest(
     /// The first schema version whose fundamentals object counts vendor rows,
     /// and hashes the count (ADR-038).
     /// </summary>
-    /// <remarks>
-    /// ponytail: read and hashed, not yet written; the exporter stays at
-    /// <see cref="CurrentSchemaVersion"/> 5 until it counts vendor rows.
-    /// </remarks>
     public const int VendorSchemaVersion = 6;
 
     /// <summary>Gets the total rows across every file.</summary>

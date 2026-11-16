@@ -62,6 +62,8 @@ def _raw(name: str) -> dict[str, Any]:
         # as `vendor:{n},` after the row count. Hand-built from v5-request; its
         # hash comes from v6-vendor.canonical.txt, rendered by hand.
         "v6-vendor.json",
+        # Schema 6 written by the .NET build, so the parity runs both ways.
+        "v6-export.json",
     ],
 )
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:

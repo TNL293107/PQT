@@ -610,6 +610,7 @@ internal sealed class DatasetExportService(
         var rows = new List<DatasetFundamentalsRow>();
         var notCollected = new List<DatasetNotCollected>();
         var sources = new SortedSet<string>(StringComparer.Ordinal);
+        var vendorRows = 0L;
 
         foreach (var (instrumentId, ticker, membership) in ranges.OrderBy(range => range.Instrument.Value))
         {
@@ -633,6 +634,7 @@ internal sealed class DatasetExportService(
                 .ConfigureAwait(false);
 
             rows.AddRange(read.Select(Row));
+            vendorRows += read.Count(ratios => ratios.BuiltOnVendor);
         }
 
         var described = new DatasetFundamentals(
@@ -641,7 +643,8 @@ internal sealed class DatasetExportService(
             sources.Count == 0 ? IDatasetLicenceRegistry.UnstatedNote : string.Join(" ", sources.Select(licences.NoteFor).Distinct(StringComparer.Ordinal)),
             DatasetFundamentals.SessionCut,
             rows.Count,
-            [.. notCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal)]);
+            [.. notCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal)],
+            vendorRows);
 
         return (rows, described);
     }

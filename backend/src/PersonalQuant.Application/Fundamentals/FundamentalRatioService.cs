@@ -126,6 +126,11 @@ public sealed record RatioValue(decimal? Value, string? Absent, RatioAbsence? Re
 /// <param name="ActionsApplied">Share-count actions applied to the balance sheet's count.</param>
 /// <param name="ActionsWithheld">Actions in the window not yet announced, or never dated.</param>
 /// <param name="Findings">What the share-count checks found, in words; empty when they found nothing.</param>
+/// <param name="BuiltOnVendor">
+/// Whether any value of the quarters the row was read from (its balance
+/// sheet, its trailing profit quarters, and the year-earlier equity) was a
+/// vendor's (ADR-038). A dataset counts these rows as <c>vendor_rows</c>.
+/// </param>
 public sealed record FundamentalRatios(
     InstrumentId InstrumentId,
     DateOnly Session,
@@ -145,7 +150,8 @@ public sealed record FundamentalRatios(
     IReadOnlyList<FiscalQuarter> ProfitQuarters,
     int ActionsApplied,
     int ActionsWithheld,
-    IReadOnlyList<string> Findings);
+    IReadOnlyList<string> Findings,
+    bool BuiltOnVendor = false);
 
 /// <summary>
 /// Computes point-in-time ratios on read (ADR-030).
@@ -347,7 +353,38 @@ public sealed class FundamentalRatioService(
             quarters,
             applied,
             withheld,
-            findings);
+            findings,
+            BuiltOnVendor(statements.Values, balance, quarters));
+    }
+
+    /// <summary>
+    /// Whether a vendor stated any value of the quarters a row reads: the
+    /// balance sheet, the trailing profit quarters and the equity a year
+    /// before the latest of them (ADR-038).
+    /// </summary>
+    /// <remarks>
+    /// Judged by quarter rather than by line, so a vendor value of a quarter
+    /// the row reads counts even when no ratio used that line: the count may
+    /// overstate the vendor share, never understate it.
+    /// </remarks>
+    private static bool BuiltOnVendor(
+        IReadOnlyList<FundamentalValue> values,
+        FiscalQuarter? balance,
+        IReadOnlyList<FiscalQuarter> quarters)
+    {
+        var read = new HashSet<FiscalQuarter>(quarters);
+
+        if (balance is { } sheet)
+        {
+            read.Add(sheet);
+        }
+
+        if (quarters.Count > 0)
+        {
+            read.Add(quarters[^1].YearEarlier);
+        }
+
+        return values.Any(value => value.Basis == ValueBasis.Vendor && read.Contains(value.Period));
     }
 
     private async Task<RatioValue> CloseAsync(

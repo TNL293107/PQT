@@ -264,7 +264,8 @@ public sealed class DatasetManifestSchemaTests
                 IDatasetLicenceRegistry.UnstatedNote,
                 DatasetFundamentals.SessionCut,
                 5,
-                [new DatasetNotCollected(Guid.Empty, "ids_capture_gap")]));
+                [new DatasetNotCollected(Guid.Empty, "ids_capture_gap")],
+                VendorRows: 0));
 
         return manifest;
     }
@@ -284,7 +285,7 @@ public sealed class DatasetManifestSchemaTests
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "docs", "schemas", "dataset-manifest-v5.schema.json");
+                directory.FullName, "docs", "schemas", "dataset-manifest-v6.schema.json");
 
             if (File.Exists(candidate))
             {
@@ -295,6 +296,6 @@ public sealed class DatasetManifestSchemaTests
         }
 
         throw new FileNotFoundException(
-            "dataset-manifest-v5.schema.json was not found above the test binary.");
+            "dataset-manifest-v6.schema.json was not found above the test binary.");
     }
 }

@@ -54,6 +54,64 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
+    public async Task A_row_read_only_from_filed_values_is_not_built_on_a_vendor_value()
+    {
+        var ratios = await new Harness().ReadAsync(March);
+
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_row_read_from_a_blank_report_a_vendor_filled_is_built_on_a_vendor_value()
+    {
+        var (service, instrument) = VendorFilled(fetched: Recorded);
+
+        var ratios = await service.ReadAsync(instrument, new DateOnly(2026, 11, 2), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 2, 0, 0, 0, TimeSpan.Zero), ratios.KnownAsOfUtc);
+        Assert.Equal(FiscalQuarter.Create(2026, 3), ratios.BalanceSheet);
+        Assert.True(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_vendor_value_not_yet_fetched_at_the_observation_instant_builds_nothing()
+    {
+        var (service, instrument) = VendorFilled(fetched: Recorded);
+
+        // Observed the day before the fetch: the blank report is known, its
+        // vendor values are not (ADR-038 §3).
+        var ratios = await service.ReadAsync(
+            instrument, new DateOnly(2026, 11, 2), Recorded.AddDays(-1), TestContext.Current.CancellationToken);
+
+        Assert.Null(ratios.BalanceSheet);
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    /// <summary>
+    /// A blank 2026Q3 report on the Circular 99 form, disclosed on 15 October
+    /// 2026 and filled from a vendor fetch: invented equity and profit.
+    /// </summary>
+    private static (FundamentalRatioService Service, InstrumentId Instrument) VendorFilled(DateTimeOffset fetched)
+    {
+        var instrument = InstrumentId.New();
+        var quarter = FiscalQuarter.Create(2026, 3);
+        var fundamentals = new InMemoryFundamentals();
+        var report = FinancialReport.Record(
+            instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+            FinancialTemplate.NonFinancialCircular99, quarter, "Báo cáo tài chính", new DateOnly(2026, 10, 15), null,
+            FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: false, new DateTimeOffset(2026, 10, 16, 0, 0, 0, TimeSpan.Zero));
+        fundamentals.Add(report);
+        fundamentals.Add(StatementLine.Observe(
+            report, FinancialStatement.BalanceSheet, "bsa78", quarter, PeriodSpan.Instant, 20_000_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+        fundamentals.Add(StatementLine.Observe(
+            report, FinancialStatement.IncomeStatement, "isa22", quarter, PeriodSpan.Quarter, 500_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+
+        return (new FundamentalRatioService(
+            new FundamentalsReader(fundamentals), new FakeBarRepository(), new FakeCorporateActionRepository(), new FakeCorporateActionCoverageRepository()),
+            instrument);
+    }
+
+    [Fact]
     public async Task Before_the_bonus_issue_goes_ex_the_count_is_the_balance_sheets()
     {
         var harness = new Harness();

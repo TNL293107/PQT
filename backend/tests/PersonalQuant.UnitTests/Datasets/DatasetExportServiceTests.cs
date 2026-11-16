@@ -684,6 +684,47 @@ public sealed class DatasetExportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task An_export_whose_values_were_all_filed_states_vendor_rows_0_on_schema_6()
+    {
+        var harness = new Harness(root);
+        harness.FileReport(harness.InstrumentId);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+
+        Assert.Equal(DatasetManifest.VendorSchemaVersion, manifest.SchemaVersion);
+        Assert.Equal(0L, manifest.Fundamentals!.VendorRows);
+        Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+    }
+
+    [Fact]
+    public async Task Every_row_read_from_a_vendor_value_is_counted_in_vendor_rows()
+    {
+        var harness = new Harness(root);
+        harness.FillBlankReportFromVendor(harness.InstrumentId);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+
+        Assert.Equal(5L, manifest.Fundamentals!.Rows);
+        Assert.Equal(5L, manifest.Fundamentals.VendorRows);
+        Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+    }
+
+    [Fact]
+    public async Task A_vendor_value_fetched_after_the_observation_instant_is_not_counted()
+    {
+        var harness = new Harness(root);
+        harness.FillBlankReportFromVendor(harness.InstrumentId, fetched: new DateTimeOffset(2026, 8, 20, 0, 0, 0, TimeSpan.Zero));
+
+        // Observed before the fetch: the blank report is known, its vendor
+        // values are not, so its rows exist and none is built on them.
+        var manifest = (await harness.ExportAsync(
+            pointInTime: true, fundamentals: true, knownAsOf: new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.Zero))).Manifest!;
+
+        Assert.Equal(5L, manifest.Fundamentals!.Rows);
+        Assert.Equal(0L, manifest.Fundamentals.VendorRows);
+    }
+
+    [Fact]
     public async Task Changing_the_fundamentals_object_breaks_the_content_hash()
     {
         var harness = new Harness(root);
@@ -771,6 +812,35 @@ public sealed class DatasetExportServiceTests : IDisposable
             {
                 Fundamentals.Add(StatementLine.Observe(
                     report, statement, code, quarter, span, value, ValueBasis.AsFiled, SourceCode.Create("IDS"), recorded));
+            }
+
+            return report;
+        }
+
+        /// <summary>
+        /// Holds a blank 2026Q2 report on the Circular 99 form, disclosed on
+        /// 30 July 2026, and fills it from a vendor fetch (ADR-038): invented
+        /// equity and profit to the parent, no charter capital.
+        /// </summary>
+        public FinancialReport FillBlankReportFromVendor(InstrumentId instrument, DateTimeOffset? fetched = null)
+        {
+            var recorded = new DateTimeOffset(2026, 7, 31, 0, 0, 0, TimeSpan.Zero);
+            var quarter = FiscalQuarter.Create(2026, 2);
+            var report = FinancialReport.Record(
+                instrument, SourceCode.Create("IDS"), $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly,
+                FinancialStatementScope.Consolidated, FinancialTemplate.NonFinancialCircular99, quarter,
+                "Báo cáo tài chính", new DateOnly(2026, 7, 30), null, FinancialReportTests.Vietnam,
+                isCorrection: false, valuesFiled: false, recorded);
+            Fundamentals.Add(report);
+
+            foreach (var (statement, code, span, value) in new[]
+            {
+                (FinancialStatement.BalanceSheet, "bsa78", PeriodSpan.Instant, 20_000_000_000_000m),
+                (FinancialStatement.IncomeStatement, "isa22", PeriodSpan.Quarter, 500_000_000_000m),
+            })
+            {
+                Fundamentals.Add(StatementLine.Observe(
+                    report, statement, code, quarter, span, value, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched ?? recorded.AddDays(1)));
             }
 
             return report;
