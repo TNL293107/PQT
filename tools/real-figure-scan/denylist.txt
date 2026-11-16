@@ -1,0 +1,4 @@
+# pqt real-figure-scan denylist v1: scrypt(n=4096,r=8,p=1,dklen=16), one hex digest per line
+2b698c16dfb69c2e0320565d1e02f033
+764b1b09a5fb8e9e3ca6a2328b8119ff
+e38c303e85d88bea96aee8ed1c200ec6

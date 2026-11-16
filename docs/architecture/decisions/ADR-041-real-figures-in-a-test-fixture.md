@@ -65,7 +65,8 @@ them merges. The scanner must print PASS after the fix.
 2. **A gate scans for real figures.** When a PR adds or changes a fixture for a
    source whose real responses are held in `tmp/` (for example,
    `tmp/adr-038-verification/`), Tester + Audit runs
-   `tmp/audit-tools/real_figure_scan.py <repo> <base> <head>`. It checks every
+   `python tools/real-figure-scan/scan.py --reference <real data> --diff <base> <head>`
+   ([README](../../../tools/real-figure-scan/README.md)). It checks every
    number of at least 10^9 on every added line of the changed test files,
    **comments included**, in **every form** (plain, `.0`, exponent such as
    `1.234E13`, with separators), against every large figure in that real data.
@@ -81,6 +82,8 @@ them merges. The scanner must print PASS after the fix.
   and a clean scan.
 - The data policy's rule 3 is unchanged; this ADR adds the check that enforces
   it for fixtures built next to real data.
-- The scanner lives in `tmp/`, outside git. Keeping it in `tools/` would make it
-  part of the repository's own checks; that is a follow-up if the gate keeps
-  needing it.
+- The scanner lives in `tools/real-figure-scan/`, so fixture authors can run it
+  (rule 3). The first one, in `tmp/`, was lost. CI's "Repository checks" runs it
+  over every test file and fixture against `denylist.txt`, which holds salted
+  scrypt digests of the known real figures, so CI needs no real data and never
+  prints a figure. Docs are not scanned in CI yet.
