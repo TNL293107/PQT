@@ -20,6 +20,9 @@ digit, such as `1.0E11`) is exempt, because it collides by chance.
 - **Anything under 10^9**, by design.
 - **A real round figure** (one significant digit), by design: it cannot be told
   from an invented one.
+- **A figure glued inside a run of 32 or more digits.** Such a run (a hash, an
+  id) is above 10^30 and is skipped whole, so nothing inside it is read. Copying
+  a figure into a hash is not a copying pattern, so this is accepted.
 - **A figure outside the reference set** (see below).
 
 Standard library only, Python 3.12 or later. Nothing to install.

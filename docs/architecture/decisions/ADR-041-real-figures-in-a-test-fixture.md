@@ -24,8 +24,10 @@ value in an assertion. The fix commit (`9befc39`) replaced it along with the
 other three, and the Moderator ruled it real on 2026-11-16.
 
 The figures themselves are deliberately not repeated here: quoting them in a
-public document would publish them again. They are identifiable from the
-git-ignored verification data in `tmp/adr-038-verification/`.
+public document would publish them again. They are identifiable from git
+history: the test files at the parent of the fix commit `9befc39`. (The
+git-ignored verification data they were first checked against,
+`tmp/adr-038-verification/`, was later lost.)
 
 Tester + Audit found the first two while gating PR #20, by comparing the
 fixtures against the verification data, and the third with a scanner written for
