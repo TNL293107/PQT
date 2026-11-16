@@ -210,11 +210,12 @@ class Figures:
     def from_denylist(cls, path: Path) -> Figures:
         """The digests in a denylist file; '#' starts a comment."""
         digests = []
-        for raw in path.read_text(encoding="utf-8").splitlines():
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             line = raw.split("#", 1)[0].strip()
             if line:
+                # Never echo the line: a figure pasted by mistake would reach a public CI log.
                 if not re.fullmatch(r"[0-9a-f]{32}", line):
-                    raise ValueError(f"{path}: '{line}' is not a 32-hex digest.")
+                    raise ValueError(f"{path}:{number}: not a 32-hex digest.")
                 digests.append(line)
         return cls(digests=digests)
 

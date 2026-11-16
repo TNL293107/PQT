@@ -121,6 +121,19 @@ class FiguresTests(unittest.TestCase):
         self.assertIn(FIGURE, figures)
         self.assertNotIn("23456789012345", figures)
 
+    def test_a_malformed_denylist_line_is_reported_by_number_never_echoed(self) -> None:
+        # Someone pastes a figure instead of its digest (QA's L1): the public log must not show it.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, "denylist.txt")
+            path.write_text(f"# header\n{FIGURE}\n", encoding="utf-8")
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                code = scan.main(["--repo", tmp, "--denylist", str(path)])
+
+        self.assertEqual(2, code)
+        self.assertIn("denylist.txt:2", err.getvalue())
+        self.assertNotIn(FIGURE, err.getvalue())
+
     def test_a_malformed_denylist_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp, "denylist.txt")
