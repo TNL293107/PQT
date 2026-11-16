@@ -87,6 +87,108 @@ public sealed class FundamentalRatioServiceTests
         Assert.False(ratios.BuiltOnVendor);
     }
 
+    [Fact]
+    public async Task A_vendor_quarter_after_a_filed_year_continues_the_trailing_figures()
+    {
+        // QA H1: Circular 200 2025Q1–Q4 filed, then 2026Q1 filled by a vendor.
+        // Profit runs on across the change of form, and the share count comes
+        // from 2025Q4's charter capital, since a vendor states none.
+        var (service, instrument) = FiledYearThenVendorQuarter();
+
+        var ratios = await service.ReadAsync(instrument, new DateOnly(2026, 11, 16), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(FiscalQuarter.Create(2026, 1), ratios.BalanceSheet);
+        Assert.Equal(
+            [FiscalQuarter.Create(2025, 2), FiscalQuarter.Create(2025, 3), FiscalQuarter.Create(2025, 4), FiscalQuarter.Create(2026, 1)],
+            ratios.ProfitQuarters);
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Equal(1_050_000_000_000m, ratios.NetProfitTtm.Value);
+        Assert.Equal(10_500m, ratios.EpsTtm.Value);
+        Assert.Equal(110_000m, ratios.BookValuePerShare.Value);
+        Assert.Equal(5.7143m, decimal.Round(ratios.PriceToEarnings.Value!.Value, 4));
+        Assert.Equal(0.5455m, decimal.Round(ratios.PriceToBook.Value!.Value, 4));
+        Assert.Equal(0.105m, ratios.ReturnOnEquity.Value);
+        Assert.True(ratios.BuiltOnVendor);
+        Assert.Contains(ratios.Findings, finding => finding.Contains("2025Q4", StringComparison.Ordinal) && finding.Contains("charter capital", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Before_the_vendor_fetch_the_filed_year_is_read_alone()
+    {
+        var (service, instrument) = FiledYearThenVendorQuarter();
+
+        // Observed before the vendor fetch of 8 November: 2025Q4 is the latest.
+        var ratios = await service.ReadAsync(
+            instrument, new DateOnly(2026, 11, 16), new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), TestContext.Current.CancellationToken);
+
+        Assert.Equal(FiscalQuarter.Create(2025, 4), ratios.BalanceSheet);
+        Assert.Equal(1_000_000_000_000m, ratios.NetProfitTtm.Value);
+        Assert.Equal(100_000m, ratios.BookValuePerShare.Value);
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    /// <summary>
+    /// Circular 200 2025Q1–Q4 as filed (₫250bn profit a quarter; 2025Q4
+    /// capital ₫1,000bn and equity ₫10,000bn; 2025Q1 equity ₫9,000bn), then a
+    /// blank 2026Q1 Circular 99 report a vendor filled on 8 November 2026
+    /// (₫300bn profit, ₫11,000bn equity), and a close of ₫60,000 on 16
+    /// November 2026. Every value invented.
+    /// </summary>
+    private static (FundamentalRatioService Service, InstrumentId Instrument) FiledYearThenVendorQuarter()
+    {
+        var instrument = InstrumentId.New();
+        var fundamentals = new InMemoryFundamentals();
+        var recorded = new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero);
+
+        for (var quarter = 1; quarter <= 4; quarter++)
+        {
+            var period = FiscalQuarter.Create(2025, quarter);
+            var report = FinancialReport.Record(
+                instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+                FinancialTemplate.NonFinancialCircular200, period, "Báo cáo tài chính", StatementLines.QuarterEnd(period).AddDays(25), null,
+                FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: true, recorded);
+            fundamentals.Add(report);
+            Filed(report, FinancialStatement.IncomeStatement, "61", period, PeriodSpan.Quarter, 250_000_000_000m);
+
+            if (quarter == 1)
+            {
+                Filed(report, FinancialStatement.BalanceSheet, "400", period, PeriodSpan.Instant, 9_000_000_000_000m);
+            }
+
+            if (quarter == 4)
+            {
+                Filed(report, FinancialStatement.BalanceSheet, "411a", period, PeriodSpan.Instant, 1_000_000_000_000m);
+                Filed(report, FinancialStatement.BalanceSheet, "400", period, PeriodSpan.Instant, 10_000_000_000_000m);
+            }
+        }
+
+        var first = FiscalQuarter.Create(2026, 1);
+        var blank = FinancialReport.Record(
+            instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+            FinancialTemplate.NonFinancialCircular99, first, "Báo cáo tài chính", new DateOnly(2026, 4, 28), null,
+            FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: false, recorded);
+        fundamentals.Add(blank);
+        var fetched = new DateTimeOffset(2026, 11, 8, 3, 0, 0, TimeSpan.Zero);
+        fundamentals.Add(StatementLine.Observe(
+            blank, FinancialStatement.IncomeStatement, "isa22", first, PeriodSpan.Quarter, 300_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+        fundamentals.Add(StatementLine.Observe(
+            blank, FinancialStatement.BalanceSheet, "bsa78", first, PeriodSpan.Instant, 11_000_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+
+        var bars = new FakeBarRepository();
+        var bar = OhlcvBar.Record(
+            instrument, BarInterval.OneDay, new DateTimeOffset(2026, 11, 16, 0, 0, 0, TimeSpan.Zero),
+            Price.Create(60_000m), Price.Create(60_000m), Price.Create(60_000m), Price.Create(60_000m), 1_000, null, Ids, recorded);
+        bars.AddRange([bar]);
+        bars.Revisions.Add(BarRevision.Snapshot(bar, recorded));
+
+        return (new FundamentalRatioService(
+            new FundamentalsReader(fundamentals), bars, new FakeCorporateActionRepository(), new FakeCorporateActionCoverageRepository()),
+            instrument);
+
+        void Filed(FinancialReport report, FinancialStatement statement, string code, FiscalQuarter period, PeriodSpan span, decimal value) =>
+            fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, value, ValueBasis.AsFiled, Ids, report.RecordedAtUtc));
+    }
+
     /// <summary>
     /// A blank 2026Q3 report on the Circular 99 form, disclosed on 15 October
     /// 2026 and filled from a vendor fetch: invented equity and profit.

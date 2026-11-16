@@ -297,11 +297,23 @@ public sealed class FundamentalRatioService(
         var lines = StatementLines.From(statements.Values, statements.Scope);
         var balance = lines.LatestBalanceSheet();
 
-        var (shares, applied, withheld, registeredEarly) = SharesAt(lines, balance, adjustments, session, announcedBy, findings);
+        // A vendor's balance sheet states no charter capital (ADR-038), so the
+        // share count is read from the latest one that does, adjusted for the
+        // actions since it, as for any balance sheet (QA H1).
+        var capital = balance is { } latest ? lines.LatestCapital(latest) : null;
+
+        if (capital is { } basis && balance is { } sheetQuarter && basis != sheetQuarter)
+        {
+            findings.Add(
+                $"{sheetQuarter}'s balance sheet states no charter capital; the share count is read from {basis}'s charter capital, "
+                    + "adjusted for the actions since.");
+        }
+
+        var (shares, applied, withheld, registeredEarly) = SharesAt(lines, capital ?? balance, adjustments, session, announcedBy, findings);
 
         if (!registeredEarly)
         {
-            CheckUnexplainedStep(lines, balance, adjustments, session, announcedBy, findings);
+            CheckUnexplainedStep(lines, capital ?? balance, adjustments, session, announcedBy, findings);
         }
         var (profit, quarters) = lines.TrailingProfit();
         CheckPar(lines, quarters, findings);
@@ -328,7 +340,7 @@ public sealed class FundamentalRatioService(
 
         IReadOnlyList<FinancialReportId> balanceReports = balance is { } sheet
             ? [.. statements.Values
-                .Where(value => value.Statement == FinancialStatement.BalanceSheet && value.Period == sheet && value.Template == lines.Template)
+                .Where(value => value.Statement == FinancialStatement.BalanceSheet && value.Period == sheet && lines.Reads(value.Template))
                 .Select(value => value.ReportId)
                 .Distinct()
                 .OrderBy(id => id.Value)]
@@ -354,13 +366,14 @@ public sealed class FundamentalRatioService(
             applied,
             withheld,
             findings,
-            BuiltOnVendor(statements.Values, balance, quarters));
+            BuiltOnVendor(statements.Values, balance, capital, quarters));
     }
 
     /// <summary>
     /// Whether a vendor stated any value of the quarters a row reads: the
-    /// balance sheet, the trailing profit quarters and the equity a year
-    /// before the latest of them (ADR-038).
+    /// balance sheet, the charter capital the share count is read from, the
+    /// trailing profit quarters and the equity a year before the latest of
+    /// them (ADR-038).
     /// </summary>
     /// <remarks>
     /// Judged by quarter rather than by line, so a vendor value of a quarter
@@ -370,13 +383,17 @@ public sealed class FundamentalRatioService(
     private static bool BuiltOnVendor(
         IReadOnlyList<FundamentalValue> values,
         FiscalQuarter? balance,
+        FiscalQuarter? capital,
         IReadOnlyList<FiscalQuarter> quarters)
     {
         var read = new HashSet<FiscalQuarter>(quarters);
 
-        if (balance is { } sheet)
+        foreach (var quarter in new[] { balance, capital })
         {
-            read.Add(sheet);
+            if (quarter is { } sheet)
+            {
+                read.Add(sheet);
+            }
         }
 
         if (quarters.Count > 0)
