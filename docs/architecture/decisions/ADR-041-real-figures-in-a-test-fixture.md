@@ -48,6 +48,15 @@ this check. The repository is public.
   than an ad hoc one.
 - No vendor data was imported; no ingestion path was running.
 
+## The data policy's steps ("If a licence is violated")
+
+| Step | Status, 2026-11-16 |
+| --- | --- |
+| 1. Stop the ingestion path | Nothing to stop: no vendor data was imported and no ingestion path was running |
+| 2. Delete the affected data from all storage | Nothing was imported (Exposure), so the database never held it. The git-ignored copy in `tmp/adr-038-verification/` no longer exists. The figures are still in the history of the branches that contain `73588e3` (see Remedy) |
+| 3. Verify nothing reached Git history | **Not met.** Verified, and the answer is that it did: `73588e3` is on three remote branches of a public repository. The Remedy leaves it there, by the Moderator's decision, and keeps it out of `develop`, `uat`, `staging` and `main` |
+| 4. Record it in an ADR | This ADR |
+
 ## Why it happened
 
 The real responses had been read and saved for ADR-038's verification. The
