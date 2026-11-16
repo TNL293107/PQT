@@ -99,6 +99,40 @@ public sealed record FactorCorrelationRequest(
     string? Experiment = null,
     string? Hypothesis = null);
 
+/// <summary>A request to calibrate one feature's quantiles into probabilities and expected value (ADR-037).</summary>
+/// <param name="DatasetId">The labelled dataset.</param>
+/// <param name="Version">The build, or <see langword="null"/> for the latest held when queued.</param>
+/// <param name="Feature">The catalogue name of the feature.</param>
+/// <param name="TransformVersion">The cross-sectional transform applied first.</param>
+/// <param name="Quantiles">Buckets the feature is calibrated in.</param>
+/// <param name="CalibrationVersion">The calibration rules; ADR-037 is <c>cal-1</c>.</param>
+/// <param name="CostModelVersion">The name the declared costs are recorded under.</param>
+/// <param name="BuyFee">The buy fee, a fraction of notional.</param>
+/// <param name="SellFee">The sell fee, a fraction of notional.</param>
+/// <param name="SellTax">The sell tax, a fraction of notional.</param>
+/// <param name="Spread">The spread, a fraction of notional.</param>
+/// <param name="Slippage">Slippage on each leg, a fraction of notional.</param>
+/// <param name="Experiment">
+/// The evaluation experiment; the worker records the run under <c>&lt;experiment&gt;-calibration</c>.
+/// The job kind when <see langword="null"/>.
+/// </param>
+/// <param name="Hypothesis">What a new experiment sets out to test.</param>
+public sealed record CalibrationRequest(
+    string DatasetId,
+    int? Version = null,
+    string Feature = "",
+    string TransformVersion = "",
+    int Quantiles = 5,
+    string CalibrationVersion = "cal-1",
+    string CostModelVersion = "",
+    decimal BuyFee = 0m,
+    decimal SellFee = 0m,
+    decimal SellTax = 0m,
+    decimal Spread = 0m,
+    decimal Slippage = 0m,
+    string? Experiment = null,
+    string? Hypothesis = null);
+
 /// <summary>What became of a submission.</summary>
 /// <param name="Job">The queued job, or <see langword="null"/> when refused.</param>
 /// <param name="Refusal">Why it was refused, or <see langword="null"/>.</param>
@@ -133,6 +167,14 @@ public interface IResearchJobService
     /// <returns>The queued job, or why it was refused.</returns>
     Task<ResearchJobSubmission> SubmitFactorCorrelationAsync(
         FactorCorrelationRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Queues the calibration of one feature on a labelled dataset (ADR-037).</summary>
+    /// <param name="request">What to calibrate, and the declared costs.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The queued job, or why it was refused.</returns>
+    Task<ResearchJobSubmission> SubmitCalibrationAsync(
+        CalibrationRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>Queues the re-execution of a recorded run, to diff its metrics.</summary>
@@ -209,6 +251,12 @@ internal sealed partial class ResearchJobService(
 
     /// <summary>The kind the worker correlates every pair of features under (ADR-036 §4).</summary>
     public const string FactorCorrelationKind = "factor_correlation";
+
+    /// <summary>The kind the worker calibrates one feature under (ADR-037).</summary>
+    public const string CalibrationKind = "calibration";
+
+    /// <summary>The calibration rules the worker computes.</summary>
+    public static readonly IReadOnlyList<string> CalibrationVersions = ["cal-1"];
 
     /// <summary>The transforms the worker knows, by the version a run records (ADR-035).</summary>
     public static readonly IReadOnlyList<string> TransformVersions = ["raw", "wz-1"];
@@ -382,6 +430,80 @@ internal sealed partial class ResearchJobService(
     }
 
     /// <inheritdoc />
+    public async Task<ResearchJobSubmission> SubmitCalibrationAsync(
+        CalibrationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(request.Feature)
+            || request.Feature.Length > MaxFeatureNameLength
+            || !FeatureNamePattern().IsMatch(request.Feature))
+        {
+            return Refuse($"'{request.Feature}' is not a feature name.");
+        }
+
+        if (request.Quantiles is < 1 or > MaxQuantiles)
+        {
+            return Refuse($"Quantiles must be between 1 and {MaxQuantiles}, not {request.Quantiles}.");
+        }
+
+        if (!CalibrationVersions.Contains(request.CalibrationVersion))
+        {
+            return Refuse(
+                $"Calibration version '{request.CalibrationVersion}' is not one the worker computes "
+                    + $"({string.Join(", ", CalibrationVersions)}).");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CostModelVersion))
+        {
+            return Refuse("The cost model must be named.");
+        }
+
+        // The worker's own bounds: a fraction of notional, from 0 to under 1.
+        foreach (var (field, fee) in new[]
+            {
+                ("buy_fee", request.BuyFee), ("sell_fee", request.SellFee), ("sell_tax", request.SellTax),
+                ("spread", request.Spread), ("slippage", request.Slippage),
+            })
+        {
+            if (fee is < 0m or >= 1m)
+            {
+                return Refuse($"{field} must be a fraction of notional from 0 to under 1, not {fee.ToString(CultureInfo.InvariantCulture)}.");
+            }
+        }
+
+        var prepared = await PrepareLabelledAsync(
+                request.DatasetId, request.Version, request.TransformVersion, request.Experiment, request.Hypothesis,
+                CalibrationKind, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (prepared.Refusal is { } refusal)
+        {
+            return Refuse(refusal);
+        }
+
+        var payload = JsonSerializer.Serialize(
+            new CalibrationPayload(
+                request.DatasetId,
+                prepared.Version,
+                request.Feature,
+                request.TransformVersion,
+                request.Quantiles,
+                request.CalibrationVersion,
+                request.CostModelVersion,
+                request.BuyFee,
+                request.SellFee,
+                request.SellTax,
+                request.Spread,
+                request.Slippage,
+                prepared.Experiment),
+            PayloadJson);
+
+        return await QueueAsync(CalibrationKind, payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<ResearchJobSubmission> SubmitReproductionAsync(
         Guid runId,
         CancellationToken cancellationToken = default)
@@ -539,6 +661,22 @@ internal sealed partial class ResearchJobService(
         string TransformVersion,
         int Quantiles,
         IReadOnlyList<int> DecayHorizons,
+        string Experiment);
+
+    // Fees as decimals, so the JSON number is the one typed, never a double's neighbour.
+    private sealed record CalibrationPayload(
+        string DatasetId,
+        int DatasetVersion,
+        string Feature,
+        string TransformVersion,
+        int Quantiles,
+        string CalibrationVersion,
+        string CostModelVersion,
+        decimal BuyFee,
+        decimal SellFee,
+        decimal SellTax,
+        decimal Spread,
+        decimal Slippage,
         string Experiment);
 
     private sealed record FactorCorrelationPayload(

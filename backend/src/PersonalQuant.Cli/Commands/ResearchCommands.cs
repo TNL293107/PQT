@@ -50,6 +50,8 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
                 return await SubmitFactorEvaluationAsync(command, cancellationToken).ConfigureAwait(false);
             case ["factor-correlation"]:
                 return await SubmitFactorCorrelationAsync(command, cancellationToken).ConfigureAwait(false);
+            case ["calibration"]:
+                return await SubmitCalibrationAsync(command, cancellationToken).ConfigureAwait(false);
         }
 
         if (!command.Validate(
@@ -210,6 +212,85 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
 
         return Queued(submission, $"pairwise correlations ({transform}) over {datasetId}", version);
     }
+
+    private async Task<int> SubmitCalibrationAsync(CommandArguments command, CancellationToken cancellationToken)
+    {
+        string[] fees = ["buy-fee", "sell-fee", "sell-tax", "spread", "slippage"];
+
+        if (!command.Validate(
+                ["dataset", "version", "feature", "transform", "quantiles", "cost-model", .. fees, "experiment", "hypothesis"],
+                out var problem))
+        {
+            output.Problem(problem);
+            return ExitCode.Usage;
+        }
+
+        if (!command.TryRequired("dataset", out var datasetId, out var missing)
+            || !command.TryRequired("feature", out var feature, out missing)
+            || !command.TryRequired("transform", out var transform, out missing)
+            || !command.TryRequired("cost-model", out var costModel, out missing))
+        {
+            output.Problem(missing + CalibrationUsage);
+            return ExitCode.Usage;
+        }
+
+        // Every cost is declared, never defaulted: a missing fee is not a zero fee (ADR-037).
+        var values = new Dictionary<string, decimal>(StringComparer.Ordinal);
+
+        foreach (var fee in fees)
+        {
+            if (!command.TryRequired(fee, out var text, out missing))
+            {
+                output.Problem(missing + CalibrationUsage);
+                return ExitCode.Usage;
+            }
+
+            if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value))
+            {
+                output.Problem($"--{fee} {text} is not a fraction of notional such as 0.0015.");
+                return ExitCode.Usage;
+            }
+
+            values[fee] = value;
+        }
+
+        if (!command.TryCount("quantiles", 5, out var quantiles, out var badQuantiles))
+        {
+            output.Problem(badQuantiles);
+            return ExitCode.Usage;
+        }
+
+        if (!TryVersion(command, out var version))
+        {
+            return ExitCode.Usage;
+        }
+
+        var submission = await jobs.Value
+            .SubmitCalibrationAsync(
+                new CalibrationRequest(
+                    datasetId,
+                    version,
+                    feature,
+                    transform,
+                    quantiles,
+                    CostModelVersion: costModel,
+                    BuyFee: values["buy-fee"],
+                    SellFee: values["sell-fee"],
+                    SellTax: values["sell-tax"],
+                    Spread: values["spread"],
+                    Slippage: values["slippage"],
+                    Experiment: command.Value("experiment"),
+                    Hypothesis: command.Value("hypothesis")),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Queued(submission, $"calibration of {feature} ({transform}) over {datasetId}", version);
+    }
+
+    private const string CalibrationUsage =
+        " Usage: pqt research submit calibration --dataset <ID> --feature <NAME> --transform raw|wz-1 "
+            + "--cost-model <NAME> --buy-fee F --sell-fee F --sell-tax F --spread F --slippage F "
+            + "[--version N] [--quantiles 5] [--experiment NAME] [--hypothesis TEXT]";
 
     private static bool TryHorizons(string text, out IReadOnlyList<int> horizons)
     {
