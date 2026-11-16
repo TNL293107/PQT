@@ -40,6 +40,10 @@ public interface IFundamentalsImportService
 /// <param name="Rejections">Filings refused, with the reason.</param>
 /// <param name="Withheld">Filings recorded with their values withheld, because their form is another filing's.</param>
 /// <param name="Dropped">Lines dropped as implausible from filings otherwise read.</param>
+/// <param name="ReportsJoined">
+/// Vendor filings that recorded or restated a line on a blank IDS report
+/// (ADR-038); one that changed nothing is already held.
+/// </param>
 public sealed record FundamentalsImportReport(
     SourceCode Provider,
     int FilingsRead,
@@ -51,7 +55,8 @@ public sealed record FundamentalsImportReport(
     IReadOnlyList<LateFiling> Late,
     IReadOnlyList<FilingRejection> Rejections,
     IReadOnlyList<FilingRejection> Withheld,
-    IReadOnlyList<FilingRejection> Dropped);
+    IReadOnlyList<FilingRejection> Dropped,
+    int ReportsJoined = 0);
 
 /// <summary>
 /// Records disclosed financial reports and the values they state (ADR-029,
@@ -158,7 +163,8 @@ public sealed class FundamentalsImportService(
             run.Late,
             run.Rejections,
             run.Withheld,
-            run.Dropped);
+            run.Dropped,
+            run.Joined);
 
         ApplicationLog.FundamentalsImported(
             logger, source.Code.Value, report.FilingsRead, report.ReportsRecorded, report.ReportsWithoutValues,
@@ -363,7 +369,15 @@ public sealed class FundamentalsImportService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        run.AlreadyHeld++;
+        if (added.Count + restated.Count > 0)
+        {
+            run.Joined++;
+        }
+        else
+        {
+            run.AlreadyHeld++;
+        }
+
         run.LinesRecorded += added.Count;
         run.LinesRestated += restated.Count;
     }
@@ -531,6 +545,8 @@ public sealed class FundamentalsImportService(
         public int WithoutValues { get; set; }
 
         public int AlreadyHeld { get; set; }
+
+        public int Joined { get; set; }
 
         public int LinesRecorded { get; set; }
 

@@ -113,6 +113,21 @@ public sealed class VendorJoinTests
         Assert.Empty(harness.Store.Lines);
     }
 
+    [Fact]
+    public async Task A_join_is_counted_as_joined_and_reading_it_again_unchanged_as_already_held()
+    {
+        // QA M3: the report tells a join from a duplicate.
+        var harness = new Harness();
+        await harness.ImportIdsAsync(BlankQuarterly(2026, 1));
+
+        var first = await harness.ImportVendorAsync(Vendor(2026, 1));
+        var again = await harness.ImportVendorAsync(Vendor(2026, 1));
+
+        Assert.Equal((1, 0), (first.ReportsJoined, first.ReportsAlreadyHeld));
+        Assert.Equal((0, 1), (again.ReportsJoined, again.ReportsAlreadyHeld));
+        Assert.Equal(0, again.LinesRecorded);
+    }
+
     // --- (c) when a vendor value is known ---------------------------------------
 
     [Fact]
