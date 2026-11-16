@@ -319,6 +319,186 @@ public sealed class ResearchJobServiceTests
         Assert.Empty(harness.Jobs.Added);
     }
 
+    // --- PR #21 review (Tester + Audit), QA + QC acceptance before the fix -------------
+    //
+    // MEDIUM-1: the worker records a calibration run under "<experiment>-calibration"
+    // (quant/src/personal_quant/worker/handlers.py, `recorded_under`: the suffix is
+    // added unless the name already ends with it), and insert_run creates that
+    // experiment with no hypothesis. The hypothesis must be staged on that same
+    // experiment, and compared against it. These tests derive the run's
+    // experiment from the payload with the worker's own rule, so either fix
+    // (stage "<X>-calibration", or send it in the payload) passes.
+
+    private const string CalibrationSuffix = "-calibration";
+
+    private const string CalibrationKindName = "calibration";
+
+    [Fact]
+    public async Task A_calibration_hypothesis_is_on_the_experiment_its_run_is_recorded_under()
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "phase-7", hypothesis: "Momentum quantiles carry a positive expected value."),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(submission.Queued, submission.Refusal);
+        var staged = Assert.Single(harness.Experiments.Added);
+        Assert.Equal(RecordedUnder(submission), staged.Name);
+        Assert.Equal("Momentum quantiles carry a positive expected value.", staged.Hypothesis);
+    }
+
+    [Fact]
+    public async Task A_calibration_hypothesis_is_not_judged_against_the_evaluation_experiment()
+    {
+        // "phase-7" is the evaluation experiment, with its own hypothesis. The
+        // calibration run goes to "phase-7-calibration", which does not exist
+        // yet: a new hypothesis for it is not "a different one" for phase-7.
+        var harness = new Harness(versions: [1]);
+        harness.Experiments.Hold(Experiment.Define("phase-7", "Momentum ranks next-month returns.", Now));
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "phase-7", hypothesis: "Momentum quantiles carry a positive expected value."),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(submission.Queued, submission.Refusal);
+        var recordedUnder = RecordedUnder(submission);
+        Assert.Equal(
+            "Momentum quantiles carry a positive expected value.",
+            Assert.Single(harness.Experiments.Added, experiment => experiment.Name == recordedUnder).Hypothesis);
+    }
+
+    [Fact]
+    public async Task A_different_hypothesis_for_the_calibration_experiment_is_refused()
+    {
+        var harness = new Harness(versions: [1]);
+        harness.Experiments.Hold(Experiment.Define("phase-7" + CalibrationSuffix, "The first calibration hypothesis.", Now));
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "phase-7", hypothesis: "A second, different hypothesis."),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Contains("hypothesis", submission.Refusal, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.Jobs.Added);
+        Assert.Equal(0, harness.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task The_same_hypothesis_for_an_existing_calibration_experiment_is_queued()
+    {
+        // Guard: restating the hypothesis the run's experiment already holds is
+        // not a new experiment, and nothing is staged twice.
+        var harness = new Harness(versions: [1]);
+        harness.Experiments.Hold(Experiment.Define("phase-7" + CalibrationSuffix, "The first calibration hypothesis.", Now));
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "phase-7", hypothesis: "The first calibration hypothesis."),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(submission.Queued, submission.Refusal);
+        Assert.DoesNotContain(harness.Experiments.Added, experiment => experiment.Name == "phase-7" + CalibrationSuffix);
+    }
+
+    [Fact]
+    public async Task Without_an_experiment_no_empty_calibration_experiment_is_created()
+    {
+        // With no --experiment the name defaults to the job kind, "calibration",
+        // and the worker records the run under "calibration-calibration". An
+        // experiment named plain "calibration" would never hold a run.
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: null, hypothesis: null),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(submission.Queued, submission.Refusal);
+        var recordedUnder = RecordedUnder(submission);
+        Assert.DoesNotContain(harness.Experiments.Added, experiment => experiment.Name == CalibrationKindName);
+        Assert.All(harness.Experiments.Added, experiment => Assert.Equal(recordedUnder, experiment.Name));
+    }
+
+    // LOW-1: a fee left out must not silently be zero; a contract on the request type.
+
+    [Theory]
+    [InlineData(nameof(CalibrationRequest.BuyFee))]
+    [InlineData(nameof(CalibrationRequest.SellFee))]
+    [InlineData(nameof(CalibrationRequest.SellTax))]
+    [InlineData(nameof(CalibrationRequest.Spread))]
+    [InlineData(nameof(CalibrationRequest.Slippage))]
+    public void A_calibration_fee_has_no_default_value(string fee)
+    {
+        var parameter = Assert.Single(
+            typeof(CalibrationRequest).GetConstructors().SelectMany(constructor => constructor.GetParameters()),
+            parameter => string.Equals(parameter.Name, fee, StringComparison.Ordinal));
+
+        Assert.False(parameter.HasDefaultValue, $"{fee} has a default; a fee left out must be refused, not zero.");
+    }
+
+    // LOW-2: refusals the calibration kind already makes, now pinned.
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task A_calibration_with_no_cost_model_name_is_refused(string costModel)
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "phase-7", hypothesis: null) with { CostModelVersion = costModel },
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Equal("The cost model must be named.", submission.Refusal);
+        Assert.Empty(harness.Jobs.Added);
+        Assert.Empty(harness.Experiments.Added);
+        Assert.Equal(0, harness.UnitOfWork.SaveCount);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public async Task A_calibration_with_quantiles_out_of_range_is_refused(int quantiles)
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "phase-7", hypothesis: null) with { Quantiles = quantiles },
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.StartsWith("Quantiles must be between 1 and 100", submission.Refusal, StringComparison.Ordinal);
+        Assert.Empty(harness.Jobs.Added);
+        Assert.Empty(harness.Experiments.Added);
+        Assert.Equal(0, harness.UnitOfWork.SaveCount);
+    }
+
+    /// <summary>A valid calibration request with five distinct, non-zero fees.</summary>
+    private static CalibrationRequest Calibration(string? experiment, string? hypothesis) =>
+        new(
+            "0a1b2c3d4e5f6a7b",
+            Feature: "momentum_3_0",
+            TransformVersion: "raw",
+            Quantiles: 3,
+            CostModelVersion: "v1",
+            BuyFee: 0.0015m,
+            SellFee: 0.0016m,
+            SellTax: 0.001m,
+            Spread: 0.0012m,
+            Slippage: 0.0007m,
+            Experiment: experiment,
+            Hypothesis: hypothesis);
+
+    /// <summary>The experiment the worker records the run under, by its own rule (handlers.py).</summary>
+    private static string RecordedUnder(ResearchJobSubmission submission)
+    {
+        Assert.NotNull(submission.Job);
+        using var payload = System.Text.Json.JsonDocument.Parse(submission.Job.Payload);
+        var experiment = payload.RootElement.GetProperty("experiment").GetString()!;
+        return experiment.EndsWith(CalibrationSuffix, StringComparison.Ordinal) ? experiment : experiment + CalibrationSuffix;
+    }
+
     private static void AssertSameJson(string expected, string actual)
     {
         using var left = System.Text.Json.JsonDocument.Parse(expected);
