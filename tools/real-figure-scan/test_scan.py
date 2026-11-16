@@ -243,5 +243,29 @@ class EndToEndTests(unittest.TestCase):
         self.assertNotIn("A.cs:1", out.getvalue())
 
 
+class DenylistEndToEndTests(EndToEndTests):
+    """The path CI runs (QA's M3): main() with --denylist only, no real data."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.denylist = Path(self._tmp.name, "denylist.txt")
+        with contextlib.redirect_stdout(io.StringIO()):
+            scan.main(["--reference", str(self.reference), "--make-denylist", str(self.denylist)])
+
+    def _run(self, *args: str) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = scan.main(["--repo", str(self.repo), "--denylist", str(self.denylist), *args])
+        return code, out.getvalue()
+
+    def test_the_ci_command_fails_on_the_working_tree_and_does_not_print_the_figure(self) -> None:
+        code, out = self._run()
+        self.assertEqual(1, code)
+        self.assertIn("backend/tests/A.cs:2: a real figure (14 digits)", out)
+        self.assertIn("against 1 figure(s)", out)
+        self.assertNotIn(FIGURE, out)
+        self.assertNotIn(FIGURE, self.denylist.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()
