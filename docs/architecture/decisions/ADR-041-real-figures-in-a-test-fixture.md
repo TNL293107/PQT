@@ -18,6 +18,11 @@ provider tests already do. Three of the numbers were not invented:
 - one real net-sales value, copied verbatim in exponent form into a doc comment
   of `VietcapStatementProviderTests.cs`.
 
+The balance-sheet totals were also in `VendorStatementLinesTests.cs`, a third
+file. A fourth figure sat there too: one real equity-attributable-to-parent
+value in an assertion. The fix commit (`9befc39`) replaced it along with the
+other three, and the Moderator ruled it real on 2026-11-16.
+
 The figures themselves are deliberately not repeated here: quoting them in a
 public document would publish them again. They are identifiable from the
 git-ignored verification data in `tmp/adr-038-verification/`.
@@ -51,7 +56,7 @@ author's intention.
 
 ## Remedy (the Moderator's decision)
 
-Because so few figures were exposed, the history is **not** rewritten. All three
+Because so few figures were exposed, the history is **not** rewritten. All four
 are replaced with invented values in a new commit, every assertion and comment
 included, and that commit is carried onto each affected branch before any of
 them merges. The scanner must print PASS after the fix.
