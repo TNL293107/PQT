@@ -92,8 +92,10 @@ them merges. The scanner must print PASS after the fix.
   over every test file and fixture against `denylist.txt`, which holds salted
   scrypt digests of real figures, so CI needs no real data and never prints a
   figure. Docs are not scanned in CI yet.
-- **CI protects only the four figures of this incident.** As of 2026-11-16,
-  `denylist.txt` holds those four and nothing else. The verification data was
+- **CI protects only the real figures known to have been committed.** As of
+  2026-11-16, `denylist.txt` holds six: the four of this incident and the two
+  VNM figures ADR-038 and the Phase 6 definition of done quoted (PR #22 H4,
+  redacted in `d10960d`). The verification data was
   lost, and the Moderator decided not to re-fetch it before the legal review, so
   any other real figure passes CI. A rescaled figure (written in millions) and
   anything under 10^9 are not detected at all (README, "Limits").
