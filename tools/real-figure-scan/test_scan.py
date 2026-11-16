@@ -47,12 +47,18 @@ EMBEDDED = [
 ]
 
 
+# A throwaway repository must commit on any machine, including one that signs
+# every commit by default (QA's L4).
+_THROWAWAY = (
+    "-c", "user.name=t",
+    "-c", "user.email=t@example.invalid",
+    "-c", "commit.gpgsign=false",
+    "-c", "tag.gpgsign=false",
+)
+
+
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
-        check=True,
-        capture_output=True,
-    )
+    subprocess.run(["git", "-C", str(repo), *_THROWAWAY, *args], check=True, capture_output=True)
 
 
 class CanonicalTests(unittest.TestCase):
