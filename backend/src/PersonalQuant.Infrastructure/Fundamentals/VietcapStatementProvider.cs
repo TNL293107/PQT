@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using PersonalQuant.Application.Abstractions;
 using PersonalQuant.Application.Fundamentals;
+using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.Fundamentals;
 using PersonalQuant.Domain.MarketData;
 
@@ -24,6 +25,17 @@ namespace PersonalQuant.Infrastructure.Fundamentals;
 /// by the fetch, never by Vietcap's <c>publicDate</c>, which a restatement
 /// does not move.
 /// </para>
+/// <para>
+/// Quarters from <see cref="FromFiscalYear"/> only, fiscal 2026 by default:
+/// earlier quarters are filed with values on IDS, and as vendor filings would
+/// only be refused, one finding each (ADR-038 Consequences; QA M1).
+/// </para>
+/// <para>
+/// A run is all or nothing. A refused answer or a response that cannot be read
+/// stops it with a <see cref="MarketDataProviderException"/> naming the ticker
+/// and section, before anything is joined: no ticker is skipped and no other
+/// source stands in (QA M2). Rate limits and server errors are transient.
+/// </para>
 /// </remarks>
 internal sealed class VietcapStatementProvider(IHttpClientFactory clients, IClock clock, IDelayScheduler delays)
     : IFundamentalsProvider
@@ -36,6 +48,9 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
 
     /// <summary>The wait between reads: robots.txt's <c>Crawl-delay: 10</c>.</summary>
     public static readonly TimeSpan MinimumSpacing = TimeSpan.FromSeconds(10);
+
+    /// <summary>The first fiscal year read by default: the first filed blank on IDS (ADR-038).</summary>
+    public const int FirstFiscalYear = 2026;
 
     private const string Income = "INCOME_STATEMENT";
     private const string Balance = "BALANCE_SHEET";
@@ -53,6 +68,9 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
 
     /// <summary>Gets the tickers to read; nothing is read by default.</summary>
     public IReadOnlyList<string> Tickers { get; init; } = [];
+
+    /// <summary>Gets the first fiscal year whose quarters become filings.</summary>
+    public int FromFiscalYear { get; init; } = FirstFiscalYear;
 
     /// <inheritdoc />
     public SourceCode Code { get; } = SourceCode.Create(ProviderCode);
@@ -84,8 +102,10 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    throw new HttpRequestException(
-                        $"Vietcap answered {(int)response.StatusCode} for {ticker} {section}.", null, response.StatusCode);
+                    var status = (int)response.StatusCode;
+                    throw new MarketDataProviderException(
+                        $"Vietcap answered {status} for {ticker} {section}; the run stopped and nothing was joined.",
+                        isTransient: status == 429 || status >= 500);
                 }
 
                 bodies[section] = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -105,40 +125,20 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
 
         foreach (var (section, body) in bodies)
         {
-            using var document = JsonDocument.Parse(body);
-
-            foreach (var row in document.RootElement.GetProperty("data").GetProperty("quarters").EnumerateArray())
+            try
             {
-                // lengthReport 1-4 is a quarter, 5 the year, which the quarters carry.
-                var quarter = row.GetProperty("lengthReport").GetInt32();
-
-                if (quarter is < 1 or > 4)
-                {
-                    continue;
-                }
-
-                var key = (row.GetProperty("yearReport").GetInt32(), quarter);
-
-                if (!quarters.TryGetValue(key, out var values))
-                {
-                    quarters[key] = values = new Dictionary<string, string>(StringComparer.Ordinal);
-                    rows[key] = [];
-                }
-
-                rows[key].Add($"\"{section}\":{row.GetRawText()}");
-
-                foreach (var item in Items.Where(item => item.Section == section))
-                {
-                    // Absent or null is no value, never zero.
-                    if (row.TryGetProperty(item.Code, out var value) && value.ValueKind == JsonValueKind.Number)
-                    {
-                        values[item.Code] = Exact(value);
-                    }
-                }
+                Read(section, body, quarters, rows);
+            }
+            catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or OverflowException)
+            {
+                throw new MarketDataProviderException(
+                    $"Vietcap's {section} for {ticker} cannot be read ({error.Message}); the run stopped and nothing was joined.",
+                    isTransient: false,
+                    error);
             }
         }
 
-        foreach (var ((year, quarter), values) in quarters)
+        foreach (var ((year, quarter), values) in quarters.Where(entry => entry.Key.Year >= FromFiscalYear))
         {
             yield return new ProviderFiling(
                 $"{ProviderCode}-{ticker}-{year}Q{quarter}",
@@ -155,6 +155,45 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
                 "{" + string.Join(',', rows[(year, quarter)]) + "}",
                 "application/json",
                 fetched);
+        }
+    }
+
+    private static void Read(
+        string section,
+        string body,
+        SortedDictionary<(int Year, int Quarter), Dictionary<string, string>> quarters,
+        Dictionary<(int Year, int Quarter), List<string>> rows)
+    {
+        using var document = JsonDocument.Parse(body);
+
+        foreach (var row in document.RootElement.GetProperty("data").GetProperty("quarters").EnumerateArray())
+        {
+            // lengthReport 1-4 is a quarter, 5 the year, which the quarters carry.
+            var quarter = row.GetProperty("lengthReport").GetInt32();
+
+            if (quarter is < 1 or > 4)
+            {
+                continue;
+            }
+
+            var key = (row.GetProperty("yearReport").GetInt32(), quarter);
+
+            if (!quarters.TryGetValue(key, out var values))
+            {
+                quarters[key] = values = new Dictionary<string, string>(StringComparer.Ordinal);
+                rows[key] = [];
+            }
+
+            rows[key].Add($"\"{section}\":{row.GetRawText()}");
+
+            foreach (var item in Items.Where(item => item.Section == section))
+            {
+                // Absent or null is no value, never zero.
+                if (row.TryGetProperty(item.Code, out var value) && value.ValueKind == JsonValueKind.Number)
+                {
+                    values[item.Code] = Exact(value);
+                }
+            }
         }
     }
 

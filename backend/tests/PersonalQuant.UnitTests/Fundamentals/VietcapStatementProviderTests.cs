@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using PersonalQuant.Application.Fundamentals;
+using PersonalQuant.Application.MarketData;
 using PersonalQuant.Domain.Fundamentals;
 using PersonalQuant.Infrastructure.Fundamentals;
 
@@ -266,6 +267,91 @@ public sealed class VietcapStatementProviderTests
         Assert.Contains("isa22", first.RawPayload, StringComparison.Ordinal);
     }
 
+    // --- (b) fiscal 2026 onward only (QA M1) --------------------------------
+
+    private const string IncomeWithHistory = """
+        {"status":200,"code":0,"data":{"years":[],
+          "quarters":[
+            {"ticker":"AAA","yearReport":2025,"lengthReport":4,"isa3":1.0E13,"isa22":1.0E12},
+            {"ticker":"AAA","yearReport":2026,"lengthReport":1,"isa3":2.0E13,"isa22":2.0E12}]}}
+        """;
+
+    private const string BalanceWithHistory = """
+        {"status":200,"code":0,"data":{"years":[],
+          "quarters":[
+            {"ticker":"AAA","yearReport":2025,"lengthReport":4,"bsa53":3.0E13,"bsa78":1.0E13},
+            {"ticker":"AAA","yearReport":2026,"lengthReport":1,"bsa53":4.0E13,"bsa78":2.0E13}]}}
+        """;
+
+    [Fact]
+    public async Task A_quarter_before_fiscal_2026_gives_no_filing()
+    {
+        // Earlier quarters are filed with values on IDS: as vendor filings
+        // they would only be refused, one finding each, burying the real ones.
+        var provider = Provider(new RoutingHandler(IncomeWithHistory, BalanceWithHistory));
+
+        var filings = await provider.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2026, VietcapStatementProvider.FirstFiscalYear);
+        Assert.Equal([(2026, (int?)1)], filings.Select(filing => (filing.FiscalYear, filing.FiscalQuarter)));
+    }
+
+    [Fact]
+    public async Task The_first_fiscal_year_read_can_be_set_earlier()
+    {
+        var provider = new VietcapStatementProvider(
+            new StubClientFactory(new RoutingHandler(IncomeWithHistory, BalanceWithHistory)), new FakeClock(Now), new RecordingDelays())
+        {
+            Tickers = ["AAA"],
+            FromFiscalYear = 2025,
+        };
+
+        var filings = await provider.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, filings.Count);
+    }
+
+    // --- (c) a response that cannot be read stops the run (QA M2) -------------
+
+    [Theory]
+    // A quarter row with no lengthReport.
+    [InlineData("""{"status":200,"code":0,"data":{"years":[],"quarters":[{"ticker":"AAA","yearReport":2026,"isa22":1.0E12}]}}""")]
+    // No data object at all.
+    [InlineData("""{"status":200,"code":0}""")]
+    // A number no decimal holds.
+    [InlineData("""{"status":200,"code":0,"data":{"years":[],"quarters":[{"ticker":"AAA","yearReport":2026,"lengthReport":1,"isa22":1.0E300}]}}""")]
+    // Not JSON.
+    [InlineData("<html>maintenance</html>")]
+    public async Task A_response_that_cannot_be_read_stops_the_run_naming_the_ticker_and_section(string income)
+    {
+        // No partial import and no fallback: the run stops before anything is
+        // joined, as a provider failure the CLI prints, never a stack.
+        var provider = Provider(new RoutingHandler(income), tickers: ["AAA", "BBB"]);
+
+        var failure = await Assert.ThrowsAsync<MarketDataProviderException>(
+            () => provider.ListAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(failure.IsTransient);
+        Assert.Contains("AAA", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("INCOME_STATEMENT", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests, true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, true)]
+    [InlineData(HttpStatusCode.NotFound, false)]
+    [InlineData(HttpStatusCode.Forbidden, false)]
+    public async Task A_refused_answer_stops_the_run_and_says_whether_retrying_could_help(HttpStatusCode status, bool transient)
+    {
+        var provider = Provider(new RoutingHandler(status: status));
+
+        var failure = await Assert.ThrowsAsync<MarketDataProviderException>(
+            () => provider.ListAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(transient, failure.IsTransient);
+        Assert.Contains(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture), failure.Message, StringComparison.Ordinal);
+    }
+
     private static decimal Value(ProviderFiling filing, string code)
     {
         var row = filing.Tables.SelectMany(table => table.Rows).Single(row => row.Code == code);
@@ -310,7 +396,7 @@ public sealed class VietcapStatementProviderTests
     }
 
     /// <summary>Answers the income or balance section by its query, and records each request.</summary>
-    private sealed class RoutingHandler(string income = Income, string balance = Balance) : HttpMessageHandler
+    private sealed class RoutingHandler(string income = Income, string balance = Balance, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
     {
         public List<(string UserAgent, string? Referer, bool HasOrigin)> Requests { get; } = [];
 
@@ -328,7 +414,7 @@ public sealed class VietcapStatementProviderTests
                 : query.Contains("INCOME_STATEMENT", StringComparison.Ordinal) ? income
                 : """{"status":200,"code":0,"data":{"years":[],"quarters":[]}}""";
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(status)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             });
