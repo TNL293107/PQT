@@ -48,7 +48,7 @@ reasoning at the time is preserved.
 | [037](ADR-037-calibration-and-expected-value.md)            | The probability-calibration and expected-value substrate | Accepted |
 | [038](ADR-038-fiscal-2026-non-bank-source.md)              | Values for non-bank statements from fiscal 2026: IDS dates them, a vendor supplies them | Accepted |
 | 039, 040                                                     | Not assigned: no ADR was ever written under these numbers | —        |
-| [041](ADR-041-real-figures-in-a-test-fixture.md)            | Three real figures in a test fixture: what happened and the check that prevents it | Accepted |
+| [041](ADR-041-real-figures-in-a-test-fixture.md)            | Four real figures in a test fixture: what happened and the check that prevents it | Accepted |
 
 ## Format
 

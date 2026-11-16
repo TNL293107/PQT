@@ -1,4 +1,4 @@
-# ADR-041: Three real figures in a test fixture — what happened and the check that prevents it
+# ADR-041: Four real figures in a test fixture — what happened and the check that prevents it
 
 **Status:** Accepted (Lead, 2026-11-16; the Moderator decided the remedy) · **Date:** 2026-11-16 · **Phase:** Sprint 11, item 11.4 (Phase 7)
 
