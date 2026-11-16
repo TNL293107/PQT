@@ -42,12 +42,16 @@ import hashlib
 import re
 import subprocess
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 THRESHOLD = Decimal(10) ** 9
+
+# No vendor figure has more than 31 digits; a larger number (1e5000, a long
+# hash) is skipped with a warning rather than stopping the run.
+MAX_EXPONENT = 30
 
 # What "test files and fixtures" means, as fnmatch patterns on repo paths
 # ('*' also matches '/').
@@ -79,6 +83,7 @@ _GROUP_SEPARATORS = "   '’"
 _NUMBER = re.compile(
     r"""
     (?<![\w.])                       # starts a token; embedded runs are read separately
+    (?<![0-9A-Fa-f]-)                # not a UUID or hash segment (…d6-4e41-…)
     (?P<mantissa>
         \d{1,3}(?:_\d{3})+           # 1_234_567
       | \d{1,3}(?:,\d{3})+(?!\d)     # 1,234,567
@@ -91,6 +96,7 @@ _NUMBER = re.compile(
     (?P<suffix>[mMdDfFlLn]|[uU][lL]|[lL][uU])?
     (?:VND|vnd)?
     (?![0-9A-Za-z_])                 # a non-ASCII letter (đ, ₫) may follow
+    (?!-[0-9A-Fa-f])
     """,
     re.VERBOSE,
 )
@@ -124,7 +130,16 @@ def canonical(token: str) -> str | None:
     return _canonical_from(match)
 
 
+class _Oversized(str):
+    """A number too large to be a figure; skipped, and the caller may warn."""
+
+
 def _canonical_from(match: re.Match[str]) -> str | None:
+    value = _value_from(match)
+    return None if isinstance(value, _Oversized) else value
+
+
+def _value_from(match: re.Match[str]) -> str | None:
     mantissa = match.group("mantissa")
     separators = "_," + _GROUP_SEPARATORS
     if any(separator in mantissa for separator in separators):
@@ -133,9 +148,14 @@ def _canonical_from(match: re.Match[str]) -> str | None:
         mantissa = mantissa.replace(".", "")
     text = mantissa + (match.group("exponent") or "")
     try:
-        value = abs(Decimal(text))
+        # copy_abs, not abs(): no context, so no Overflow on a huge exponent.
+        value = Decimal(text).copy_abs()
     except InvalidOperation:
-        return None
+        return _Oversized(match.group())
+    if value.adjusted() > MAX_EXPONENT:
+        # Checked before any int() so 1e100000000 never builds a 10^8-digit int.
+        # A long digit string with no exponent is a hash or an id: skipped quietly.
+        return _Oversized(match.group()) if match.group("exponent") else None
     if value < THRESHOLD:
         return None
     if value == value.to_integral_value():
@@ -149,22 +169,28 @@ def is_round(value: str) -> bool:
     return len(significant) <= 1
 
 
-def numbers(text: str) -> Iterator[str]:
+def numbers(text: str, on_skip: Callable[[str], None] | None = None) -> Iterator[str]:
     """Yield the canonical value of every number of at least 10^9 in a text.
 
     Tokens first; then any run of ten or more digits no token covers, such as
-    one inside an identifier, so nothing is read twice.
+    one inside an identifier, so nothing is read twice. A number above
+    10^MAX_EXPONENT is no figure: it is skipped, and ``on_skip`` is told.
     """
     covered: list[tuple[int, int]] = []
     for match in _NUMBER.finditer(text):
         covered.append(match.span())
-        value = _canonical_from(match)
-        if value is not None:
+        value = _value_from(match)
+        if isinstance(value, _Oversized):
+            if on_skip is not None:
+                on_skip(value)
+        elif value is not None:
             yield value
     for run in _EMBEDDED.finditer(text):
         start, end = run.span()
         digits = run.group().lstrip("0")
-        if len(digits) >= 10 and not any(left <= start and end <= right for left, right in covered):
+        if 10 <= len(digits) <= MAX_EXPONENT + 1 and not any(
+            left <= start and end <= right for left, right in covered
+        ):
             yield digits
 
 
@@ -248,7 +274,11 @@ def in_scope(path: str, patterns: Iterable[str]) -> bool:
 def scan_lines(path: str, lines: Iterable[tuple[int, str]], figures: Figures) -> Iterator[Hit]:
     """Yield a hit for every real figure on the given (line number, text) pairs."""
     for number, text in lines:
-        for value in numbers(text):
+
+        def warn(_: str, line: int = number) -> None:
+            print(f"warning: {path}:{line}: skipped a number above 10^{MAX_EXPONENT}; not a figure", file=sys.stderr)
+
+        for value in numbers(text, warn):
             if value in figures:
                 yield Hit(path, number, len(value.split(".", 1)[0]))
 

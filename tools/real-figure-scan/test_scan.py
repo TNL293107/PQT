@@ -39,6 +39,8 @@ FORMS = [
     "12.345.678.901.234,00",
 ]
 
+E = "e"  # glued into huge exponents at run time, see the L2 tests
+
 # Where a figure sits inside other text (QA's M1): still read.
 EMBEDDED = [
     "Revenue_12345678901234_test",
@@ -87,6 +89,24 @@ class CanonicalTests(unittest.TestCase):
     def test_a_figure_is_read_once_not_twice(self) -> None:
         self.assertEqual([FIGURE], list(scan.numbers("Revenue_12345678901234_test")))
         self.assertEqual([FIGURE], list(scan.numbers("x = 12_345_678_901_234;")))
+
+    def test_a_huge_exponent_is_skipped_and_reported_not_raised(self) -> None:
+        # QA's L2: an exponent of 5000 hit the int-string limit; one of 10^8 would build a 10^8-digit int.
+        # Built at run time (E + "5000") so the scanner's own CI scan of this file stays quiet.
+        skipped: list[str] = []
+        found = list(scan.numbers(f"1{E}5000, 1{E}100000000, 9{E}99999999999 and {FIGURE}", skipped.append))
+        self.assertEqual([FIGURE], found)
+        self.assertEqual(3, len(skipped))
+
+    def test_a_uuid_segment_is_not_an_exponent(self) -> None:
+        skipped: list[str] = []
+        self.assertEqual([], list(scan.numbers('"ae6813d6-1629-4e41-acc2-1f52ccff66c7"', skipped.append)))
+        self.assertEqual([], skipped)
+
+    def test_a_long_digit_string_without_an_exponent_is_a_hash_and_skipped_quietly(self) -> None:
+        skipped: list[str] = []
+        self.assertEqual([], list(scan.numbers("sha " + "5" * 64, skipped.append)))
+        self.assertEqual([], skipped)
 
     def test_a_rescaled_figure_is_a_known_limit(self) -> None:
         # Written in millions, the figure is below 10^9 and is not read (README, "Limits").
@@ -242,6 +262,18 @@ class EndToEndTests(unittest.TestCase):
     def test_no_figures_is_a_usage_error_not_a_pass(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(2, scan.main(["--repo", str(self.repo)]))
+
+    def test_a_huge_exponent_in_a_file_warns_and_still_passes(self) -> None:
+        (self.repo / "backend" / "tests" / "B.cs").write_text(f"var big = 1{E}5000;\n", encoding="utf-8")
+        _git(self.repo, "add", ".")
+        _git(self.repo, "commit", "-q", "-m", "big")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = scan.main(["--repo", str(self.repo), "--reference", str(self.reference), "--rev", "HEAD"])
+
+        self.assertEqual(1, code)  # A.cs:2 still fails; B.cs does not stop the run
+        self.assertIn("backend/tests/B.cs:1: skipped", err.getvalue())
+        self.assertIn("FAIL: 1 real figure(s)", out.getvalue())
 
     def test_an_unknown_revision_is_an_error_not_a_pass(self) -> None:
         self.assertEqual(2, self._run("--rev", "no-such-rev")[0])
