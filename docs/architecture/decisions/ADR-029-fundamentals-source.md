@@ -197,7 +197,9 @@ look like a working backtest while measuring the future.
    parent, total assets, equity attributable to the parent, and shares
    outstanding. Record the mapping. **Done 2026-10-13** for the bank and
    Circular 200 templates, below. Circular 99 cannot be read from IDS, and
-   securities firms and insurers are out of scope.
+   securities firms and insurers are out of scope. (ADR-038, 2026-10-29: a
+   2026 IDS filing is not a Circular 99 form but a 2026 C200 form left empty,
+   every cell zero; its values come from a vendor.)
 
 ## Verification 1 · terms · 2026-10-13
 

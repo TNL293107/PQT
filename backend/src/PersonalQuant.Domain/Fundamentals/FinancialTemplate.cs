@@ -26,7 +26,13 @@ public enum FinancialTemplate
     /// <summary>The enterprise form of Circular 200/2014/TT-BTC, used to fiscal 2025.</summary>
     NonFinancialCircular200 = 1,
 
-    /// <summary>The enterprise form of Circular 99/2025/TT-BTC, from fiscal 2026.</summary>
+    /// <summary>A non-financial report from fiscal 2026, drawn up under Circular 99/2025/TT-BTC.</summary>
+    /// <remarks>
+    /// On IDS this is a 2026 C200 form left empty: the Circular 200 layout row
+    /// for row, every cell zero, with the signed PDF attached. The label is
+    /// inferred from "fiscal 2026 and no values", not read from a different
+    /// form, and its values come only from a vendor (ADR-038).
+    /// </remarks>
     NonFinancialCircular99 = 2,
 
     /// <summary>The credit-institution form.</summary>
