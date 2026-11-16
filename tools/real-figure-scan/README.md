@@ -6,9 +6,21 @@ response (`docs/data-policy.md`, rules 1 and 3).
 
 It reads every number of at least 10^9 in the files in scope, **comments
 included**, in **every form** (plain, `.0`, exponent such as `1.234E13`,
-`_` / `,` / `.` thousands separators, C# suffixes such as `m`), and compares it
+`_` / `,` / `.` / space / no-break space / apostrophe thousands separators,
+C# suffixes such as `m`, the JS BigInt `n`, a glued `VND`, `đ` or `₫`, and any
+run of ten or more digits inside an identifier or after a dot), and compares it
 with a set of real figures. One match fails. A round number (one significant
 digit, such as `1.0E11`) is exempt, because it collides by chance.
+
+## Limits: what it does not detect
+
+- **A rescaled figure.** `12,345,678.9 million`, `12.3 bn`, or a figure written
+  in thousands or millions is below 10^9 as written, or no longer equal to the
+  real value. No pattern can undo a rescale, so it is not attempted.
+- **Anything under 10^9**, by design.
+- **A real round figure** (one significant digit), by design: it cannot be told
+  from an invented one.
+- **A figure outside the reference set** (see below).
 
 Standard library only, Python 3.12 or later. Nothing to install.
 

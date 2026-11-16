@@ -68,25 +68,36 @@ _BINARY_SUFFIXES = frozenset(
     {".parquet", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz", ".dll", ".exe"}
 )
 
+# Thousands separators other than '_', ',' and '.': space, no-break space,
+# narrow no-break space, and the apostrophes some locales use.
+_GROUP_SEPARATORS = "   '’"
+
 # A number token. Thousands separators are only taken as such when every
 # group after the first has exactly three digits, so "405161,2025" is two
-# numbers, not one. Exponents may carry a sign; C#/Java suffixes are allowed.
+# numbers, not one. Exponents may carry a sign; C#/Java suffixes and the JS
+# BigInt 'n' are allowed, and so is a currency glued on (VND, đ, ₫).
 _NUMBER = re.compile(
     r"""
-    (?<![\w.])                       # not inside an identifier, hex or version
+    (?<![\w.])                       # starts a token; embedded runs are read separately
     (?P<mantissa>
         \d{1,3}(?:_\d{3})+           # 1_234_567
       | \d{1,3}(?:,\d{3})+(?!\d)     # 1,234,567
       | \d{1,3}(?:\.\d{3}){2,}(?![\d.]) # 1.234.567 (Vietnamese style)
+      | \d{1,3}(?:[   '’]\d{3}){2,}(?!\d) # 1 234 567, 1'234'567
       | \d+(?:_\d+)*(?:\.\d+)?       # 1234567, 1234.5, 1_2345
       | \.\d+
     )
     (?P<exponent>[eE][+-]?\d+)?
-    (?P<suffix>[mMdDfFlL]|[uU][lL]|[lL][uU])?
-    (?![\w])
+    (?P<suffix>[mMdDfFlLn]|[uU][lL]|[lL][uU])?
+    (?:VND|vnd)?
+    (?![0-9A-Za-z_])                 # a non-ASCII letter (đ, ₫) may follow
     """,
     re.VERBOSE,
 )
+
+# A run of ten or more digits anywhere, e.g. inside an identifier such as
+# Revenue_12345678901234_test or after a dot. Read only where no token covers it.
+_EMBEDDED = re.compile(r"\d{10,}")
 
 _DIGEST_SALT = b"pqt-real-figure-scan/1"
 _DIGEST_HEADER = "# pqt real-figure-scan denylist v1: scrypt(n=4096,r=8,p=1,dklen=16), one hex digest per line"
@@ -115,8 +126,9 @@ def canonical(token: str) -> str | None:
 
 def _canonical_from(match: re.Match[str]) -> str | None:
     mantissa = match.group("mantissa")
-    if "_" in mantissa or "," in mantissa:
-        mantissa = mantissa.replace("_", "").replace(",", "")
+    separators = "_," + _GROUP_SEPARATORS
+    if any(separator in mantissa for separator in separators):
+        mantissa = mantissa.translate({ord(separator): None for separator in separators})
     elif mantissa.count(".") >= 2:
         mantissa = mantissa.replace(".", "")
     text = mantissa + (match.group("exponent") or "")
@@ -138,11 +150,22 @@ def is_round(value: str) -> bool:
 
 
 def numbers(text: str) -> Iterator[str]:
-    """Yield the canonical value of every number of at least 10^9 in a text."""
+    """Yield the canonical value of every number of at least 10^9 in a text.
+
+    Tokens first; then any run of ten or more digits no token covers, such as
+    one inside an identifier, so nothing is read twice.
+    """
+    covered: list[tuple[int, int]] = []
     for match in _NUMBER.finditer(text):
+        covered.append(match.span())
         value = _canonical_from(match)
         if value is not None:
             yield value
+    for run in _EMBEDDED.finditer(text):
+        start, end = run.span()
+        digits = run.group().lstrip("0")
+        if len(digits) >= 10 and not any(left <= start and end <= right for left, right in covered):
+            yield digits
 
 
 def digest(value: str) -> str:

@@ -27,6 +27,23 @@ FORMS = [
     "12345678901234m",
     "12345678901234L",
     "-12345678901234",
+    # QA's M1: forms that used to get through.
+    "12345678901234n",
+    "12345678901234đ",
+    "12345678901234₫",
+    "12345678901234VND",
+    "12 345 678 901 234",
+    "12 345 678 901 234",
+    "12 345 678 901 234",
+    "12'345'678'901'234",
+    "12.345.678.901.234,00",
+]
+
+# Where a figure sits inside other text (QA's M1): still read.
+EMBEDDED = [
+    "Revenue_12345678901234_test",
+    "total.12345678901234",
+    "id12345678901234",
 ]
 
 
@@ -53,8 +70,21 @@ class CanonicalTests(unittest.TestCase):
     def test_a_list_separated_by_commas_is_two_numbers(self) -> None:
         self.assertEqual(["1234567891", "2345678912"], list(scan.numbers("[1234567891,2345678912]")))
 
-    def test_digits_inside_an_identifier_or_hex_are_not_a_number(self) -> None:
-        self.assertEqual([], list(scan.numbers("id_12345678901234 0x12345678901234 v1.12345678901234")))
+    def test_a_figure_inside_an_identifier_or_after_a_dot_is_read(self) -> None:
+        for text in EMBEDDED:
+            with self.subTest(text=text):
+                self.assertIn(FIGURE, list(scan.numbers(text)))
+
+    def test_a_short_digit_run_inside_an_identifier_is_not_a_number(self) -> None:
+        self.assertEqual([], list(scan.numbers("Test_123456789_case v1.2.3 bsa53 0x1F")))
+
+    def test_a_figure_is_read_once_not_twice(self) -> None:
+        self.assertEqual([FIGURE], list(scan.numbers("Revenue_12345678901234_test")))
+        self.assertEqual([FIGURE], list(scan.numbers("x = 12_345_678_901_234;")))
+
+    def test_a_rescaled_figure_is_a_known_limit(self) -> None:
+        # Written in millions, the figure is below 10^9 and is not read (README, "Limits").
+        self.assertEqual([], list(scan.numbers("12,345,678.901234 million")))
 
     def test_a_round_number_is_exempt(self) -> None:
         self.assertTrue(scan.is_round("100000000000"))
