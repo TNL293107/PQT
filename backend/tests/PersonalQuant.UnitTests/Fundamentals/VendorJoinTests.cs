@@ -153,6 +153,49 @@ public sealed class VendorJoinTests
         Assert.Equal(filed.Count, harness.Store.Lines.Count(line => line.IsCurrent));
     }
 
+    // --- (e) a later as_filed reading supersedes the vendor line (H2) ----------
+
+    [Fact]
+    public async Task A_filled_ids_re_filing_of_a_vendor_filled_quarter_serves_only_as_filed()
+    {
+        // Blank IDS Q1, the vendor join, then IDS carries a re-filing of Q1
+        // with values: from its date on the read serves the issuer's own
+        // values, never the vendor's beside them (ADR-038 §4).
+        var harness = new Harness();
+        await harness.ImportIdsAsync(BlankQuarterly(2026, 1));
+        await harness.ImportVendorAsync(Vendor(2026, 1));
+
+        await harness.ImportIdsAtAsync(
+            new DateTimeOffset(2026, 11, 21, 2, 0, 0, TimeSpan.Zero),
+            Filings.Quarterly(year: 2026, quarter: 1, ticker: "AAA", reference: "AAA-2026Q1-refiled") with { SubmittedOn = new DateOnly(2026, 11, 20) });
+
+        var before = await harness.ReadAsync(new DateTimeOffset(2026, 11, 10, 0, 0, 0, TimeSpan.Zero));
+        var after = await harness.ReadAsync(new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Contains(before.Values, value => value.Basis == ValueBasis.Vendor);
+        Assert.NotEmpty(after.Values);
+        Assert.All(after.Values, value => Assert.Equal(ValueBasis.AsFiled, value.Basis));
+    }
+
+    [Fact]
+    public async Task Values_appearing_on_the_blank_report_itself_are_a_finding_and_the_vendor_line_stays()
+    {
+        // The same IDS report later read with values: refused as before
+        // (ValuesAppeared), because its date may not be when they appeared.
+        // Nothing is recorded from it, so the vendor value is still served.
+        var harness = new Harness();
+        await harness.ImportIdsAsync(BlankQuarterly(2026, 1));
+        await harness.ImportVendorAsync(Vendor(2026, 1));
+
+        var report = await harness.ImportIdsAtAsync(
+            new DateTimeOffset(2026, 11, 21, 2, 0, 0, TimeSpan.Zero),
+            Filings.Quarterly(year: 2026, quarter: 1, ticker: "AAA") with { SubmittedOn = new DateOnly(2026, 4, 28) });
+
+        Assert.Equal(FilingRejectionReason.ValuesAppeared, Assert.Single(report.Rejections).Reason);
+        var after = await harness.ReadAsync(new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero));
+        Assert.All(after.Values, value => Assert.Equal(ValueBasis.Vendor, value.Basis));
+    }
+
     private static ProviderFiling BlankQuarterly(int year, int quarter, string name = "Báo cáo tài chính Hợp nhất - Quý") =>
         Filings.Quarterly(
                 year: year,
@@ -211,6 +254,7 @@ public sealed class VendorJoinTests
             var instrument = Instrument.Register(
                 venue, Ticker.Create("AAA"), "AAA Corporation", AssetType.Equity, CurrencyCode.Vnd, IdsRead);
 
+            InstrumentId = instrument.Id;
             Service = new FundamentalsImportService(
                 [_ids, _vendor],
                 new Resolver(instrument.Id),
@@ -223,6 +267,8 @@ public sealed class VendorJoinTests
 
         public InMemoryFundamentals Store { get; } = new();
 
+        public InstrumentId InstrumentId { get; }
+
         public FakeClock Clock { get; } = new(IdsRead);
 
         public FundamentalsImportService Service { get; }
@@ -233,6 +279,17 @@ public sealed class VendorJoinTests
             Clock.UtcNow = IdsRead;
             return Service.ImportAsync(Ids, [], TestContext.Current.CancellationToken);
         }
+
+        public Task<FundamentalsImportReport> ImportIdsAtAsync(DateTimeOffset at, params ProviderFiling[] filings)
+        {
+            _ids.Filings = filings;
+            Clock.UtcNow = at;
+            return Service.ImportAsync(Ids, [], TestContext.Current.CancellationToken);
+        }
+
+        public Task<FundamentalsAsOf> ReadAsync(DateTimeOffset knownAsOf) =>
+            new FundamentalsReader(Store).ReadAsync(
+                InstrumentId, FinancialStatementScope.Consolidated, knownAsOf, cancellationToken: TestContext.Current.CancellationToken);
 
         public Task<FundamentalsImportReport> ImportVendorAsync(params ProviderFiling[] filings)
         {
