@@ -240,10 +240,17 @@ public sealed class FundamentalsHistory
 
         var served = new Dictionary<(FinancialTemplate, FinancialStatement, string, FiscalQuarter, PeriodSpan), FundamentalValue>();
 
-        // A quarter some report known by then was filed with values for. A
-        // blank report's vendor lines for it are superseded: the as_filed
-        // reading stands in their place, on its own template (ADR-038 §4).
-        var filed = known.Where(report => report.ValuesFiled).Select(report => report.Period).ToHashSet();
+        // What some report known by then states as filed, by statement,
+        // period and span: its own column and its comparatives alike. A blank
+        // report's vendor line for one of these is superseded, and the as_filed
+        // reading stands in its place on its own template (ADR-038 §4). A
+        // half-year or annual report's year to date is another span, so it
+        // leaves the vendor's quarter alone.
+        var filed = known
+            .Where(report => report.ValuesFiled)
+            .SelectMany(report => _lines[report.Id])
+            .Select(line => (line.Statement, line.Period, line.Span))
+            .ToHashSet();
 
         // A blank report's only lines are a vendor's (ADR-038 §3).
         foreach (var report in known)
@@ -252,7 +259,7 @@ public sealed class FundamentalsHistory
             // known from their fetch, never back-dated to the IDS filing
             // (ADR-038). A vendor restatement of a filed value is ADR-029's
             // measured leak, served as before.
-            foreach (var line in _lines[report.Id].Where(line => report.ValuesFiled || (line.ObservedFromUtc <= knownAsOfUtc && !filed.Contains(report.Period))))
+            foreach (var line in _lines[report.Id].Where(line => report.ValuesFiled || (line.ObservedFromUtc <= knownAsOfUtc && !filed.Contains((line.Statement, line.Period, line.Span)))))
             {
                 var key = (report.Template, line.Statement, line.LineCode, line.Period, line.Span);
                 var restated = served.TryGetValue(key, out var earlier) && (earlier.Restated || earlier.Value != line.Value);
