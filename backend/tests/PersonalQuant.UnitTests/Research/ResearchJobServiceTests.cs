@@ -257,10 +257,10 @@ public sealed class ResearchJobServiceTests
                 Quantiles: 3,
                 CostModelVersion: "v1",
                 BuyFee: 0.0015m,
-                SellFee: 0.0015m,
+                SellFee: 0.0016m,
                 SellTax: 0.001m,
-                Spread: 0.001m,
-                Slippage: 0m,
+                Spread: 0.0012m,
+                Slippage: 0.0007m,
                 Experiment: "acceptance"),
             TestContext.Current.CancellationToken);
 

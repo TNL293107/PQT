@@ -213,10 +213,10 @@ public sealed class ResearchCommandsTests
             "--quantiles", "3",
             "--cost-model", "v1",
             "--buy-fee", "0.0015",
-            "--sell-fee", "0.0015",
+            "--sell-fee", "0.0016",
             "--sell-tax", "0.001",
-            "--spread", "0.001",
-            "--slippage", "0",
+            "--spread", "0.0012",
+            "--slippage", "0.0007",
             "--experiment", "acceptance");
 
         Assert.Equal(ExitCode.Ok, code);
@@ -229,10 +229,10 @@ public sealed class ResearchCommandsTests
                 Quantiles: 3,
                 CostModelVersion: "v1",
                 BuyFee: 0.0015m,
-                SellFee: 0.0015m,
+                SellFee: 0.0016m,
                 SellTax: 0.001m,
-                Spread: 0.001m,
-                Slippage: 0m,
+                Spread: 0.0012m,
+                Slippage: 0.0007m,
                 Experiment: "acceptance"),
             harness.Jobs.LastCalibration);
         Assert.Contains("queued", harness.Result, StringComparison.Ordinal);
