@@ -103,6 +103,25 @@ def test_vendor_rows_enter_the_hash_from_schema_6_only() -> None:
     assert content_hash_of(DatasetManifest.from_json(v6)) != v6["content_hash"]
 
 
+def test_a_vendor_row_count_of_zero_is_hashed_not_dropped() -> None:
+    # From schema 6, vendor_rows 0 is a stated count ("vendor:0,"), not an
+    # absent one: a reader that tested it for truth would drop it and agree
+    # with a manifest that never stated it.
+    v6 = _raw("v6-vendor.json")
+    v6["fundamentals"]["vendor_rows"] = 0
+    manifest = DatasetManifest.from_json(v6)
+
+    assert manifest.fundamentals is not None
+    assert manifest.fundamentals.vendor_rows == 0
+    # 0 renders as "vendor:0,": the canonical string with the count removed
+    # must hash differently, so a rule that skips a falsy count is caught.
+    canonical = (FIXTURES / "v6-vendor.canonical.txt").read_text(encoding="utf-8")
+    with_zero = canonical.replace("vendor:37,", "vendor:0,", 1)
+    without = canonical.replace("vendor:37,", "", 1)
+    assert content_hash_of(manifest) == hashlib.sha256(with_zero.encode("utf-8")).hexdigest()
+    assert content_hash_of(manifest) != hashlib.sha256(without.encode("utf-8")).hexdigest()
+
+
 def test_a_schema_1_manifest_reads_as_an_as_of_export() -> None:
     # Version 1 predates the membership field; every v1 export was as-of.
     manifest = DatasetManifest.from_json(_raw("v1-as-of.json"))

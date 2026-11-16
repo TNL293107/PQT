@@ -46,8 +46,11 @@ public sealed class DatasetManifestGoldenTests
 
     private const string GoldenV4 = "v4-fundamentals.json";
 
-    // Written by this build, unlike v5-request.json, which is hand-built.
+    // Written by schema 5's build; now held by its hash, like v3 and v4.
     private const string GoldenV5 = "v5-export.json";
+
+    // Written by this build (schema 6, ADR-038), unlike v6-vendor.json, which is hand-built.
+    private const string GoldenV6 = "v6-export.json";
 
     [Theory]
     [InlineData("v1-as-of.json")]
@@ -62,6 +65,7 @@ public sealed class DatasetManifestGoldenTests
     // Schema 6 (ADR-038): hand-built from v5-request.json with vendor_rows; the
     // canonical string beside it pins the rendering in both languages.
     [InlineData("v6-vendor.json")]
+    [InlineData(GoldenV6)]
     public void A_committed_manifest_hashes_to_the_content_hash_it_records(string name)
     {
         var manifest = Read(name);
@@ -70,11 +74,11 @@ public sealed class DatasetManifestGoldenTests
     }
 
     [Fact]
-    public void The_version_five_fixture_is_exactly_what_this_build_writes()
+    public void The_version_six_fixture_is_exactly_what_this_build_writes()
     {
         var written = JsonSerializer.Serialize(GoldenManifest(), ParquetDatasetStore.ManifestJson)
             .ReplaceLineEndings("\n") + "\n";
-        var path = Path.Combine(FixtureDirectory(), GoldenV5);
+        var path = Path.Combine(FixtureDirectory(), GoldenV6);
 
         if (string.Equals(Environment.GetEnvironmentVariable("PQT_WRITE_GOLDEN"), "1", StringComparison.Ordinal))
         {
@@ -303,10 +307,39 @@ public sealed class DatasetManifestGoldenTests
                     new DatasetNotCollected(Guid.Parse("2b3c4d5e-6f70-4b8c-9dae-bf0011223344"), "ids_capture_gap"),
                     new DatasetNotCollected(Guid.Parse("3c4d5e6f-7081-4c9d-aebf-c01122334455"), "out_of_scope"),
                     new DatasetNotCollected(Guid.Parse("4d5e6f70-8192-4dae-bfc0-d12233445566"), "not_imported"),
-                ]),
+                ],
+                VendorRows: 37),
             labelled);
 
         return manifest with { ContentHash = DatasetIdentity.ContentHashOf(manifest) };
+    }
+
+    [Fact]
+    public void This_build_writes_schema_6_with_vendor_rows()
+    {
+        Assert.Equal(DatasetManifest.VendorSchemaVersion, DatasetManifest.CurrentSchemaVersion);
+
+        var written = JsonSerializer.Serialize(GoldenManifest(), ParquetDatasetStore.ManifestJson);
+        using var document = JsonDocument.Parse(written);
+
+        Assert.Equal(6, document.RootElement.GetProperty("schema_version").GetInt32());
+        Assert.Equal(37, document.RootElement.GetProperty("fundamentals").GetProperty("vendor_rows").GetInt64());
+    }
+
+    [Fact]
+    public void A_schema_6_export_with_no_vendor_value_writes_vendor_rows_0()
+    {
+        // From schema 6 the count is a fact the hash covers: an export that read
+        // no vendor value states 0, so a missing key never stands for "unknown".
+        var manifest = GoldenManifest();
+        var none = manifest with { Fundamentals = manifest.Fundamentals! with { VendorRows = 0 } };
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(none, ParquetDatasetStore.ManifestJson));
+
+        Assert.Equal(6, document.RootElement.GetProperty("schema_version").GetInt32());
+        Assert.Equal(0, document.RootElement.GetProperty("fundamentals").GetProperty("vendor_rows").GetInt64());
+        // And it is hashed: the 0 is a stated count, so it moves the hash.
+        Assert.NotEqual(DatasetIdentity.ContentHashOf(none), DatasetIdentity.ContentHashOf(manifest));
     }
 
     private static DatasetManifest Read(string name) =>
