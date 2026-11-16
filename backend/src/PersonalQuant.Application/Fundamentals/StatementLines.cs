@@ -233,9 +233,12 @@ internal sealed class StatementLines
             return toDate;
         }
 
-        return Profit(FiscalQuarter.Create(quarter.Year, quarter.Quarter - 1), PeriodSpan.YearToDate) is { } before
-            ? toDate - before
-            : null;
+        // The first quarter alone is the first quarter's year to date.
+        var previous = FiscalQuarter.Create(quarter.Year, quarter.Quarter - 1);
+        var beforeToDate = Profit(previous, PeriodSpan.YearToDate)
+            ?? (previous.Quarter == 1 ? Profit(previous, PeriodSpan.Quarter) : null);
+
+        return beforeToDate is { } before ? toDate - before : null;
     }
 
     /// <summary>Sums the four latest consecutive quarters of profit to the parent.</summary>

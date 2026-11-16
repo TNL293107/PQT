@@ -299,14 +299,17 @@ public sealed class FundamentalRatioService(
 
         // A vendor's balance sheet states no charter capital (ADR-038), so the
         // share count is read from the latest one that does, adjusted for the
-        // actions since it, as for any balance sheet (QA H1).
+        // actions since it, as for any balance sheet (QA H1). That is the
+        // ordinary vendor era and says nothing; a capital more than a year
+        // older than the balance sheet is a finding, since the count rests on
+        // actions alone for that long.
         var capital = balance is { } latest ? lines.LatestCapital(latest) : null;
 
-        if (capital is { } basis && balance is { } sheetQuarter && basis != sheetQuarter)
+        if (capital is { } basis && balance is { } sheetQuarter && basis.CompareTo(sheetQuarter.YearEarlier) < 0)
         {
             findings.Add(
-                $"{sheetQuarter}'s balance sheet states no charter capital; the share count is read from {basis}'s charter capital, "
-                    + "adjusted for the actions since.");
+                $"The share count is read from {basis}'s charter capital, more than a year before {sheetQuarter}'s balance sheet, "
+                    + "which states none; it is adjusted only for the actions recorded since.");
         }
 
         var (shares, applied, withheld, registeredEarly) = SharesAt(lines, capital ?? balance, adjustments, session, announcedBy, findings);

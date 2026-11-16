@@ -109,7 +109,9 @@ public sealed class FundamentalRatioServiceTests
         Assert.Equal(0.5455m, decimal.Round(ratios.PriceToBook.Value!.Value, 4));
         Assert.Equal(0.105m, ratios.ReturnOnEquity.Value);
         Assert.True(ratios.BuiltOnVendor);
-        Assert.Contains(ratios.Findings, finding => finding.Contains("2025Q4", StringComparison.Ordinal) && finding.Contains("charter capital", StringComparison.Ordinal));
+        // 2025Q4's capital is within the year to 2026Q1: the ordinary vendor
+        // era, not a finding on every row (QA verify L).
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("charter capital", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -163,6 +165,28 @@ public sealed class FundamentalRatioServiceTests
         Assert.Equal(FiscalQuarter.Create(2027, 1), ratios.BalanceSheet);
         Assert.Equal(0.1m, ratios.ReturnOnEquity.Value);
         Assert.True(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_share_count_read_from_capital_more_than_a_year_old_is_a_finding()
+    {
+        // Five vendor quarters after the last filed capital (2025Q4): the count
+        // still rests on it, and now that is said.
+        var issuer = new MixedIssuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [4]);
+
+        for (var quarter = 1; quarter <= 5; quarter++)
+        {
+            var period = FiscalQuarter.Create(2026 + ((quarter - 1) / 4), ((quarter - 1) % 4) + 1);
+            issuer.Vendor(period, profit: 250_000_000_000m, equity: 10_000_000_000_000m);
+        }
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2027, 6, 1));
+
+        Assert.Equal(FiscalQuarter.Create(2027, 1), ratios.BalanceSheet);
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Contains(ratios.Findings, finding =>
+            finding.Contains("2025Q4", StringComparison.Ordinal) && finding.Contains("more than a year", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -237,7 +261,8 @@ public sealed class FundamentalRatioServiceTests
                 if (value is { } stated)
                 {
                     _fundamentals.Add(StatementLine.Observe(
-                        report, statement, code, period, span, stated, ValueBasis.Vendor, SourceCode.Create("VCS"), Fetched));
+                        report, statement, code, period, span, stated, ValueBasis.Vendor, SourceCode.Create("VCS"),
+                        report.RecordedAtUtc > Fetched ? report.RecordedAtUtc.AddDays(1) : Fetched));
                 }
             }
         }

@@ -68,6 +68,27 @@ public sealed class VendorStatementLinesTests
         Assert.Null(lines.EquityToParent(Q1));
     }
 
+    [Fact]
+    public void A_first_quarter_alone_is_its_year_to_date_for_the_second_quarter()
+    {
+        // A filed H1 states 700bn year to date and nothing for Q2 alone; the
+        // vendor states Q1 alone as 400bn. Q1's quarter is Q1's year to date,
+        // so Q2 is 300bn (QA verify L).
+        var q2 = FiscalQuarter.Create(2026, 2);
+        var lines = StatementLines.From(
+            [
+                Value(FinancialTemplate.NonFinancialCircular99, FinancialStatement.IncomeStatement, "isa22", Q1, PeriodSpan.Quarter, 400_000_000_000m, ValueBasis.Vendor),
+                Value(FinancialTemplate.NonFinancialCircular200, FinancialStatement.IncomeStatement, "61", q2, PeriodSpan.YearToDate, 700_000_000_000m, ValueBasis.AsFiled),
+            ],
+            FinancialStatementScope.Consolidated);
+
+        Assert.Equal(300_000_000_000m, lines.QuarterProfit(q2));
+    }
+
+    private static FundamentalValue Value(
+        FinancialTemplate template, FinancialStatement statement, string code, FiscalQuarter period, PeriodSpan span, decimal value, ValueBasis basis) =>
+        new(template, statement, code, period, span, value, basis, FinancialReportId.New(), FinancialReportKind.Quarterly, DateTimeOffset.UnixEpoch, Restated: false);
+
     private static StatementLines Lines(params (FinancialStatement Statement, string Code, PeriodSpan Span, decimal Value)[] values) =>
         StatementLines.From(
             [
