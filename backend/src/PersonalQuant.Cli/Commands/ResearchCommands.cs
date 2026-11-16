@@ -269,16 +269,16 @@ internal sealed class ResearchCommands(Lazy<IResearchJobService> jobs, Output ou
             .SubmitCalibrationAsync(
                 new CalibrationRequest(
                     datasetId,
-                    version,
-                    feature,
-                    transform,
-                    quantiles,
-                    CostModelVersion: costModel,
                     BuyFee: values["buy-fee"],
                     SellFee: values["sell-fee"],
                     SellTax: values["sell-tax"],
                     Spread: values["spread"],
                     Slippage: values["slippage"],
+                    Version: version,
+                    Feature: feature,
+                    TransformVersion: transform,
+                    Quantiles: quantiles,
+                    CostModelVersion: costModel,
                     Experiment: command.Value("experiment"),
                     Hypothesis: command.Value("hypothesis")),
                 cancellationToken)

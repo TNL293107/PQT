@@ -100,36 +100,40 @@ public sealed record FactorCorrelationRequest(
     string? Hypothesis = null);
 
 /// <summary>A request to calibrate one feature's quantiles into probabilities and expected value (ADR-037).</summary>
+/// <remarks>
+/// The five costs have no default: a fee left out is refused at compile time,
+/// never read as zero (ADR-037 §1, "a declared parameter of the run").
+/// </remarks>
 /// <param name="DatasetId">The labelled dataset.</param>
+/// <param name="BuyFee">The buy fee, a fraction of notional.</param>
+/// <param name="SellFee">The sell fee, a fraction of notional.</param>
+/// <param name="SellTax">The sell tax, a fraction of notional.</param>
+/// <param name="Spread">The spread, a fraction of notional.</param>
+/// <param name="Slippage">Slippage on each leg, a fraction of notional.</param>
 /// <param name="Version">The build, or <see langword="null"/> for the latest held when queued.</param>
 /// <param name="Feature">The catalogue name of the feature.</param>
 /// <param name="TransformVersion">The cross-sectional transform applied first.</param>
 /// <param name="Quantiles">Buckets the feature is calibrated in.</param>
 /// <param name="CalibrationVersion">The calibration rules; ADR-037 is <c>cal-1</c>.</param>
 /// <param name="CostModelVersion">The name the declared costs are recorded under.</param>
-/// <param name="BuyFee">The buy fee, a fraction of notional.</param>
-/// <param name="SellFee">The sell fee, a fraction of notional.</param>
-/// <param name="SellTax">The sell tax, a fraction of notional.</param>
-/// <param name="Spread">The spread, a fraction of notional.</param>
-/// <param name="Slippage">Slippage on each leg, a fraction of notional.</param>
 /// <param name="Experiment">
-/// The evaluation experiment; the worker records the run under <c>&lt;experiment&gt;-calibration</c>.
-/// The job kind when <see langword="null"/>.
+/// The evaluation experiment; the worker records the run under <c>&lt;experiment&gt;-calibration</c>,
+/// which is where a hypothesis is staged. The job kind when <see langword="null"/>.
 /// </param>
-/// <param name="Hypothesis">What a new experiment sets out to test.</param>
+/// <param name="Hypothesis">What a new calibration experiment sets out to test.</param>
 public sealed record CalibrationRequest(
     string DatasetId,
+    decimal BuyFee,
+    decimal SellFee,
+    decimal SellTax,
+    decimal Spread,
+    decimal Slippage,
     int? Version = null,
     string Feature = "",
     string TransformVersion = "",
     int Quantiles = 5,
     string CalibrationVersion = "cal-1",
     string CostModelVersion = "",
-    decimal BuyFee = 0m,
-    decimal SellFee = 0m,
-    decimal SellTax = 0m,
-    decimal Spread = 0m,
-    decimal Slippage = 0m,
     string? Experiment = null,
     string? Hypothesis = null);
 
@@ -254,6 +258,13 @@ internal sealed partial class ResearchJobService(
 
     /// <summary>The kind the worker calibrates one feature under (ADR-037).</summary>
     public const string CalibrationKind = "calibration";
+
+    /// <summary>
+    /// What the worker appends to a calibration job's experiment to name the one it
+    /// records the run under, unless the name already ends with it (ADR-037 §5,
+    /// <c>handlers.py</c> <c>recorded_under</c>).
+    /// </summary>
+    public const string CalibrationExperimentSuffix = "-calibration";
 
     /// <summary>The calibration rules the worker computes.</summary>
     public static readonly IReadOnlyList<string> CalibrationVersions = ["cal-1"];
@@ -383,7 +394,7 @@ internal sealed partial class ResearchJobService(
 
         var prepared = await PrepareLabelledAsync(
                 request.DatasetId, request.Version, request.TransformVersion, request.Experiment, request.Hypothesis,
-                FactorEvaluationKind, cancellationToken)
+                FactorEvaluationKind, recordedSuffix: null, cancellationToken)
             .ConfigureAwait(false);
 
         if (prepared.Refusal is { } refusal)
@@ -414,7 +425,7 @@ internal sealed partial class ResearchJobService(
 
         var prepared = await PrepareLabelledAsync(
                 request.DatasetId, request.Version, request.TransformVersion, request.Experiment, request.Hypothesis,
-                FactorCorrelationKind, cancellationToken)
+                FactorCorrelationKind, recordedSuffix: null, cancellationToken)
             .ConfigureAwait(false);
 
         if (prepared.Refusal is { } refusal)
@@ -475,7 +486,7 @@ internal sealed partial class ResearchJobService(
 
         var prepared = await PrepareLabelledAsync(
                 request.DatasetId, request.Version, request.TransformVersion, request.Experiment, request.Hypothesis,
-                CalibrationKind, cancellationToken)
+                CalibrationKind, recordedSuffix: CalibrationExperimentSuffix, cancellationToken)
             .ConfigureAwait(false);
 
         if (prepared.Refusal is { } refusal)
@@ -569,7 +580,9 @@ internal sealed partial class ResearchJobService(
     /// the transform and the experiment. The worker needs the build named, so
     /// "latest" is resolved here, to the newest build held when queued.
     /// Nothing is saved: a new experiment is only staged, and only saved with
-    /// the job.
+    /// the job. With <paramref name="recordedSuffix"/>, the experiment staged and
+    /// judged is the one the worker records under; the name returned for the
+    /// payload is still the one typed.
     /// </summary>
     private async Task<(int Version, string Experiment, string? Refusal)> PrepareLabelledAsync(
         string datasetId,
@@ -578,6 +591,7 @@ internal sealed partial class ResearchJobService(
         string? experimentName,
         string? hypothesis,
         string kind,
+        string? recordedSuffix,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(datasetId) || !DatasetIdPattern().IsMatch(datasetId))
@@ -606,13 +620,19 @@ internal sealed partial class ResearchJobService(
         }
 
         var name = experimentName ?? kind;
-        var experiment = await experiments.FindByNameAsync(name, cancellationToken).ConfigureAwait(false);
+
+        // The payload carries the name typed; the run is recorded under the
+        // worker's name for it, so that is the experiment staged and judged.
+        var recordedUnder = recordedSuffix is null || name.EndsWith(recordedSuffix, StringComparison.Ordinal)
+            ? name
+            : name + recordedSuffix;
+        var experiment = await experiments.FindByNameAsync(recordedUnder, cancellationToken).ConfigureAwait(false);
 
         if (experiment is null)
         {
             try
             {
-                experiment = Experiment.Define(name, hypothesis, clock.UtcNow);
+                experiment = Experiment.Define(recordedUnder, hypothesis, clock.UtcNow);
             }
             catch (DomainValidationException exception)
             {
@@ -625,11 +645,11 @@ internal sealed partial class ResearchJobService(
             && !string.Equals(stated.Trim(), experiment.Hypothesis, StringComparison.Ordinal))
         {
             return (0, string.Empty,
-                $"Experiment '{name}' already states its hypothesis; a different one is a new "
+                $"Experiment '{recordedUnder}' already states its hypothesis; a different one is a new "
                     + "experiment. Name one with --experiment.");
         }
 
-        return (version ?? versions.Max(), experiment.Name, null);
+        return (version ?? versions.Max(), name, null);
     }
 
     private async Task<ResearchJobSubmission> QueueAsync(string kind, string payload, CancellationToken cancellationToken)
