@@ -158,7 +158,7 @@ and VNM only, so FPT's restatements come from `fpt-later-readings.txt`.
   basis and never overwrites an `as_filed` one.
 - **VNM 2024Q4's IDS form holds placeholders**: revenue exactly
   20,000,000,000,000 and profit exactly 2,000,000,000,000. Vietcap's
-  15,477,073,125,441 and 2,123,649,268,482 are the real figures. Here the
+  14- and 13-digit figures, neither round, are the real ones (not quoted, ADR-041). Here the
   filed form is wrong and the vendor right. A filed placeholder is an
   `as_filed` value PQT stores today; finding such values is a data-quality
   item of its own, recorded in the Phase 6 backlog table
