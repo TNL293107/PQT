@@ -157,7 +157,9 @@ def test_a_schema_7_manifest_hashes_and_its_vendor_rows_stay_in_the_hash() -> No
     raw["schema_version"] = 7
 
     manifest = DatasetManifest.from_json(raw)
-    edited = DatasetManifest.from_json({**raw, "fundamentals": {**raw["fundamentals"], "vendor_rows": 0}})
+    edited = DatasetManifest.from_json(
+        {**raw, "fundamentals": {**raw["fundamentals"], "vendor_rows": 0}}
+    )
 
     assert manifest.schema_version == 7
     assert content_hash_of(manifest) != content_hash_of(edited)
@@ -176,7 +178,9 @@ def test_the_schema_7_fixture_hashes_to_the_content_hash_dotnet_recorded() -> No
     assert content_hash_of(manifest) == raw["content_hash"]
 
 
-def test_the_vendor_share_of_each_value_feature_is_read_from_the_parquet_alone(tmp_path: Path) -> None:
+def test_the_vendor_share_of_each_value_feature_is_read_from_the_parquet_alone(
+    tmp_path: Path,
+) -> None:
     _write_schema_7(tmp_path, ROWS)
     dataset = LocalDatasetProvider(tmp_path).open("0123456789abcdef")
 
@@ -187,8 +191,12 @@ def test_the_vendor_share_of_each_value_feature_is_read_from_the_parquet_alone(t
         assert shares[feature] == pytest.approx(expected), feature
 
 
-def test_a_build_with_no_vendor_value_has_a_share_of_zero_for_every_value_feature(tmp_path: Path) -> None:
-    _write_schema_7(tmp_path, [(name, session, frozenset(), values) for name, session, _, values in ROWS])
+def test_a_build_with_no_vendor_value_has_a_share_of_zero_for_every_value_feature(
+    tmp_path: Path,
+) -> None:
+    _write_schema_7(
+        tmp_path, [(name, session, frozenset(), values) for name, session, _, values in ROWS]
+    )
 
     shares = _vendor_shares()(LocalDatasetProvider(tmp_path).open("0123456789abcdef"))
 

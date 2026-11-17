@@ -82,6 +82,8 @@ class FundamentalsRow:
     ``values`` maps each value column to its :class:`~decimal.Decimal`, or to
     ``None`` where it is absent; ``absent`` maps it to the dataset's reason,
     or ``None`` where it is present. ``findings`` stays the dataset's JSON text.
+    ``vendor`` names the values whose inputs include a vendor line (schema 7,
+    ADR-038); it is empty for a build before schema 7, which states nothing.
     """
 
     instrument_id: str
@@ -89,6 +91,7 @@ class FundamentalsRow:
     values: Mapping[str, Decimal | None]
     absent: Mapping[str, str | None]
     findings: str
+    vendor: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
