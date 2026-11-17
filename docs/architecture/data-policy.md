@@ -20,7 +20,11 @@ the rules below are what keep it that way.
 3. **Fixtures are synthetic or trivially small.** A fixture exists to make a
    test deterministic. If a fixture would be recognisable as a real vendor
    extract, it is too large and probably not licensed for the purpose.
-   Fixture values are invented, never copied from a real response; a gate
+   One exception, decided by the Moderator on 2026-11-17: an **as-filed
+   figure from IDS or HOSE**, a public disclosure, may appear in a test
+   fixture or an evidence doc. A figure that **only a vendor supplies**
+   (Vietcap, CafeF or any other) never may, even when it would be convenient.
+   Otherwise, fixture values are invented, never copied from a real response; a gate
    (`tools/real-figure-scan/`) scans changed fixtures against the real data
    held in the repository root's git-ignored `tmp/`, for example
    `tmp/adr-038-verification/`, not the dataset scratch `data/tmp/` (ADR-041).

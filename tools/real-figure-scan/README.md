@@ -35,10 +35,23 @@ Standard library only, Python 3.12 or later. Nothing to install.
 | `--reference DIR` | Real responses in a git-ignored directory, e.g. `tmp/adr-038-verification/`. Every large number in every file | On the machine that holds the data |
 | `--denylist FILE` | Salted scrypt digests of real figures, made with `--make-denylist`. A digest does not reveal its figure | Anywhere, including CI |
 
-`denylist.txt` holds the digests of **10,197** figures: every non-round number
-of at least 10^9 in the ADR-038 verification data (`tmp/adr-038-verification/`,
-restored from a USB copy on 2026-11-17, not re-fetched), together with the six
-real figures known to have been committed:
+There are two modes, and they protect against different sets.
+
+| Mode | Figures | Command |
+| --- | --- | --- |
+| **CI** | The six in `denylist.txt` (below) | `--denylist tools/real-figure-scan/denylist.txt` |
+| **Local, full** | All 10,196 non-round figures of at least 10^9 in the ADR-038 verification data, `tmp/adr-038-verification/` (restored from a USB copy on 2026-11-17, not re-fetched), plus the sixth known figure | `--reference tmp/adr-038-verification`, or the same set as digests in the git-ignored `tmp/real-figure-scan/denylist-full.txt` (10,197) |
+
+CI does not use the full set because Vietcap's values equal the public IDS
+forms to the đồng, so it would fail on IDS figures the data policy allows (rule
+3). **The full local scan reports 13 known hits**, all from sprints 6.2, 6.3 and
+8.1, before any vendor statement was read: 10 as-filed IDS figures and 3
+invented placeholders that match a vendor value by chance (ADR-041,
+Consequences; QA + QC's triage in the git-ignored
+`data/tmp/legacy-hits-triage.md`). A 14th hit is new and must be looked at.
+
+`denylist.txt` holds the digests of the **six** real vendor figures known to
+have been committed:
 
 - the **four** of the ADR-041 incident: the three the ADR names, and the
   equity-to-parent figure asserted in `VendorStatementLinesTests.cs`, which the
@@ -47,10 +60,10 @@ real figures known to have been committed:
 - the **two** VNM 2024Q4 figures (revenue and profit) that ADR-038 and the
   Phase 6 definition of done quoted on `develop`, removed by `d10960d`.
 
-Five of the six are in the verification data; the sixth is added from the
-numbers `9befc39` removed. A green "Repository checks" means no figure of that
-data came back, not that a fixture is invented: a real figure from any other
-source still passes.
+Five of the six are in the verification data; the sixth comes from the numbers
+`9befc39` removed. A green "Repository checks" means none of the six came back,
+not that a fixture is invented: any other vendor figure still passes CI, and
+only the full local scan catches it.
 
 **Brute force.** A digest is salted and slow, but the space it hides is small:
 a 13- to 14-digit figure whose rough size is known can be found by trying
@@ -58,11 +71,16 @@ candidates. This is accepted because the figures are a listed company's own
 published statements; what ADR-041 prevents is the repository redistributing
 the vendor's data, and a digest does not do that.
 
-When real data is saved for a new verification, add its digests:
+When real data is saved for a new verification, rebuild the local full
+denylist from it. Only a vendor figure found committed goes into the CI
+`denylist.txt`:
 
 ```bash
-python tools/real-figure-scan/scan.py --reference tmp/<verification> --make-denylist tmp/new.txt
-# append the digest lines of tmp/new.txt to tools/real-figure-scan/denylist.txt
+python tools/real-figure-scan/scan.py --reference tmp/adr-038-verification --reference tmp/<verification> \
+    --make-denylist tmp/real-figure-scan/denylist-full.txt
+# A vendor figure found committed: put it alone in a git-ignored directory, then
+python tools/real-figure-scan/scan.py --reference tmp/<that directory> --make-denylist tmp/new.txt
+# and append the digest line of tmp/new.txt to tools/real-figure-scan/denylist.txt
 ```
 
 A hit is printed as `path:line` and the figure's digit count, never the figure,
@@ -73,6 +91,9 @@ because the CI log of a public repository is public.
 ```bash
 # Before pushing a fixture (ADR-041 rule 3): the lines your branch adds.
 python tools/real-figure-scan/scan.py --reference tmp/adr-038-verification --diff origin/develop HEAD
+
+# Full local scan: expect exactly the 13 known hits (see above).
+python tools/real-figure-scan/scan.py --reference tmp/adr-038-verification --scope all
 
 # What CI runs: every test file and fixture in the working tree.
 python tools/real-figure-scan/scan.py --denylist tools/real-figure-scan/denylist.txt
