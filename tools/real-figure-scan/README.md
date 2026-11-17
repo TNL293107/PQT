@@ -35,8 +35,10 @@ Standard library only, Python 3.12 or later. Nothing to install.
 | `--reference DIR` | Real responses in a git-ignored directory, e.g. `tmp/adr-038-verification/`. Every large number in every file | On the machine that holds the data |
 | `--denylist FILE` | Salted scrypt digests of real figures, made with `--make-denylist`. A digest does not reveal its figure | Anywhere, including CI |
 
-`denylist.txt` holds the digests of **six** figures, every real figure known
-to have been committed to this repository:
+`denylist.txt` holds the digests of **10,197** figures: every non-round number
+of at least 10^9 in the ADR-038 verification data (`tmp/adr-038-verification/`,
+restored from a USB copy on 2026-11-17, not re-fetched), together with the six
+real figures known to have been committed:
 
 - the **four** of the ADR-041 incident: the three the ADR names, and the
   equity-to-parent figure asserted in `VendorStatementLinesTests.cs`, which the
@@ -45,14 +47,10 @@ to have been committed to this repository:
 - the **two** VNM 2024Q4 figures (revenue and profit) that ADR-038 and the
   Phase 6 definition of done quoted on `develop`, removed by `d10960d`.
 
-**That is the whole reference set today.** The verification data the first
-scanner read (`tmp/adr-038-verification/`, roughly 10,000 figures) was lost
-with the old working copy, and the six were recovered from the numbers
-`9befc39` and `d10960d` removed, through a reference kept outside the
-repository. It is not being re-fetched until the legal review of the Vietcap
-terms allows it (ADR-038). Until then the scan, **CI included**, protects
-against these six and no other real figure: a green "Repository checks" means
-none of the six came back, not that a fixture is invented.
+Five of the six are in the verification data; the sixth is added from the
+numbers `9befc39` removed. A green "Repository checks" means no figure of that
+data came back, not that a fixture is invented: a real figure from any other
+source still passes.
 
 **Brute force.** A digest is salted and slow, but the space it hides is small:
 a 13- to 14-digit figure whose rough size is known can be found by trying

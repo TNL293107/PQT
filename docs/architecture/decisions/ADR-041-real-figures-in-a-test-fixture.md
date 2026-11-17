@@ -25,9 +25,9 @@ other three, and the Moderator ruled it real on 2026-11-16.
 
 The figures themselves are deliberately not repeated here: quoting them in a
 public document would publish them again. They are identifiable from git
-history: the test files at the parent of the fix commit `9befc39`. (The
+history: the test files at the parent of the fix commit `9befc39`, and the
 git-ignored verification data they were first checked against,
-`tmp/adr-038-verification/`, was later lost.)
+`tmp/adr-038-verification/`.
 
 Tester + Audit found the first two while gating PR #20, by comparing the
 fixtures against the verification data, and the third with a scanner written for
@@ -53,7 +53,7 @@ this check. The repository is public.
 | Step | Status, 2026-11-16 |
 | --- | --- |
 | 1. Stop the ingestion path | Nothing to stop: no vendor data was imported and no ingestion path was running |
-| 2. Delete the affected data from all storage | Nothing was imported (Exposure), so the database never held it. The git-ignored copy in `tmp/adr-038-verification/` no longer exists. The figures are still in the history of the branches that contain `73588e3` (see Remedy) |
+| 2. Delete the affected data from all storage | Nothing was imported (Exposure), so the database never held it. The git-ignored copy in `tmp/adr-038-verification/` is kept, outside git, as the scanner's reference. The figures are still in the history of the branches that contain `73588e3` (see Remedy) |
 | 3. Verify nothing reached Git history | **Not met.** Verified, and the answer is that it did: `73588e3` is on three remote branches of a public repository. The Remedy leaves it there, by the Moderator's decision, and keeps it out of `develop`, `uat`, `staging` and `main` |
 | 4. Record it in an ADR | This ADR |
 
@@ -111,14 +111,16 @@ would carry it, and with it all four figures, into their history. So:
 - The data policy's rule 3 is unchanged; this ADR adds the check that enforces
   it for fixtures built next to real data.
 - The scanner lives in `tools/real-figure-scan/`, so fixture authors can run it
-  (rule 3). The first one, in `tmp/`, was lost. CI's "Repository checks" runs it
+  (rule 3); the first one stays in the git-ignored `tmp/`. CI's "Repository checks" runs it
   over every test file and fixture against `denylist.txt`, which holds salted
   scrypt digests of real figures, so CI needs no real data and never prints a
   figure. Docs are not scanned in CI yet.
-- **CI protects only the real figures known to have been committed.** As of
-  2026-11-16, `denylist.txt` holds six: the four of this incident and the two
-  VNM figures ADR-038 and the Phase 6 definition of done quoted (PR #22 H4,
-  redacted in `d10960d`). The verification data was
-  lost, and the Moderator decided not to re-fetch it before the legal review, so
-  any other real figure passes CI. A rescaled figure (written in millions) and
-  anything under 10^9 are not detected at all (README, "Limits").
+- **CI protects against the verification data's figures, and no others.** As of
+  2026-11-17, `denylist.txt` holds 10,197 digests: every non-round figure of at
+  least 10^9 in `tmp/adr-038-verification/`, restored from a USB copy that day
+  (not re-fetched, as the Moderator decided before the legal review), plus the
+  six known to have been committed: the four of this incident and the two VNM
+  figures ADR-038 and the Phase 6 definition of done quoted (PR #22 H4,
+  redacted in `d10960d`). A real figure from any other source passes CI. A
+  rescaled figure (written in millions) and anything under 10^9 are not
+  detected at all (README, "Limits").
