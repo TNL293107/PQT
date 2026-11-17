@@ -16,6 +16,16 @@ namespace PersonalQuant.IntegrationTests;
 /// is the only place they can be proved. An in-memory provider would evaluate
 /// the same LINQ with .NET string semantics and agree with itself while the
 /// database did something else.
+/// <para>
+/// Search spans the whole instrument master, and every class in the
+/// collection shares one database. Other tests create instruments with random
+/// tickers (<c>UniverseEndpointTests</c> uses six hex characters, so
+/// <c>RCDAA24</c> contains <c>CDA</c>), so a result list may hold rows this
+/// test never made. Every assertion here is therefore made on
+/// <see cref="Own"/>: the results, in their ranked order, restricted to the
+/// instruments the test itself created. Ranking among them is unchanged by
+/// rows from elsewhere, so this keeps what each test proves.
+/// </para>
 /// </remarks>
 /// <param name="containers">Shared container fixture.</param>
 [Collection(DependencyContainerTests.Name)]
@@ -38,7 +48,7 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         // master rather than one venue, and the test classes share a database,
         // so a fixture built from a real ticker would be joined by rows
         // another test created.
-        await AddInstrumentsAsync(
+        var created = await AddInstrumentsAsync(
             scope,
             venue,
             ("ZQA", "ZQA Corporation"),
@@ -46,9 +56,10 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
             ("ZQC", "A Company Mentioning ZQA Midway"));
 
         // Act
-        var results = await SearchAsync(scope, "ZQA");
+        var results = Own(await SearchAsync(scope, "ZQA"), created);
 
         // Assert
+        Assert.Equal(3, results.Count);
         Assert.Equal("ZQA", results[0].Ticker.Value);
         Assert.Equal(InstrumentMatchKind.ExactTicker, results[0].MatchKind);
         Assert.Equal(InstrumentMatchKind.NamePrefix, results[1].MatchKind);
@@ -65,16 +76,17 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "RANKB");
 
-        await AddInstrumentsAsync(
+        var created = await AddInstrumentsAsync(
             scope,
             venue,
             ("VNMX", "An Unrelated Company"),
             ("ZZZ", "VNM Holdings"));
 
         // Act
-        var results = await SearchAsync(scope, "VNM");
+        var results = Own(await SearchAsync(scope, "VNM"), created);
 
         // Assert
+        Assert.Equal(2, results.Count);
         Assert.Equal(InstrumentMatchKind.TickerPrefix, results[0].MatchKind);
         Assert.Equal("VNMX", results[0].Ticker.Value);
         Assert.Equal(InstrumentMatchKind.NamePrefix, results[1].MatchKind);
@@ -88,16 +100,17 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "RANKC");
 
-        await AddInstrumentsAsync(
+        var created = await AddInstrumentsAsync(
             scope,
             venue,
             ("QQQ", "Masan Group Corporation"),
             ("RRR", "Masan Group"));
 
         // Act
-        var results = await SearchAsync(scope, "Masan Group");
+        var results = Own(await SearchAsync(scope, "Masan Group"), created);
 
         // Assert
+        Assert.Equal(2, results.Count);
         Assert.Equal(InstrumentMatchKind.ExactName, results[0].MatchKind);
         Assert.Equal("RRR", results[0].Ticker.Value);
         Assert.Equal(InstrumentMatchKind.NamePrefix, results[1].MatchKind);
@@ -111,11 +124,11 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "CASEA");
 
-        await AddInstrumentsAsync(scope, venue, ("HPG", "Hoa Phat Group Joint Stock Company"));
+        var created = await AddInstrumentsAsync(scope, venue, ("HPG", "Hoa Phat Group Joint Stock Company"));
 
         // Act
-        var lower = await SearchAsync(scope, "hpg");
-        var mixed = await SearchAsync(scope, "hOa pHat");
+        var lower = Own(await SearchAsync(scope, "hpg"), created);
+        var mixed = Own(await SearchAsync(scope, "hOa pHat"), created);
 
         // Assert
         Assert.Equal("HPG", Assert.Single(lower).Ticker.Value);
@@ -132,11 +145,11 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "ACCEN");
 
-        await AddInstrumentsAsync(scope, venue, ("VCB", "Ngân hàng Ngoại thương Việt Nam"));
+        var created = await AddInstrumentsAsync(scope, venue, ("VCB", "Ngân hàng Ngoại thương Việt Nam"));
 
         // Act
-        var unaccented = await SearchAsync(scope, "ngan hang");
-        var accented = await SearchAsync(scope, "Ngân hàng");
+        var unaccented = Own(await SearchAsync(scope, "ngan hang"), created);
+        var accented = Own(await SearchAsync(scope, "Ngân hàng"), created);
 
         // Assert
         Assert.Equal("VCB", Assert.Single(unaccented).Ticker.Value);
@@ -161,8 +174,9 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Act
-        var excluded = await SearchAsync(scope, "DED");
-        var included = await SearchAsync(scope, "DED", includeInactive: true);
+        // "DED" is three hex characters, which a random tag elsewhere can hold.
+        var excluded = Own(await SearchAsync(scope, "DED"), gone.Id);
+        var included = Own(await SearchAsync(scope, "DED", includeInactive: true), gone.Id);
 
         // Assert
         Assert.Empty(excluded);
@@ -180,7 +194,9 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         var venue = await AddExchangeAsync(scope, "EMPTY");
         await AddInstrumentsAsync(scope, venue, ("FPT", "FPT Corporation"));
 
-        // Act
+        // Act. Deliberately not restricted to this test's rows: the claim is
+        // about the whole answer. X, Y and Z are not hex, so no random tag in
+        // the shared database can contain the query.
         var results = await SearchAsync(scope, "XYZABC");
 
         // Assert
@@ -251,17 +267,18 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "WILDC");
 
-        await AddInstrumentsAsync(
+        var created = await AddInstrumentsAsync(
             scope,
             venue,
             ("WCA", "Wildcard Alpha Holdings"),
             ("WCB", "Wildcard Beta 100% Owned"),
             ("WCC", "Wildcard Gamma_Delta Holdings"));
 
-        // Act
-        var percent = await SearchAsync(scope, "%");
-        var underscore = await SearchAsync(scope, "GAMMA_DELTA");
-        var underscoreAsWildcard = await SearchAsync(scope, "GAMMAXDELTA");
+        // Act. Restricted to this test's rows, an unescaped % would still
+        // return WCA and WCC, so the claim survives the restriction.
+        var percent = Own(await SearchAsync(scope, "%"), created);
+        var underscore = Own(await SearchAsync(scope, "GAMMA_DELTA"), created);
+        var underscoreAsWildcard = Own(await SearchAsync(scope, "GAMMAXDELTA"), created);
 
         // Assert
         Assert.Equal("WCB", Assert.Single(percent).Ticker.Value);
@@ -278,10 +295,11 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
 
         await using var scope = await CreateScopeAsync();
         var venue = await AddExchangeAsync(scope, "CODEA");
-        await AddInstrumentsAsync(scope, venue, ("CDA", "A Listed Company"));
+        var created = await AddInstrumentsAsync(scope, venue, ("CDA", "A Listed Company"));
 
-        // Act
-        var result = Assert.Single(await SearchAsync(scope, "CDA"));
+        // Act. Filtered by instrument id, not by venue, so the exchange code
+        // asserted below is still read from the result rather than assumed.
+        var result = Assert.Single(Own(await SearchAsync(scope, "CDA"), created));
 
         // Assert
         Assert.Equal("CODEA", result.ExchangeCode.Value);
@@ -310,8 +328,8 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
 
         // Act
         await using var reader = await CreateScopeAsync();
-        var byOldName = await SearchAsync(reader, "Original Trading");
-        var byNewName = await SearchAsync(reader, "chung khoan");
+        var byOldName = Own(await SearchAsync(reader, "Original Trading"), instrument.Id);
+        var byNewName = Own(await SearchAsync(reader, "chung khoan"), instrument.Id);
 
         // Assert
         Assert.Empty(byOldName);
@@ -331,6 +349,17 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
         return await scope.Search.SearchAsync(criteria, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// The results, in ranked order, that are instruments this test created.
+    /// </summary>
+    private static List<InstrumentSearchResult> Own(
+        IEnumerable<InstrumentSearchResult> results,
+        params IEnumerable<InstrumentId> created)
+    {
+        var ids = created.ToHashSet();
+        return [.. results.Where(result => ids.Contains(result.InstrumentId))];
+    }
+
     private static Instrument Register(ExchangeId exchangeId, string ticker, string name) =>
         Instrument.Register(
             exchangeId,
@@ -340,19 +369,23 @@ public sealed class InstrumentSearchTests(DependencyContainerFixture containers)
             CurrencyCode.Vnd,
             Now);
 
-    private static async Task AddInstrumentsAsync(
+    private static async Task<IReadOnlyList<InstrumentId>> AddInstrumentsAsync(
         InstrumentScope scope,
         ExchangeId exchangeId,
         params (string Ticker, string Name)[] instruments)
     {
+        var created = new List<InstrumentId>();
+
         foreach (var (ticker, name) in instruments)
         {
             var instrument = Register(exchangeId, ticker, name);
             instrument.List(Now.AddDays(1));
             scope.Instruments.Add(instrument);
+            created.Add(instrument.Id);
         }
 
         await scope.UnitOfWork.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return created;
     }
 
     private static async Task<ExchangeId> AddExchangeAsync(InstrumentScope scope, string code)

@@ -67,6 +67,52 @@ public static class InfrastructureServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers Vietcap's statements as a vendor fundamentals provider (ADR-038).
+    /// </summary>
+    /// <remarks>
+    /// ponytail: not called from <see cref="AddInfrastructure"/>; it is wired
+    /// to configuration with the first live import, which the Moderator approves.
+    /// </remarks>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="baseAddress">The API root the statement paths are relative to.</param>
+    /// <param name="tickers">The tickers it reads; none by default.</param>
+    /// <returns>The same service collection, to allow chaining.</returns>
+    public static IServiceCollection AddVietcapStatements(
+        IServiceCollection services,
+        Uri baseAddress,
+        IReadOnlyList<string>? tickers = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(baseAddress);
+
+        services.AddHttpClient(Fundamentals.VietcapStatementProvider.ClientName, client =>
+        {
+            client.BaseAddress = baseAddress;
+
+            // Named as itself, as the market data adapter is (ADR-015): no
+            // browser agent, no Referer, no Origin.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("PersonalQuantTerminal/0.1 (+research)");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            // The endpoint gzips its statements whether asked or not.
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+        });
+
+        services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(provider =>
+            new Fundamentals.VietcapStatementProvider(
+                provider.GetRequiredService<IHttpClientFactory>(),
+                provider.GetRequiredService<IClock>(),
+                provider.GetRequiredService<IDelayScheduler>())
+            {
+                Tickers = tickers ?? [],
+            });
+
+        return services;
+    }
+
     private static void AddPostgres(IServiceCollection services)
     {
         // One data source per process: it owns the connection pool and is
