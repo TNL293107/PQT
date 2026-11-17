@@ -210,6 +210,13 @@ and VNM only, so FPT's restatements come from `fpt-later-readings.txt`.
   labelled and measurable, not eliminated.
 - **A second source to keep collecting.** The vendor read runs beside the IDS
   collector, under the same pacing and personal-use bounds.
+- **A share issue in the vendor year can go unflagged.** Vietcap states no
+  charter capital, so a vendor-era share count is the last filed capital
+  adjusted for the actions recorded since. Within a year of that capital the
+  ratio service says nothing about it; an issue with no recorded action in
+  that year changes no count and raises no finding. The row is still marked
+  `BuiltOnVendor`, and a capital more than a year older than the balance
+  sheet is a finding (QA verify of PR #20, L2).
 - **Licence footing is the vendor's written personal-use grant.** Local,
   personal, never redistributed; if PQT ever earns revenue, this reopens
   first, as ADR-015 and ADR-029 already say.
