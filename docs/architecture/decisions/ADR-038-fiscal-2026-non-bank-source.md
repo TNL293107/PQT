@@ -340,9 +340,10 @@ of each value feature's inputs) needs the value, so the dataset carries it.
   quarters, the closing equity and the year-earlier equity. The close and the
   dividend yield are never flagged.
 - **Shares and dividend yield carry no flag.** A vendor states no charter
-  capital (Trade-offs), so the share count and the dividend yield, which
-  divides by it, rest on no vendor line today. If a vendor ever supplies
-  capital, both flags have to be reconsidered (QA 11.6 LOW-2).
+  capital (Trade-offs), so the share count rests on no vendor line today.
+  The dividend yield rests on corporate actions and the close, not on a
+  statement line. If a vendor ever supplies capital, the share count's flag
+  has to be reconsidered (QA 11.6 LOW-2).
 - **Point in time.** A vendor value fetched after the read instant is not
   held, so it flags nothing.
 - **Absent values.** An absent value keeps the flag of the vendor inputs that
