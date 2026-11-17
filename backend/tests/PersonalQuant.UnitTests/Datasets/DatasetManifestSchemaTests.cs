@@ -205,7 +205,7 @@ public sealed class DatasetManifestSchemaTests
     }
 
     private static JsonElement Schema() =>
-        JsonDocument.Parse(File.ReadAllText(SchemaPath())).RootElement;
+        JsonElement.Parse(File.ReadAllText(SchemaPath()));
 
     private static HashSet<string> Names(JsonElement element) =>
         element.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
@@ -215,7 +215,7 @@ public sealed class DatasetManifestSchemaTests
     {
         var json = JsonSerializer.Serialize(Build(pointInTime), ParquetDatasetStore.ManifestJson);
 
-        return JsonDocument.Parse(json).RootElement;
+        return JsonElement.Parse(json);
     }
 
     private static DatasetManifest Build(bool pointInTime)
@@ -264,7 +264,8 @@ public sealed class DatasetManifestSchemaTests
                 IDatasetLicenceRegistry.UnstatedNote,
                 DatasetFundamentals.SessionCut,
                 5,
-                [new DatasetNotCollected(Guid.Empty, "ids_capture_gap")]));
+                [new DatasetNotCollected(Guid.Empty, "ids_capture_gap")],
+                VendorRows: 0));
 
         return manifest;
     }
@@ -284,7 +285,7 @@ public sealed class DatasetManifestSchemaTests
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "docs", "schemas", "dataset-manifest-v5.schema.json");
+                directory.FullName, "docs", "schemas", "dataset-manifest-v6.schema.json");
 
             if (File.Exists(candidate))
             {
@@ -295,6 +296,6 @@ public sealed class DatasetManifestSchemaTests
         }
 
         throw new FileNotFoundException(
-            "dataset-manifest-v5.schema.json was not found above the test binary.");
+            "dataset-manifest-v6.schema.json was not found above the test binary.");
     }
 }

@@ -11,7 +11,7 @@ internal static partial class ApplicationLog
     [LoggerMessage(
         EventId = 3700,
         Level = LogLevel.Information,
-        Message = "fundamentals from {Provider}: {Filings} filing(s) read; {Recorded} report(s) recorded, {WithoutValues} without values, {AlreadyHeld} already held; {Lines} line(s) recorded, {Restated} restated; {Late} late.")]
+        Message = "fundamentals from {Provider}: {Filings} filing(s) read; {Recorded} report(s) recorded, {WithoutValues} without values, {AlreadyHeld} already held, {Joined} vendor joined; {Lines} line(s) recorded, {Restated} restated; {Late} late.")]
     public static partial void FundamentalsImported(
         ILogger logger,
         string provider,
@@ -19,6 +19,7 @@ internal static partial class ApplicationLog
         int recorded,
         int withoutValues,
         int alreadyHeld,
+        int joined,
         int lines,
         int restated,
         int late);

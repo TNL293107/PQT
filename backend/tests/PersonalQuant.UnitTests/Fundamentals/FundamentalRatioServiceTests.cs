@@ -54,6 +54,354 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
+    public async Task A_row_read_only_from_filed_values_is_not_built_on_a_vendor_value()
+    {
+        var ratios = await new Harness().ReadAsync(March);
+
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_row_read_from_a_blank_report_a_vendor_filled_is_built_on_a_vendor_value()
+    {
+        var (service, instrument) = VendorFilled(fetched: Recorded);
+
+        var ratios = await service.ReadAsync(instrument, new DateOnly(2026, 11, 2), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 2, 0, 0, 0, TimeSpan.Zero), ratios.KnownAsOfUtc);
+        Assert.Equal(FiscalQuarter.Create(2026, 3), ratios.BalanceSheet);
+        Assert.True(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_vendor_value_not_yet_fetched_at_the_observation_instant_builds_nothing()
+    {
+        var (service, instrument) = VendorFilled(fetched: Recorded);
+
+        // Observed the day before the fetch: the blank report is known, its
+        // vendor values are not (ADR-038 §3).
+        var ratios = await service.ReadAsync(
+            instrument, new DateOnly(2026, 11, 2), Recorded.AddDays(-1), TestContext.Current.CancellationToken);
+
+        Assert.Null(ratios.BalanceSheet);
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_vendor_quarter_after_a_filed_year_continues_the_trailing_figures()
+    {
+        // QA H1: Circular 200 2025Q1–Q4 filed, then 2026Q1 filled by a vendor.
+        // Profit runs on across the change of form, and the share count comes
+        // from 2025Q4's charter capital, since a vendor states none.
+        var (service, instrument) = FiledYearThenVendorQuarter();
+
+        var ratios = await service.ReadAsync(instrument, new DateOnly(2026, 11, 16), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(FiscalQuarter.Create(2026, 1), ratios.BalanceSheet);
+        Assert.Equal(
+            [FiscalQuarter.Create(2025, 2), FiscalQuarter.Create(2025, 3), FiscalQuarter.Create(2025, 4), FiscalQuarter.Create(2026, 1)],
+            ratios.ProfitQuarters);
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Equal(1_050_000_000_000m, ratios.NetProfitTtm.Value);
+        Assert.Equal(10_500m, ratios.EpsTtm.Value);
+        Assert.Equal(110_000m, ratios.BookValuePerShare.Value);
+        Assert.Equal(5.7143m, decimal.Round(ratios.PriceToEarnings.Value!.Value, 4));
+        Assert.Equal(0.5455m, decimal.Round(ratios.PriceToBook.Value!.Value, 4));
+        Assert.Equal(0.105m, ratios.ReturnOnEquity.Value);
+        Assert.True(ratios.BuiltOnVendor);
+        // 2025Q4's capital is within the year to 2026Q1: the ordinary vendor
+        // era, not a finding on every row (QA verify L).
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("charter capital", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Before_the_vendor_fetch_the_filed_year_is_read_alone()
+    {
+        var (service, instrument) = FiledYearThenVendorQuarter();
+
+        // Observed before the vendor fetch of 8 November: 2025Q4 is the latest.
+        var ratios = await service.ReadAsync(
+            instrument, new DateOnly(2026, 11, 16), new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), TestContext.Current.CancellationToken);
+
+        Assert.Equal(FiscalQuarter.Create(2025, 4), ratios.BalanceSheet);
+        Assert.Equal(1_000_000_000_000m, ratios.NetProfitTtm.Value);
+        Assert.Equal(100_000m, ratios.BookValuePerShare.Value);
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    // --- vendor_rows over a mixed issuer (QA v6-M3) ----------------------------
+
+    [Fact]
+    public async Task A_row_reached_by_a_vendor_only_through_a_trailing_quarter_is_built_on_a_vendor_value()
+    {
+        // The balance sheet is 2025Q4's, filed; only 2026Q1's profit is a vendor's.
+        var issuer = new MixedIssuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [1, 4]);
+        issuer.Vendor(FiscalQuarter.Create(2026, 1), profit: 300_000_000_000m);
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2026, 11, 16));
+
+        Assert.Equal(FiscalQuarter.Create(2025, 4), ratios.BalanceSheet);
+        Assert.Equal(FiscalQuarter.Create(2026, 1), ratios.ProfitQuarters[^1]);
+        Assert.True(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_row_reached_by_a_vendor_only_through_the_year_earlier_equity_is_built_on_a_vendor_value()
+    {
+        // 2026Q2–2027Q1 filed, 2027Q1 the balance sheet; the only vendor value
+        // is 2026Q1's equity, the opening equity of the trailing year's ROE.
+        var issuer = new MixedIssuer();
+        foreach (var period in new[] { FiscalQuarter.Create(2026, 2), FiscalQuarter.Create(2026, 3), FiscalQuarter.Create(2026, 4) })
+        {
+            issuer.Filed(period, profit: 250_000_000_000m);
+        }
+
+        issuer.Filed(FiscalQuarter.Create(2027, 1), profit: 250_000_000_000m, capital: 1_000_000_000_000m, equity: 11_000_000_000_000m);
+        issuer.Vendor(FiscalQuarter.Create(2026, 1), equity: 9_000_000_000_000m);
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2027, 6, 1));
+
+        Assert.Equal(FiscalQuarter.Create(2027, 1), ratios.BalanceSheet);
+        Assert.Equal(0.1m, ratios.ReturnOnEquity.Value);
+        Assert.True(ratios.BuiltOnVendor);
+    }
+
+    [Fact]
+    public async Task A_share_count_read_from_capital_more_than_a_year_old_is_a_finding()
+    {
+        // Five vendor quarters after the last filed capital (2025Q4): the count
+        // still rests on it, and now that is said.
+        var issuer = new MixedIssuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [4]);
+
+        for (var quarter = 1; quarter <= 5; quarter++)
+        {
+            var period = FiscalQuarter.Create(2026 + ((quarter - 1) / 4), ((quarter - 1) % 4) + 1);
+            issuer.Vendor(period, profit: 250_000_000_000m, equity: 10_000_000_000_000m);
+        }
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2027, 6, 1));
+
+        Assert.Equal(FiscalQuarter.Create(2027, 1), ratios.BalanceSheet);
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.Contains(ratios.Findings, finding =>
+            finding.Contains("2025Q4", StringComparison.Ordinal) && finding.Contains("more than a year", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_share_count_read_from_capital_exactly_a_year_old_is_not_a_finding()
+    {
+        // Boundary of the one above (QA verify L1): 2026Q4's balance sheet on
+        // 2025Q4's capital is within the year, so nothing is said.
+        var issuer = new MixedIssuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [4]);
+
+        for (var quarter = 1; quarter <= 4; quarter++)
+        {
+            issuer.Vendor(FiscalQuarter.Create(2026, quarter), profit: 250_000_000_000m, equity: 10_000_000_000_000m);
+        }
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2027, 6, 1));
+
+        Assert.Equal(FiscalQuarter.Create(2026, 4), ratios.BalanceSheet);
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("charter capital", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_vendor_value_of_a_quarter_the_row_does_not_read_is_not_counted()
+    {
+        // Control for the two above: the same filed year, and a vendor value
+        // for a quarter outside the balance sheet, trailing year and opening equity.
+        var issuer = new MixedIssuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [1, 4]);
+        issuer.Vendor(FiscalQuarter.Create(2023, 4), equity: 7_000_000_000_000m);
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2026, 11, 16));
+
+        Assert.Equal(FiscalQuarter.Create(2025, 4), ratios.BalanceSheet);
+        Assert.False(ratios.BuiltOnVendor);
+    }
+
+    /// <summary>
+    /// One issuer's filed Circular 200 quarters and vendor-filled Circular 99
+    /// ones, recorded on 2 May 2026, vendor values fetched on 8 November 2026,
+    /// and a close of ₫60,000 on any session read. Every value invented.
+    /// </summary>
+    private sealed class MixedIssuer
+    {
+        private static readonly DateTimeOffset IssuerRecorded = new(2026, 5, 2, 0, 0, 0, TimeSpan.Zero);
+        private static readonly DateTimeOffset Fetched = new(2026, 11, 8, 3, 0, 0, TimeSpan.Zero);
+
+        private readonly InstrumentId _instrument = InstrumentId.New();
+        private readonly InMemoryFundamentals _fundamentals = new();
+        private readonly FakeBarRepository _bars = new();
+
+        public void FiledYear(int year, int capitalAt, int[] equityAt)
+        {
+            for (var quarter = 1; quarter <= 4; quarter++)
+            {
+                Filed(
+                    FiscalQuarter.Create(year, quarter),
+                    profit: 250_000_000_000m,
+                    capital: quarter == capitalAt ? 1_000_000_000_000m : null,
+                    equity: equityAt.Contains(quarter) ? 9_000_000_000_000m + (quarter * 250_000_000_000m) : null);
+            }
+        }
+
+        public void Filed(FiscalQuarter period, decimal? profit = null, decimal? capital = null, decimal? equity = null)
+        {
+            var report = Report(period, FinancialTemplate.NonFinancialCircular200, valuesFiled: true);
+
+            foreach (var (statement, code, span, value) in new (FinancialStatement, string, PeriodSpan, decimal?)[]
+            {
+                (FinancialStatement.IncomeStatement, "61", PeriodSpan.Quarter, profit),
+                (FinancialStatement.BalanceSheet, "411a", PeriodSpan.Instant, capital),
+                (FinancialStatement.BalanceSheet, "400", PeriodSpan.Instant, equity),
+            })
+            {
+                if (value is { } stated)
+                {
+                    _fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, stated, ValueBasis.AsFiled, Ids, report.RecordedAtUtc));
+                }
+            }
+        }
+
+        public void Vendor(FiscalQuarter period, decimal? profit = null, decimal? equity = null)
+        {
+            var report = Report(period, FinancialTemplate.NonFinancialCircular99, valuesFiled: false);
+
+            foreach (var (statement, code, span, value) in new (FinancialStatement, string, PeriodSpan, decimal?)[]
+            {
+                (FinancialStatement.IncomeStatement, "isa22", PeriodSpan.Quarter, profit),
+                (FinancialStatement.BalanceSheet, "bsa78", PeriodSpan.Instant, equity),
+            })
+            {
+                if (value is { } stated)
+                {
+                    _fundamentals.Add(StatementLine.Observe(
+                        report, statement, code, period, span, stated, ValueBasis.Vendor, SourceCode.Create("VCS"),
+                        report.RecordedAtUtc > Fetched ? report.RecordedAtUtc.AddDays(1) : Fetched));
+                }
+            }
+        }
+
+        public Task<FundamentalRatios> ReadAsync(DateOnly session)
+        {
+            var bar = OhlcvBar.Record(
+                _instrument, BarInterval.OneDay, new DateTimeOffset(session.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+                Price.Create(60_000m), Price.Create(60_000m), Price.Create(60_000m), Price.Create(60_000m), 1_000, null, Ids, IssuerRecorded);
+            _bars.AddRange([bar]);
+            _bars.Revisions.Add(BarRevision.Snapshot(bar, IssuerRecorded));
+
+            return new FundamentalRatioService(
+                    new FundamentalsReader(_fundamentals), _bars, new FakeCorporateActionRepository(), new FakeCorporateActionCoverageRepository())
+                .ReadAsync(_instrument, session, cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        private FinancialReport Report(FiscalQuarter period, FinancialTemplate template, bool valuesFiled)
+        {
+            // Disclosed 25 days after the quarter; recorded on 2 May 2026, or the
+            // day after disclosure for a later quarter.
+            var disclosed = StatementLines.QuarterEnd(period).AddDays(25);
+            var after = new DateTimeOffset(disclosed.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var report = FinancialReport.Record(
+                _instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+                template, period, "Báo cáo tài chính", disclosed, null,
+                FinancialReportTests.Vietnam, isCorrection: false, valuesFiled, after > IssuerRecorded ? after : IssuerRecorded);
+            _fundamentals.Add(report);
+            return report;
+        }
+    }
+
+    /// <summary>
+    /// Circular 200 2025Q1–Q4 as filed (₫250bn profit a quarter; 2025Q4
+    /// capital ₫1,000bn and equity ₫10,000bn; 2025Q1 equity ₫9,000bn), then a
+    /// blank 2026Q1 Circular 99 report a vendor filled on 8 November 2026
+    /// (₫300bn profit, ₫11,000bn equity), and a close of ₫60,000 on 16
+    /// November 2026. Every value invented.
+    /// </summary>
+    private static (FundamentalRatioService Service, InstrumentId Instrument) FiledYearThenVendorQuarter()
+    {
+        var instrument = InstrumentId.New();
+        var fundamentals = new InMemoryFundamentals();
+        var recorded = new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero);
+
+        for (var quarter = 1; quarter <= 4; quarter++)
+        {
+            var period = FiscalQuarter.Create(2025, quarter);
+            var report = FinancialReport.Record(
+                instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+                FinancialTemplate.NonFinancialCircular200, period, "Báo cáo tài chính", StatementLines.QuarterEnd(period).AddDays(25), null,
+                FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: true, recorded);
+            fundamentals.Add(report);
+            Filed(report, FinancialStatement.IncomeStatement, "61", period, PeriodSpan.Quarter, 250_000_000_000m);
+
+            if (quarter == 1)
+            {
+                Filed(report, FinancialStatement.BalanceSheet, "400", period, PeriodSpan.Instant, 9_000_000_000_000m);
+            }
+
+            if (quarter == 4)
+            {
+                Filed(report, FinancialStatement.BalanceSheet, "411a", period, PeriodSpan.Instant, 1_000_000_000_000m);
+                Filed(report, FinancialStatement.BalanceSheet, "400", period, PeriodSpan.Instant, 10_000_000_000_000m);
+            }
+        }
+
+        var first = FiscalQuarter.Create(2026, 1);
+        var blank = FinancialReport.Record(
+            instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+            FinancialTemplate.NonFinancialCircular99, first, "Báo cáo tài chính", new DateOnly(2026, 4, 28), null,
+            FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: false, recorded);
+        fundamentals.Add(blank);
+        var fetched = new DateTimeOffset(2026, 11, 8, 3, 0, 0, TimeSpan.Zero);
+        fundamentals.Add(StatementLine.Observe(
+            blank, FinancialStatement.IncomeStatement, "isa22", first, PeriodSpan.Quarter, 300_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+        fundamentals.Add(StatementLine.Observe(
+            blank, FinancialStatement.BalanceSheet, "bsa78", first, PeriodSpan.Instant, 11_000_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+
+        var bars = new FakeBarRepository();
+        var bar = OhlcvBar.Record(
+            instrument, BarInterval.OneDay, new DateTimeOffset(2026, 11, 16, 0, 0, 0, TimeSpan.Zero),
+            Price.Create(60_000m), Price.Create(60_000m), Price.Create(60_000m), Price.Create(60_000m), 1_000, null, Ids, recorded);
+        bars.AddRange([bar]);
+        bars.Revisions.Add(BarRevision.Snapshot(bar, recorded));
+
+        return (new FundamentalRatioService(
+            new FundamentalsReader(fundamentals), bars, new FakeCorporateActionRepository(), new FakeCorporateActionCoverageRepository()),
+            instrument);
+
+        void Filed(FinancialReport report, FinancialStatement statement, string code, FiscalQuarter period, PeriodSpan span, decimal value) =>
+            fundamentals.Add(StatementLine.Observe(report, statement, code, period, span, value, ValueBasis.AsFiled, Ids, report.RecordedAtUtc));
+    }
+
+    /// <summary>
+    /// A blank 2026Q3 report on the Circular 99 form, disclosed on 15 October
+    /// 2026 and filled from a vendor fetch: invented equity and profit.
+    /// </summary>
+    private static (FundamentalRatioService Service, InstrumentId Instrument) VendorFilled(DateTimeOffset fetched)
+    {
+        var instrument = InstrumentId.New();
+        var quarter = FiscalQuarter.Create(2026, 3);
+        var fundamentals = new InMemoryFundamentals();
+        var report = FinancialReport.Record(
+            instrument, Ids, $"ids-{Guid.NewGuid():N}", FinancialReportKind.Quarterly, FinancialStatementScope.Consolidated,
+            FinancialTemplate.NonFinancialCircular99, quarter, "Báo cáo tài chính", new DateOnly(2026, 10, 15), null,
+            FinancialReportTests.Vietnam, isCorrection: false, valuesFiled: false, new DateTimeOffset(2026, 10, 16, 0, 0, 0, TimeSpan.Zero));
+        fundamentals.Add(report);
+        fundamentals.Add(StatementLine.Observe(
+            report, FinancialStatement.BalanceSheet, "bsa78", quarter, PeriodSpan.Instant, 20_000_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+        fundamentals.Add(StatementLine.Observe(
+            report, FinancialStatement.IncomeStatement, "isa22", quarter, PeriodSpan.Quarter, 500_000_000_000m, ValueBasis.Vendor, SourceCode.Create("VCS"), fetched));
+
+        return (new FundamentalRatioService(
+            new FundamentalsReader(fundamentals), new FakeBarRepository(), new FakeCorporateActionRepository(), new FakeCorporateActionCoverageRepository()),
+            instrument);
+    }
+
+    [Fact]
     public async Task Before_the_bonus_issue_goes_ex_the_count_is_the_balance_sheets()
     {
         var harness = new Harness();

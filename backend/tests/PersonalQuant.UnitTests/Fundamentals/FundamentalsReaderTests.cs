@@ -129,6 +129,61 @@ public sealed class FundamentalsReaderTests
         Assert.Single(read.DisclosedWithoutValues);
     }
 
+    // --- Sprint 11.4 acceptance (ADR-038), QA + QC, before the code -------------
+
+    [Fact]
+    public async Task A_vendor_value_on_a_blank_report_is_known_only_from_its_fetch()
+    {
+        // A fiscal-2026 IDS form filed blank on 24 April; a vendor value for that
+        // quarter fetched on 8 November. A market read in June sees the report
+        // disclosed without values: the vendor figure did not exist then, and
+        // serving it would be look-ahead. A read from the fetch on serves it,
+        // labelled Vendor and still on the blank report (ADR-038: known from
+        // the later of the IDS date and the fetch).
+        var (store, blank, fetched) = BlankReportWithVendorValue();
+
+        var june = await Read(store, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+        var december = await Read(store, new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero));
+        var atFetch = await Read(store, fetched);
+
+        Assert.Empty(june.Values);
+        Assert.Single(june.DisclosedWithoutValues);
+        var value = Assert.Single(december.Values);
+        Assert.Equal((1_111_111_111_111m, ValueBasis.Vendor, blank.Id), (value.Value, value.Basis, value.ReportId));
+        Assert.Single(atFetch.Values);
+    }
+
+    [Fact]
+    public async Task A_vendor_value_is_not_served_before_its_ids_report_is_known()
+    {
+        // ADR-038 §1: the fact is dated by IDS, so it is known only from the
+        // later of the IDS date and the fetch. Here the vendor value is fetched
+        // on 10 April, BEFORE the 24 April filing: a read on 15 April is after
+        // the fetch, so only the IDS date can keep the value out.
+        var (store, _, _) = BlankReportWithVendorValue(fetched: new DateTimeOffset(2026, 4, 10, 3, 0, 0, TimeSpan.Zero));
+
+        var read = await Read(store, new DateTimeOffset(2026, 4, 15, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Empty(read.Values);
+    }
+
+    private static (InMemoryFundamentals Store, FinancialReport Blank, DateTimeOffset Fetched) BlankReportWithVendorValue(
+        DateTimeOffset? fetched = null)
+    {
+        var store = new InMemoryFundamentals();
+        var q1 = FiscalQuarter.Create(2026, 1);
+        var blank = Record(FinancialReportKind.Quarterly, new DateOnly(2026, 4, 24), isCorrection: false, valuesFiled: false, period: q1);
+        store.Add(blank);
+        var fetch = fetched ?? new DateTimeOffset(2026, 11, 8, 3, 0, 0, TimeSpan.Zero);
+
+        // A blank form states nothing itself; only a vendor line may sit on it.
+        store.Add(StatementLine.Observe(
+            blank, FinancialStatement.IncomeStatement, "isa22", q1, PeriodSpan.Quarter, 1_111_111_111_111m,
+            ValueBasis.Vendor, SourceCode.Create("VCS"), fetch));
+
+        return (store, blank, fetch);
+    }
+
     private static Task<FundamentalsAsOf> Read(InMemoryFundamentals store, DateTimeOffset knownAsOf, DateTimeOffset? observedAsOf = null) =>
         new FundamentalsReader(store).ReadAsync(
             Issuer, FinancialStatementScope.Consolidated, knownAsOf, observedAsOf, TestContext.Current.CancellationToken);
