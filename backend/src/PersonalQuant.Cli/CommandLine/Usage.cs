@@ -50,6 +50,9 @@ internal static class Usage
         output.WriteLine("  pqt research submit factor-evaluation --dataset <ID> --feature <NAME> --transform raw|wz-1");
         output.WriteLine("                      --decay-horizons 5,10,21 [--version N] [--quantiles 5]  (ADR-036)");
         output.WriteLine("  pqt research submit factor-correlation --dataset <ID> --transform raw|wz-1 [--version N]");
+        output.WriteLine("  pqt research submit calibration --dataset <ID> --feature <NAME> --transform raw|wz-1");
+        output.WriteLine("                      --cost-model <NAME> --buy-fee F --sell-fee F --sell-tax F --spread F --slippage F");
+        output.WriteLine("                      [--version N] [--quantiles 5]  (ADR-037)");
         output.WriteLine("  pqt research list [--limit 20]");
         output.WriteLine("  pqt research show <JOB-ID>");
         output.WriteLine("  pqt research runs [--experiment NAME] [--limit 20]");

@@ -333,6 +333,16 @@ jobs:
             exit 1
           fi
 
+      # ADR-041: no real vendor figure in a test file or fixture. The scanner
+      # compares against digests of known real figures, so CI needs no real
+      # data and the log never prints a figure. Docs are not scanned here yet
+      # (--scope docs is the Moderator's call, PR #22 H4).
+      - name: Test the real-figure scanner
+        run: python3 -m unittest discover -s tools/real-figure-scan -p 'test_*.py'
+
+      - name: Fail on a real vendor figure in tests or fixtures (ADR-041)
+        run: python3 tools/real-figure-scan/scan.py --denylist tools/real-figure-scan/denylist.txt
+
       # Compose interpolates variables while validating, so the example file
       # stands in for a real .env. It is committed and contains no secret.
       - name: Validate Docker Compose configuration
