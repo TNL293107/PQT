@@ -52,6 +52,9 @@ public sealed class DatasetManifestGoldenTests
     // Written by this build (schema 6, ADR-038), unlike v6-vendor.json, which is hand-built.
     private const string GoldenV6 = "v6-export.json";
 
+    // QA + QC, 11.6 option A: the schema 7 fixture the two languages share.
+    private const string GoldenV7 = "v7-export.json";
+
     [Theory]
     [InlineData("v1-as-of.json")]
     [InlineData("v2-point-in-time.json")]
@@ -66,11 +69,44 @@ public sealed class DatasetManifestGoldenTests
     // canonical string beside it pins the rendering in both languages.
     [InlineData("v6-vendor.json")]
     [InlineData(GoldenV6)]
+    // Schema 7 (11.6 option A): written by the build that adds a vendor flag
+    // per value, and read by the Python parity case of the same name.
+    [InlineData(GoldenV7)]
     public void A_committed_manifest_hashes_to_the_content_hash_it_records(string name)
     {
         var manifest = Read(name);
 
         Assert.Equal(manifest.ContentHash, DatasetIdentity.ContentHashOf(manifest));
+    }
+
+    [Fact]
+    public void The_schema_7_fixture_is_a_schema_7_manifest_with_fundamentals()
+    {
+        // 11.6 option A: the shared file must exercise the schema it pins.
+        var manifest = Read(GoldenV7);
+
+        Assert.Equal(7, manifest.SchemaVersion);
+        Assert.NotNull(manifest.Fundamentals);
+        Assert.NotNull(manifest.Fundamentals!.VendorRows);
+        Assert.Contains(manifest.Files, file => file.Name == IDatasetStore.FundamentalsFileName);
+    }
+
+    [Fact]
+    public void The_schema_7_json_schema_is_committed_and_pins_version_7()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "docs", "schemas", "dataset-manifest-v6.schema.json")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        var path = Path.Combine(directory!.FullName, "docs", "schemas", "dataset-manifest-v7.schema.json");
+        Assert.True(File.Exists(path), "docs/schemas/dataset-manifest-v7.schema.json is not committed.");
+
+        using var schema = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(7, schema.RootElement.GetProperty("properties").GetProperty("schema_version").GetProperty("const").GetInt32());
     }
 
     [Fact]
