@@ -418,6 +418,57 @@ public sealed class ResearchJobServiceTests
         Assert.All(harness.Experiments.Added, experiment => Assert.Equal(recordedUnder, experiment.Name));
     }
 
+    // Dev's re-review of 318afaa (L2-L4): names pinned literally, not through the
+    // worker's rule, so a mutant of that rule cannot pass.
+
+    [Fact]
+    public async Task A_calibration_experiment_already_ending_in_the_suffix_is_staged_as_typed()
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: "x-calibration", hypothesis: "Quantiles carry a positive expected value."),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(submission.Queued, submission.Refusal);
+        Assert.Equal("x-calibration", Assert.Single(harness.Experiments.Added).Name);
+    }
+
+    [Fact]
+    public async Task A_factor_evaluation_experiment_is_staged_as_typed_with_no_suffix()
+    {
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitFactorEvaluationAsync(
+            new FactorEvaluationRequest(
+                "fedcba9876543210", Feature: "momentum_3_0", TransformVersion: "raw", Quantiles: 5,
+                DecayHorizons: [3], Experiment: "acceptance"),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(submission.Queued, submission.Refusal);
+        Assert.Equal("acceptance", Assert.Single(harness.Experiments.Added).Name);
+    }
+
+    [Fact]
+    public async Task A_calibration_name_too_long_once_suffixed_is_refused_naming_what_was_typed()
+    {
+        // 120 characters is a valid experiment name; with "-calibration" it is 132.
+        var typed = new string('a', 120);
+        var harness = new Harness(versions: [1]);
+
+        var submission = await harness.Service.SubmitCalibrationAsync(
+            Calibration(experiment: typed, hypothesis: null),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(submission.Queued);
+        Assert.Contains($"'{typed}'", submission.Refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain(typed + CalibrationSuffix, submission.Refusal, StringComparison.Ordinal);
+        Assert.Contains(CalibrationSuffix, submission.Refusal, StringComparison.Ordinal);
+        Assert.Contains("128", submission.Refusal, StringComparison.Ordinal);
+        Assert.Empty(harness.Jobs.Added);
+        Assert.Equal(0, harness.UnitOfWork.SaveCount);
+    }
+
     // LOW-1: a fee left out must not silently be zero; a contract on the request type.
 
     [Theory]

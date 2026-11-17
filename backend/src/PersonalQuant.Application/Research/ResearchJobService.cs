@@ -630,6 +630,14 @@ internal sealed partial class ResearchJobService(
 
         if (experiment is null)
         {
+            if (recordedUnder.Length > Experiment.MaxNameLength && name.Length <= Experiment.MaxNameLength)
+            {
+                return (0, string.Empty,
+                    $"Experiment '{name}' is too long for a {kind} run: the run is recorded under the name "
+                        + $"with '{recordedSuffix}' added, which must be at most "
+                        + $"{Experiment.MaxNameLength.ToString(CultureInfo.InvariantCulture)} characters.");
+            }
+
             try
             {
                 experiment = Experiment.Define(recordedUnder, hypothesis, clock.UtcNow);
