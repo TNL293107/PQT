@@ -7,8 +7,9 @@ response (`docs/data-policy.md`, rules 1 and 3).
 It reads every number of at least 10^9 in the files in scope, **comments
 included**, in **every form** (plain, `.0`, exponent such as `1.234E13`,
 `_` / `,` / `.` / space / no-break space / apostrophe thousands separators,
-C# suffixes such as `m`, the JS BigInt `n`, a glued `VND`, `đ` or `₫`, and any
-run of ten or more digits inside an identifier or after a dot), and compares it
+a fraction after any of them, C# suffixes such as `m`, the JS BigInt `n`, a
+glued `VND`, `đ` or `₫`, and a number glued inside an identifier or after a dot,
+fraction and exponent included, such as `value1.2345E13`), and compares it
 with a set of real figures. One match fails. A round number (one significant
 digit, such as `1.0E11`) is exempt, because it collides by chance.
 
@@ -91,8 +92,9 @@ python tools/real-figure-scan/scan.py --candidates --scope docs
 Exit status: `0` PASS, `1` a real figure was found, `2` a usage or git error.
 No `--reference` and no `--denylist` is an error, not a pass.
 
-The default scope (`tests`) is `backend/tests/`, `quant/tests/`, frontend
-`*.test.*` and `src/test/`, any `fixtures/` directory, and `tools/*/test_*`.
+The default scope (`tests`) is `backend/tests/`, `quant/tests/`, all of
+`frontend/src/` (its tests and the mock data beside them), any `fixtures/`
+directory, and `tools/*/test_*`.
 
 ## Test
 

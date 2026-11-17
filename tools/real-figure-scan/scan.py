@@ -60,8 +60,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
     "tests": (
         "backend/tests/*",
         "quant/tests/*",
-        "frontend/src/*.test.*",
-        "frontend/src/test/*",
+        "frontend/src/*",  # tests, and the mock data beside them
         "*fixtures/*",
         "tools/*/test_*",
     ),
@@ -85,10 +84,10 @@ _NUMBER = re.compile(
     r"""
     (?<![\w.])                       # starts a token; embedded runs are read separately
     (?P<mantissa>
-        \d{1,3}(?:_\d{3})+           # 1_234_567
-      | \d{1,3}(?:,\d{3})+(?!\d)     # 1,234,567
+        \d{1,3}(?:_\d{3})+(?:\.\d+)? # 1_234_567, 1_234_567.5
+      | \d{1,3}(?:,\d{3})+(?!\d)(?:\.\d+)? # 1,234,567, 1,234,567.5
       | \d{1,3}(?:\.\d{3}){2,}(?![\d.]) # 1.234.567 (Vietnamese style)
-      | \d{1,3}(?:[ \u00a0\u202f'\u2019]\d{3}){2,}(?!\d) # 1 234 567, 1'234'567
+      | \d{1,3}(?:[ \u00a0\u202f'\u2019]\d{3}){2,}(?!\d)(?:\.\d+)? # 1 234 567, 1'234'567.5
       | \d+(?:_\d+)*(?:\.\d+)?       # 1234567, 1234.5, 1_2345
       | \.\d+
     )
@@ -105,9 +104,11 @@ _NUMBER = re.compile(
 # A hyphen is otherwise ordinary: VCB-12,345,678,901,234 is read whole.
 _UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 
-# A run of ten or more digits anywhere, e.g. inside an identifier such as
-# Revenue_12345678901234_test or after a dot. Read only where no token covers it.
-_EMBEDDED = re.compile(r"\d{10,}")
+# A number anywhere, e.g. inside an identifier such as
+# Revenue_12345678901234_test, after a dot, or glued on as value1.2345E13.
+# Read only where no token covers it. An exponent counts only after a
+# fraction, so a hex run such as ab4729e12cd is not read as 4.729E15.
+_EMBEDDED = re.compile(r"\d+(?:\.\d+(?:[eE][+-]?\d+)?)?")
 
 _DIGEST_SALT = b"pqt-real-figure-scan/1"
 _DIGEST_HEADER = "# pqt real-figure-scan denylist v1: scrypt(n=4096,r=8,p=1,dklen=16), one hex digest per line"
@@ -160,6 +161,10 @@ def _value_from(match: re.Match[str]) -> str | None:
         # Checked before any int() so 1e100000000 never builds a 10^8-digit int.
         # A long digit string with no exponent is a hash or an id: skipped quietly.
         return _Oversized(match.group()) if match.group("exponent") else None
+    return _canonical_value(value)
+
+
+def _canonical_value(value: Decimal) -> str | None:
     if value < THRESHOLD:
         return None
     if value == value.to_integral_value():
@@ -192,11 +197,22 @@ def numbers(text: str, on_skip: Callable[[str], None] | None = None) -> Iterator
             yield value
     for run in _EMBEDDED.finditer(text):
         start, end = run.span()
-        digits = run.group().lstrip("0")
-        if 10 <= len(digits) <= MAX_EXPONENT + 1 and not any(
-            left <= start and end <= right for left, right in covered
-        ):
-            yield digits
+        if any(left <= start and end <= right for left, right in covered):
+            continue
+        value = _embedded_value(run.group())
+        if value is not None:
+            yield value
+
+
+def _embedded_value(text: str) -> str | None:
+    """A glued number's canonical value; one above 10^MAX_EXPONENT is skipped quietly."""
+    try:
+        value = Decimal(text).copy_abs()
+    except InvalidOperation:
+        return None
+    if value.adjusted() > MAX_EXPONENT:
+        return None
+    return _canonical_value(value)
 
 
 def digest(value: str) -> str:

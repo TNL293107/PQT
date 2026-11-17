@@ -83,6 +83,21 @@ class CanonicalTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIn(FIGURE, list(scan.numbers(text)))
 
+    def test_a_grouped_figure_keeps_its_fraction(self) -> None:
+        # The original gate read "1,234,567,890.5" whole; this one must too.
+        for text in ("1,234,567,890.5", "1_234_567_890.5", "1 234 567 890.5"):
+            with self.subTest(text=text):
+                self.assertEqual(["1234567890.5"], list(scan.numbers(f"x = {text};")))
+
+    def test_a_glued_figure_keeps_its_fraction_and_exponent(self) -> None:
+        # The original gate had no token boundary, so it read these whole.
+        self.assertEqual(["1234567890.5"], list(scan.numbers("Revenue_1234567890.5_test")))
+        self.assertEqual([FIGURE], list(scan.numbers("value1.2345678901234E13")))
+
+    def test_a_glued_exponent_without_a_dot_is_a_hex_run_not_a_figure(self) -> None:
+        # A commit hash such as ...4729e12... is not read as 4.729E15.
+        self.assertEqual([], list(scan.numbers("commit ab4729e12cd")))
+
     def test_a_short_digit_run_inside_an_identifier_is_not_a_number(self) -> None:
         self.assertEqual([], list(scan.numbers("Test_123456789_case v1.2.3 bsa53 0x1F")))
 
@@ -220,6 +235,10 @@ class ScopeTests(unittest.TestCase):
         self.assertFalse(scan.in_scope("docs/architecture/decisions/ADR-1.md", tests))
         self.assertTrue(scan.in_scope("docs/architecture/decisions/ADR-1.md", scan.SCOPES["docs"]))
         self.assertFalse(scan.in_scope("quant/tests/fixtures/a.parquet", tests))
+
+    def test_frontend_source_is_in_the_default_scope(self) -> None:
+        # The original gate read all of frontend/src: mock data lives there too.
+        self.assertTrue(scan.in_scope("frontend/src/features/x/mockData.ts", scan.SCOPES["tests"]))
 
 
 class EndToEndTests(unittest.TestCase):
