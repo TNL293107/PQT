@@ -135,7 +135,8 @@ would carry it, and with it all four figures, into their history. So:
 - **The full scan's first run found 13 hits, none from a vendor.** All were
   committed in sprints 6.2, 6.3 and 8.1 (2026-10-13 to 10-22), before the first
   Vietcap statement was read on 10-30. QA + QC classified them on 2026-11-17,
-  P = 10, V = 0, I = 3, and they stay; CI does not flag them.
+  P = 10, V = 0, I = 3, and they stay; CI does not flag them. Lines as of
+  `develop` at `3801a6b`:
   - **P, an as-filed IDS figure (10):**
     `backend/tests/PersonalQuant.IntegrationTests/FundamentalsPersistenceTests.cs:43`
     and `:45`; `backend/tests/PersonalQuant.UnitTests/Fundamentals/StatementLineTests.cs:68`;
@@ -145,8 +146,8 @@ would carry it, and with it all four figures, into their history. So:
     and `:180` (two figures); `docs/roadmap/evidence/sprint-8-1-steps.md:10`.
   - **V, a figure only a vendor supplies (0).**
   - **I, an invented placeholder that matches a vendor value by chance (3):**
-    `backend/tests/PersonalQuant.UnitTests/Fundamentals/FundamentalRatioServiceTests.cs:121`,
-    `:564` and `:581`.
+    `backend/tests/PersonalQuant.UnitTests/Fundamentals/FundamentalRatioServiceTests.cs:469`,
+    `:912` and `:929` (`:121`, `:564` and `:581` at `9b9d688`, where QA + QC classified them).
 
   A full local scan therefore reports these 13. Any other hit is new and must
   be looked at.
