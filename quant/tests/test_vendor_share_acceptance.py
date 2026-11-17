@@ -14,6 +14,12 @@ What these tests pin, and what they leave to Dev:
   Each is named once, in ``VENDOR_FLAG`` and ``_vendor_shares``; change those,
   not the asserts.
 
+A flag says a vendor input was read for the value, so an absent value may
+carry one (an ROE whose closing equity is missing still read a vendor
+quarter). QA + QC confirmed this on 2026-11-17: the flag records what a value
+rests on, not whether it came out, and the share below counts present values
+only, so a flag on an absent value never moves it.
+
 Share of a feature: among the rows where every fundamentals input of its
 catalogue entry is present, the fraction with any of those inputs flagged
 vendor. Features with no fundamentals input (momentum, volatility, liquidity)
@@ -29,7 +35,7 @@ from collections.abc import Callable, Mapping
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -88,7 +94,7 @@ def _vendor_shares() -> Callable[..., Mapping[str, float]]:
         "per feature from a dataset (11.6 option A)."
     )
 
-    return function
+    return cast("Callable[..., Mapping[str, float]]", function)
 
 
 Row = tuple[str, date, frozenset[str], Mapping[str, str | None]]
@@ -111,7 +117,7 @@ def _write_schema_7(root: Path, rows: list[Row]) -> None:
                     name,
                     session,
                     values=dict(values),
-                    absent={column: "no_balance_sheet" for column in values},
+                    absent=dict.fromkeys(values, "no_balance_sheet"),
                 )
                 for name, session, _, values in rows
             ],
@@ -125,7 +131,9 @@ def _write_schema_7(root: Path, rows: list[Row]) -> None:
     keys = [
         (name, session.date() if hasattr(session, "date") else session)
         for name, session in zip(
-            table.column("instrument_id").to_pylist(), table.column("session").to_pylist()
+            table.column("instrument_id").to_pylist(),
+            table.column("session").to_pylist(),
+            strict=True,
         )
     ]
 
@@ -200,4 +208,4 @@ def test_a_build_with_no_vendor_value_has_a_share_of_zero_for_every_value_featur
 
     shares = _vendor_shares()(LocalDatasetProvider(tmp_path).open("0123456789abcdef"))
 
-    assert shares == {feature: 0.0 for feature in EXPECTED_SHARES}
+    assert shares == dict.fromkeys(EXPECTED_SHARES, 0.0)
