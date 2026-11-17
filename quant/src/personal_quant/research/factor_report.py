@@ -38,6 +38,8 @@ __all__ = [
 ]
 
 _TRANSFORMS = ("raw", "wz-1")
+# The payload keys the worker records as a run's params (handlers.py).
+_TRANSFORM = "transform_version"
 _EVALUATION = "factor_evaluation"
 _CORRELATION = "factor_correlation"
 
@@ -345,7 +347,7 @@ def _correlation_section(correlations: Sequence[ReportRun]) -> str:
         ]
         parts.append(
             "The mean of the per-rebalance Spearman correlations under "
-            f"`{run.params.get('transform')}` (not pooled), with its period count, "
+            f"`{run.params.get(_TRANSFORM)}` (not pooled), with its period count, "
             "in name order.\n\n| pair | mean | periods |\n| --- | --- | --- |\n" + "\n".join(rows)
         )
 
@@ -354,13 +356,13 @@ def _correlation_section(correlations: Sequence[ReportRun]) -> str:
 
 def _run_id_section(trials: Sequence[ReportRun], reproductions: Sequence[ReportRun]) -> str:
     rows = [
-        f"| {run.trial_index} | {run.params.get('feature')} | {run.params.get('transform')} "
+        f"| {run.trial_index} | {run.params.get('feature')} | {run.params.get(_TRANSFORM)} "
         f"| `{run.run_id}` | {run.status} | `{run.code_commit}` |"
         for run in trials
     ]
     by_id = {run.run_id: run.trial_index for run in trials}
     rows += [
-        f"| — | {run.params.get('feature')} | {run.params.get('transform')} | `{run.run_id}` "
+        f"| — | {run.params.get('feature')} | {run.params.get(_TRANSFORM)} | `{run.run_id}` "
         f"| {run.status}, reproduces trial {by_id.get(run.reproduces_run_id or '', '?')} "
         f"| `{run.code_commit}` |"
         for run in reproductions
@@ -376,7 +378,7 @@ def _in_catalogue_order(trials: Sequence[ReportRun], transform: str) -> list[Rep
     chosen = [
         run
         for run in trials
-        if run.strategy == _EVALUATION and run.params.get("transform") == transform
+        if run.strategy == _EVALUATION and run.params.get(_TRANSFORM) == transform
     ]
     return sorted(
         chosen, key=lambda run: (order.get(str(run.params["feature"]), len(order)), _trial(run))

@@ -80,7 +80,7 @@ def _run(
             run,
             experiment,
             "a" * 64,
-            Jsonb({"feature": "size", "transform": "raw"}),
+            Jsonb({"feature": "size", "transform_version": "raw"}),
             "h" * 64,
             trial,
             trial,

@@ -24,6 +24,7 @@ from personal_quant.research.factor_report import (
     runs_from_jsonl,
     runs_to_jsonl,
 )
+from personal_quant.worker.handlers import _CORRELATION_FIELDS, _EVALUATION_FIELDS
 
 EXPERIMENT = "phase-7-test"
 DATASET_ID = "d0d0d0d0d0d0d0d0"
@@ -119,7 +120,14 @@ def _evaluation(
         status=status,
         content_hash="a" * 64,
         factor_version=f"{feature}@1",
-        params={"feature": feature, "transform": transform, "decay_horizons": [5, 21, 63]},
+        params={
+            "dataset_id": DATASET_ID,
+            "dataset_version": 1,
+            "feature": feature,
+            "transform_version": transform,
+            "quantiles": 5,
+            "decay_horizons": [5, 21, 63],
+        },
         code_commit="c0ffee1",
         trial_index=None if reproduces else trial,
         trial_count=None if reproduces else trial,
@@ -140,7 +148,7 @@ def _correlation(transform: str = "wz-1") -> ReportRun:
         status="succeeded",
         content_hash="a" * 64,
         factor_version="catalogue@1",
-        params={"transform": transform},
+        params={"dataset_id": DATASET_ID, "dataset_version": 1, "transform_version": transform},
         code_commit="c0ffee1",
         trial_index=1,
         trial_count=1,
@@ -167,6 +175,13 @@ def _runs() -> list[ReportRun]:
         _evaluation(1, "momentum_12_1", "raw", reproduces="00000000-0000-0000-0000-000000000001"),
         _correlation(),
     ]
+
+
+def test_the_runs_carry_the_parameters_the_worker_records() -> None:
+    # A run's params are its payload less the experiment (handlers.py): the
+    # report must read the worker's own keys, not names of its own.
+    assert set(_evaluation(1, "size", "raw").params) == set(_EVALUATION_FIELDS) - {"experiment"}
+    assert set(_correlation().params) == set(_CORRELATION_FIELDS) - {"experiment"}
 
 
 def test_runs_survive_the_jsonl_round_trip() -> None:
