@@ -109,12 +109,16 @@ public sealed class DatasetManifestGoldenTests
         Assert.Equal(7, schema.RootElement.GetProperty("properties").GetProperty("schema_version").GetProperty("const").GetInt32());
     }
 
-    [Fact]
-    public void The_version_six_fixture_is_exactly_what_this_build_writes()
+    [Theory]
+    // Schema 7 adds no manifest field, so this build writes both shapes: the v6
+    // fixture stays the schema 6 rendering, the v7 one is the current.
+    [InlineData(DatasetManifest.VendorSchemaVersion, GoldenV6)]
+    [InlineData(DatasetManifest.VendorFlagsSchemaVersion, GoldenV7)]
+    public void The_vendor_era_fixtures_are_exactly_what_this_build_writes(int schemaVersion, string name)
     {
-        var written = JsonSerializer.Serialize(GoldenManifest(), ParquetDatasetStore.ManifestJson)
+        var written = JsonSerializer.Serialize(GoldenManifest(schemaVersion), ParquetDatasetStore.ManifestJson)
             .ReplaceLineEndings("\n") + "\n";
-        var path = Path.Combine(FixtureDirectory(), GoldenV6);
+        var path = Path.Combine(FixtureDirectory(), name);
 
         if (string.Equals(Environment.GetEnvironmentVariable("PQT_WRITE_GOLDEN"), "1", StringComparison.Ordinal))
         {
@@ -232,7 +236,7 @@ public sealed class DatasetManifestGoldenTests
     /// fixture; two of them are not collected, for two different reasons, and
     /// a third has no rows because it has no bars and no report.
     /// </summary>
-    private static DatasetManifest GoldenManifest()
+    private static DatasetManifest GoldenManifest(int schemaVersion = DatasetManifest.CurrentSchemaVersion)
     {
         var from = new DateOnly(2026, 7, 1);
         var to = new DateOnly(2026, 9, 17);
@@ -265,7 +269,7 @@ public sealed class DatasetManifestGoldenTests
         var manifest = new DatasetManifest(
             request.DatasetId,
             2,
-            DatasetManifest.CurrentSchemaVersion,
+            schemaVersion,
             string.Empty,
             request.KnownAsOfUtc,
             request.Adjusted,
@@ -351,14 +355,14 @@ public sealed class DatasetManifestGoldenTests
     }
 
     [Fact]
-    public void This_build_writes_schema_6_with_vendor_rows()
+    public void This_build_writes_schema_7_with_vendor_rows()
     {
-        Assert.Equal(DatasetManifest.VendorSchemaVersion, DatasetManifest.CurrentSchemaVersion);
+        Assert.Equal(DatasetManifest.VendorFlagsSchemaVersion, DatasetManifest.CurrentSchemaVersion);
 
         var written = JsonSerializer.Serialize(GoldenManifest(), ParquetDatasetStore.ManifestJson);
         using var document = JsonDocument.Parse(written);
 
-        Assert.Equal(6, document.RootElement.GetProperty("schema_version").GetInt32());
+        Assert.Equal(7, document.RootElement.GetProperty("schema_version").GetInt32());
         Assert.Equal(37, document.RootElement.GetProperty("fundamentals").GetProperty("vendor_rows").GetInt64());
     }
 
@@ -367,7 +371,7 @@ public sealed class DatasetManifestGoldenTests
     {
         // From schema 6 the count is a fact the hash covers: an export that read
         // no vendor value states 0, so a missing key never stands for "unknown".
-        var manifest = GoldenManifest();
+        var manifest = GoldenManifest(DatasetManifest.VendorSchemaVersion);
         var none = manifest with { Fundamentals = manifest.Fundamentals! with { VendorRows = 0 } };
 
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(none, ParquetDatasetStore.ManifestJson));

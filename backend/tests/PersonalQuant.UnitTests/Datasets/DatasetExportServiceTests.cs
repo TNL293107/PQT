@@ -640,7 +640,8 @@ public sealed class DatasetExportServiceTests : IDisposable
 
         var columns = await harness.ColumnsAsync(manifest, IDatasetStore.FundamentalsFileName);
 
-        Assert.Equal(10 + (2 * DatasetFundamentalsRow.ValueNames.Count) + 1, columns.Count);
+        // From schema 7 each value also has its vendor flag, after findings.
+        Assert.Equal(10 + (3 * DatasetFundamentalsRow.ValueNames.Count) + 1, columns.Count);
         Assert.All(columns["scope"], scope => Assert.Equal("consolidated", scope));
         Assert.All(columns["balance_sheet_quarter"], quarter => Assert.Equal("2026Q2", quarter));
         Assert.All(columns["report_ids"], ids => Assert.Equal($"[\"{report.Id.Value}\"]", ids));
@@ -684,14 +685,14 @@ public sealed class DatasetExportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task An_export_whose_values_were_all_filed_states_vendor_rows_0_on_schema_6()
+    public async Task An_export_whose_values_were_all_filed_states_vendor_rows_0_from_schema_6()
     {
         var harness = new Harness(root);
         harness.FileReport(harness.InstrumentId);
 
         var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
 
-        Assert.Equal(DatasetManifest.VendorSchemaVersion, manifest.SchemaVersion);
+        Assert.Equal(DatasetManifest.CurrentSchemaVersion, manifest.SchemaVersion);
         Assert.Equal(0L, manifest.Fundamentals!.VendorRows);
         Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
     }

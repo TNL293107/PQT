@@ -285,7 +285,7 @@ public sealed class DatasetManifestSchemaTests
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "docs", "schemas", "dataset-manifest-v6.schema.json");
+                directory.FullName, "docs", "schemas", "dataset-manifest-v7.schema.json");
 
             if (File.Exists(candidate))
             {
@@ -296,6 +296,6 @@ public sealed class DatasetManifestSchemaTests
         }
 
         throw new FileNotFoundException(
-            "dataset-manifest-v6.schema.json was not found above the test binary.");
+            "dataset-manifest-v7.schema.json was not found above the test binary.");
     }
 }

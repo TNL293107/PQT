@@ -36,6 +36,9 @@ internal sealed class StatementLines
     /// <summary>Quarters with a balance sheet on a vendor's Circular 99 codes.</summary>
     private readonly HashSet<FiscalQuarter> _vendorBalanceSheets = [];
 
+    /// <summary>The lines a vendor stated (ADR-038), so a value read from one can say so.</summary>
+    private readonly HashSet<(FinancialStatement, string, FiscalQuarter, PeriodSpan)> _vendorLines = [];
+
     private StatementLines(
         FinancialTemplate? template,
         FinancialStatementScope scope,
@@ -78,7 +81,17 @@ internal sealed class StatementLines
 
         foreach (var value in readable.Where(value => lines.Reads(value.Template)))
         {
-            lines._values[(value.Statement, value.LineCode, value.Period, value.Span)] = value.Value;
+            var key = (value.Statement, value.LineCode, value.Period, value.Span);
+            lines._values[key] = value.Value;
+
+            if (value.Basis == ValueBasis.Vendor)
+            {
+                lines._vendorLines.Add(key);
+            }
+            else
+            {
+                lines._vendorLines.Remove(key);
+            }
 
             if (value.Template == FinancialTemplate.NonFinancialCircular99 && value.Statement == FinancialStatement.BalanceSheet)
             {
@@ -186,27 +199,35 @@ internal sealed class StatementLines
     /// <summary>Gets equity attributable to the parent at a quarter end.</summary>
     /// <param name="quarter">The quarter.</param>
     /// <returns>The equity in đồng, or null.</returns>
-    public decimal? EquityToParent(FiscalQuarter quarter)
+    public decimal? EquityToParent(FiscalQuarter quarter) => EquityRead(quarter).Value;
+
+    /// <summary>Gets whether a vendor stated a line the parent's equity at a quarter end is read from.</summary>
+    /// <param name="quarter">The quarter.</param>
+    /// <returns>True when the equity is known and rests on a vendor line.</returns>
+    public bool EquityIsVendor(FiscalQuarter quarter) => EquityRead(quarter).Vendor;
+
+    private Read EquityRead(FiscalQuarter quarter)
     {
         if (Template is null)
         {
-            return null;
+            return Read.None;
         }
 
         if (Bank)
         {
-            return Balance("500", quarter);
+            return BalanceRead("500", quarter);
         }
 
-        return Balance("400", quarter) is { } equity
-            ? equity - (Balance("429", quarter) ?? 0m)
-            : VendorEquity(quarter);
-    }
+        // A vendor's bsa78 is read only where no Circular 200 equity is held.
+        var filed = BalanceRead("400", quarter);
+        var (whole, minority) = filed.Value is not null
+            ? (filed, BalanceRead("429", quarter))
+            : (BalanceRead("bsa78", quarter), BalanceRead("bsa210", quarter));
 
-    private decimal? VendorEquity(FiscalQuarter quarter) =>
-        Template is null || Bank || Balance("bsa78", quarter) is not { } equity
-            ? null
-            : equity - (Balance("bsa210", quarter) ?? 0m);
+        return whole.Value is { } equity
+            ? new Read(equity - (minority.Value ?? 0m), whole.Vendor || minority.Vendor)
+            : Read.None;
+    }
 
     /// <summary>Gets net profit to the parent for one quarter alone.</summary>
     /// <remarks>
@@ -216,29 +237,34 @@ internal sealed class StatementLines
     /// </remarks>
     /// <param name="quarter">The quarter.</param>
     /// <returns>The profit in đồng, or null.</returns>
-    public decimal? QuarterProfit(FiscalQuarter quarter)
+    public decimal? QuarterProfit(FiscalQuarter quarter) => QuarterProfitRead(quarter).Value;
+
+    private Read QuarterProfitRead(FiscalQuarter quarter)
     {
-        if (Profit(quarter, PeriodSpan.Quarter) is { } alone)
+        if (Profit(quarter, PeriodSpan.Quarter) is { Value: not null } alone)
         {
             return alone;
         }
 
-        if (Profit(quarter, PeriodSpan.YearToDate) is not { } toDate)
+        if (Profit(quarter, PeriodSpan.YearToDate) is not { Value: { } toDate } yearToDate)
         {
-            return null;
+            return Read.None;
         }
 
         if (quarter.Quarter == 1)
         {
-            return toDate;
+            return yearToDate;
         }
 
         // The first quarter alone is the first quarter's year to date.
         var previous = FiscalQuarter.Create(quarter.Year, quarter.Quarter - 1);
-        var beforeToDate = Profit(previous, PeriodSpan.YearToDate)
-            ?? (previous.Quarter == 1 ? Profit(previous, PeriodSpan.Quarter) : null);
+        var beforeToDate = Profit(previous, PeriodSpan.YearToDate) is { Value: not null } ytd
+            ? ytd
+            : previous.Quarter == 1 ? Profit(previous, PeriodSpan.Quarter) : Read.None;
 
-        return beforeToDate is { } before ? toDate - before : null;
+        return beforeToDate.Value is { } before
+            ? new Read(toDate - before, yearToDate.Vendor || beforeToDate.Vendor)
+            : Read.None;
     }
 
     /// <summary>Sums the four latest consecutive quarters of profit to the parent.</summary>
@@ -260,45 +286,61 @@ internal sealed class StatementLines
 
         var quarters = new List<FiscalQuarter>();
         var sum = 0m;
+        var vendor = false;
 
         for (var back = 3; back >= 0; back--)
         {
             var quarter = Back(end, back);
 
-            if (QuarterProfit(quarter) is not { } profit)
+            if (QuarterProfitRead(quarter) is not { Value: { } profit } read)
             {
                 return (RatioValue.Missing(RatioAbsence.MissingQuarter, $"profit for {quarter} is not known; four consecutive quarters are needed"), []);
             }
 
             quarters.Add(quarter);
             sum += profit;
+            vendor |= read.Vendor;
         }
 
-        return (RatioValue.Known(sum), quarters);
+        return (RatioValue.Known(sum) with { FromVendor = vendor }, quarters);
     }
 
-    private decimal? Profit(FiscalQuarter quarter, PeriodSpan span)
+    private Read Profit(FiscalQuarter quarter, PeriodSpan span)
     {
         if (Template is null)
         {
-            return null;
+            return Read.None;
         }
 
         if (Bank)
         {
-            return Income("21", quarter, span) is { } afterTax ? afterTax - (Income("22", quarter, span) ?? 0m) : null;
+            var afterTax = IncomeRead("21", quarter, span);
+            var minority = IncomeRead("22", quarter, span);
+            return afterTax.Value is { } whole ? new Read(whole - (minority.Value ?? 0m), afterTax.Vendor || minority.Vendor) : Read.None;
         }
 
         // A separate statement has no parent line (61): the entity is the
         // parent, so its profit after tax (60) is. A consolidated one without
         // 61 has no figure to the parent, and 60 would include minorities.
         // A vendor's isa22 is read only where no Circular 200 value is held.
-        var filed = _scope == FinancialStatementScope.Separate
-            ? Income("61", quarter, span) ?? Income("60", quarter, span)
-            : Income("61", quarter, span);
+        var filed = IncomeRead("61", quarter, span);
 
-        return filed ?? Income("isa22", quarter, span);
+        if (filed.Value is null && _scope == FinancialStatementScope.Separate)
+        {
+            filed = IncomeRead("60", quarter, span);
+        }
+
+        return filed.Value is not null ? filed : IncomeRead("isa22", quarter, span);
     }
+
+    private Read BalanceRead(string code, FiscalQuarter quarter) =>
+        LineRead((FinancialStatement.BalanceSheet, code, quarter, PeriodSpan.Instant));
+
+    private Read IncomeRead(string code, FiscalQuarter quarter, PeriodSpan span) =>
+        LineRead((FinancialStatement.IncomeStatement, code, quarter, span));
+
+    private Read LineRead((FinancialStatement, string, FiscalQuarter, PeriodSpan) key) =>
+        _values.TryGetValue(key, out var value) ? new Read(value, _vendorLines.Contains(key)) : Read.None;
 
     private decimal? Balance(string code, FiscalQuarter quarter) =>
         _values.TryGetValue((FinancialStatement.BalanceSheet, code, quarter, PeriodSpan.Instant), out var value) ? value : null;
@@ -310,5 +352,11 @@ internal sealed class StatementLines
     {
         var index = (quarter.Year * 4) + quarter.Quarter - 1 - quarters;
         return FiscalQuarter.Create(index / 4, (index % 4) + 1);
+    }
+
+    /// <summary>A value read from the lines, and whether a vendor stated a line it rests on.</summary>
+    private readonly record struct Read(decimal? Value, bool Vendor)
+    {
+        public static Read None => default;
     }
 }

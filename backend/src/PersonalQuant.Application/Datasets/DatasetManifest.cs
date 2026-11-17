@@ -225,8 +225,13 @@ public sealed record DatasetManifest(
     /// Version 6: <c>fundamentals.vendor_rows</c>, the rows built on any
     /// vendor value, stated even when 0. See ADR-038.
     /// </para>
+    /// <para>
+    /// Version 7: <c>fundamentals.parquet</c> carries a <c>&lt;value&gt;_vendor</c>
+    /// flag beside every value. The manifest gains no field and the content
+    /// hash no part: the flags are in the file, hashed by its SHA-256.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = VendorSchemaVersion;
+    public const int CurrentSchemaVersion = VendorFlagsSchemaVersion;
 
     /// <summary>
     /// The first schema version whose manifests carry history and removal
@@ -251,6 +256,12 @@ public sealed record DatasetManifest(
     /// and hashes the count (ADR-038).
     /// </summary>
     public const int VendorSchemaVersion = 6;
+
+    /// <summary>
+    /// The first schema version whose fundamentals file flags, per value,
+    /// whether a vendor value went into it (ADR-038; sprint 11.6 option A).
+    /// </summary>
+    public const int VendorFlagsSchemaVersion = 7;
 
     /// <summary>Gets the total rows across every file.</summary>
     public long RowCount => Files.Sum(file => file.RowCount);

@@ -131,7 +131,19 @@ internal sealed class ParquetDatasetStore(IOptions<DatasetOptions> options)
                 await group.WriteAsync(fields[11 + (2 * value)], rows.Select(row => row.Values[value].Absent!).ToArray()).ConfigureAwait(false);
             }
 
-            await group.WriteAsync(fields[^1], rows.Select(row => row.Findings).ToArray()).ConfigureAwait(false);
+            var findings = 10 + (2 * DatasetFundamentalsRow.ValueNames.Count);
+            await group.WriteAsync(fields[findings], rows.Select(row => row.Findings).ToArray()).ConfigureAwait(false);
+
+            // Schema 7: the vendor flags come last, so every earlier column keeps its place.
+            for (var index = 0; index < DatasetFundamentalsRow.ValueNames.Count; index++)
+            {
+                var value = index;
+                await group.WriteAsync<bool>(
+                        fields[findings + 1 + value],
+                        rows.Select(row => row.VendorFlags is { } flags && flags[value]).ToArray().AsMemory(),
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         var info = new FileInfo(path);
@@ -286,6 +298,12 @@ internal sealed class ParquetDatasetStore(IOptions<DatasetOptions> options)
         }
 
         fields.Add(new DataField<string>("findings"));
+
+        foreach (var name in DatasetFundamentalsRow.ValueNames)
+        {
+            fields.Add(new DataField<bool>(name + DatasetFundamentalsRow.VendorFlagSuffix));
+        }
+
         return new ParquetSchema(fields);
     }
 

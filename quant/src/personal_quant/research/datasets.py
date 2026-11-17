@@ -92,7 +92,10 @@ FUNDAMENTAL_VALUES = (
 """The value columns of ``fundamentals.parquet``, each beside its ``_absent`` reason."""
 
 VENDOR_FLAG_SUFFIX = "_vendor"
-"""From schema 7, each value column's vendor flag is ``<value>_vendor``, a non-null bool."""
+"""From schema 7, each value column's vendor flag is ``<value>_vendor``, a non-null bool.
+
+A flag says a vendor input was read for the value, so an absent value can carry
+one (an ROE whose closing equity is missing still read a vendor quarter)."""
 
 _BUILD = re.compile(r"v(?P<version>[1-9][0-9]*)")
 _COLUMNS = [
@@ -575,9 +578,6 @@ def _verify_vendor_flags(columns: Mapping[str, list[Any]], index: int, where: st
 
         if not isinstance(flag, bool):
             raise DatasetIntegrityError(f"{where}: {flag_column} is {flag!r}, not true or false.")
-
-        if flag and columns[name][index] is None:
-            raise DatasetIntegrityError(f"{where}: {name} is absent but flagged vendor.")
 
 
 def _member_on(manifest: DatasetManifest, instrument: DatasetInstrument, session: date) -> bool:

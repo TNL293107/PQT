@@ -64,16 +64,26 @@ def test_a_schema_7_build_missing_a_flag_column_is_refused(tmp_path: Path) -> No
         LocalDatasetProvider(tmp_path).open(DATASET)
 
 
-def test_a_vendor_flag_on_an_absent_value_is_refused(tmp_path: Path) -> None:
-    # bbb's second row has no book value; a vendor flag on it reads nothing.
+def test_a_vendor_flag_on_an_absent_value_is_read_and_shares_nothing(tmp_path: Path) -> None:
+    # bbb's second row has no book value, yet a vendor input was read for it
+    # (the .NET writer flags what a value rests on, not whether it came out).
     rows = [
         (name, session, flagged | ({"pb"} if values else frozenset()), values)
         for name, session, flagged, values in ROWS
     ]
     _write_schema_7(tmp_path, rows)
+    dataset = LocalDatasetProvider(tmp_path).open(DATASET)
 
-    with pytest.raises(DatasetIntegrityError, match="pb is absent but flagged vendor"):
-        LocalDatasetProvider(tmp_path).open(DATASET)
+    flagged_absent = [
+        row
+        for instrument in dataset.manifest.instruments
+        for row in dataset.fundamentals_of(instrument.instrument_id).values()
+        if "pb" in row.vendor and row.values["pb"] is None
+    ]
+
+    assert len(flagged_absent) == 1
+    # The share counts rows whose inputs are present, so the flag adds nothing.
+    assert vendor_shares(dataset)["value_bp"] == pytest.approx(1 / 3)
 
 
 def test_a_null_flag_is_refused(tmp_path: Path) -> None:
