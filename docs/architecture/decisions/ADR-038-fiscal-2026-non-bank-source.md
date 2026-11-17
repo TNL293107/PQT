@@ -323,3 +323,42 @@ these open points in view.
   vendor line as a revision; an unmapped C99 item is absent; a read reports
   its vendor share.
 - Phase 7's report states the vendor share of each value feature's inputs.
+
+## Amendment — 2026-11-17 (sprint 11.6, option A): a vendor flag per value, manifest schema 7
+
+`vendor_rows` says how many rows rest on any vendor value; it cannot say
+which value. A row whose balance sheet is filed but whose trailing profit has
+a vendor quarter is one vendor row, yet its book value and P/B rest on no
+vendor value. The last consequence above (the report states the vendor share
+of each value feature's inputs) needs the value, so the dataset carries it.
+
+- **Per value, by its own inputs.** `RatioValue.FromVendor` is set when a
+  vendor line was read for that value, not merely for a quarter its row
+  reads. `StatementLines` tracks vendor lines by statement, code, quarter and
+  span. Net profit TTM, EPS and P/E follow the trailing quarters; book value
+  and P/B follow the balance sheet's equity; ROE follows the trailing
+  quarters, the closing equity and the year-earlier equity. The close and the
+  dividend yield are never flagged. The share count is not pinned: Vietcap
+  states no charter capital (Trade-offs).
+- **Point in time.** A vendor value fetched after the read instant is not
+  held, so it flags nothing.
+- **Absent values.** As built, an absent value keeps the flag of the vendor
+  inputs read before another went missing (an ROE whose closing equity is
+  unknown, a book value with no share count), because QA's acceptance pins
+  it that way. Whether an absent value may carry a flag is still with QA. A
+  feature's vendor share counts only rows whose inputs are all present, so
+  either answer leaves the share unchanged.
+- **File shape.** `fundamentals.parquet` gains a non-null boolean
+  `<value>_vendor` column for each of its nine values. The columns come
+  after `findings`, so every earlier column keeps its position.
+- **Manifest schema 7.** No manifest field is added and the content hash
+  gains no part, because the flags live in the file, which its `sha256`
+  covers. The version still moves to 7, so a reader knows to expect and check
+  the columns: the Python reader refuses a schema 7 build with a flag column
+  missing or a flag that is not a plain true or false, and reads no flags
+  before schema 7. `vendor_rows` is unchanged and keeps its schema 6 meaning
+  (`BuiltOnVendor`). See `docs/schemas/dataset-manifest-v7.schema.json`;
+  `v7-export.json` is the parity fixture both languages hash.
+- **The report.** `personal_quant.factors.catalogue.vendor_shares` reads the
+  share of each value feature from a schema 7 build alone: no database and no
+  ratio service. It refuses an older build rather than call its share 0.
