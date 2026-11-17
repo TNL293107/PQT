@@ -205,7 +205,7 @@ public sealed class DatasetManifestSchemaTests
     }
 
     private static JsonElement Schema() =>
-        JsonDocument.Parse(File.ReadAllText(SchemaPath())).RootElement;
+        JsonElement.Parse(File.ReadAllText(SchemaPath()));
 
     private static HashSet<string> Names(JsonElement element) =>
         element.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
@@ -215,7 +215,7 @@ public sealed class DatasetManifestSchemaTests
     {
         var json = JsonSerializer.Serialize(Build(pointInTime), ParquetDatasetStore.ManifestJson);
 
-        return JsonDocument.Parse(json).RootElement;
+        return JsonElement.Parse(json);
     }
 
     private static DatasetManifest Build(bool pointInTime)

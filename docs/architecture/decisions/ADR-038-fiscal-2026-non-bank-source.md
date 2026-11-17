@@ -180,7 +180,91 @@ and VNM only, so FPT's restatements come from `fpt-later-readings.txt`.
   (`PersonalQuantTerminal/0.1 (+research)`, no browser `User-Agent`, no
   `Referer`). If the endpoint answers only a browser, Vietcap fails ADR-015's
   bounds and this ADR falls back to the hand-keyed stop-gap. Verification 2
-  showed it answers the honest agent.
+  showed it answers the honest agent. Reads are at least 10 seconds apart (`Crawl-delay: 10`, see
+  the terms and legal review).
+
+## Terms and legal review · 2026-11-08
+
+Read on the Moderator's request before the first import. **This is a reading of
+texts by the room, not legal advice**; the open points at the end need a
+Vietnamese lawyer. "Read" means the text was fetched and read; "cited" means it
+was seen only in commentary or search results and must be checked on vbpl.vn or
+congbao.chinhphu.vn.
+
+### Vietcap's terms of use (read)
+
+`https://www.vietcap.com.vn/dieu-khoan-su-dung-chinh-sach-bao-mat`, read
+2026-11-08 by Lead and re-read the same day by QA + QC. The terms of use carry
+no date or version; the privacy policy on the same page postdates 31/12/2025
+(it cites Nghị định 356/2025/NĐ-CP of that date) while the footer says ©2023,
+so the terms may be older than the policy beside them.
+
+- **Scope:** "trang web này" (this website); the rule below names
+  `trading.vietcap.com.vn` itself. It does not name Vietcap IQ, but
+  `iq.vietcap.com.vn` now redirects to `trading.vietcap.com.vn/iq`, so the IQ
+  pages sit under the domain the terms name. Terms shown only inside the
+  JavaScript application could not be read.
+- **The rule, one sentence:** "Ngoại trừ việc tải xuống và in các thông tin
+  được yêu cầu để sử dụng cho mục đích cá nhân, Người sử dụng không được phép
+  sao chép, dẫn liên kết: https://trading.vietcap.com.vn, phân phối, kinh doanh
+  hoặc xuất bản các nội dung của trang web dưới bất kỳ hình thức nào." The
+  **ban is the rule** (no copying, linking to trading.vietcap.com.vn,
+  distributing, trading or publishing the content in any form), and
+  downloading and printing for personal use is the **only exception** to it,
+  not a standalone grant. Open point 1 turns on that exception. All rights are
+  reserved.
+- **Automated access:** not mentioned. No clause permits or forbids scraping,
+  bots or programmatic access.
+- **`robots.txt`** on `trading.vietcap.com.vn` (which covers `/iq`):
+  `User-agent: * / Allow: / / Crawl-delay: 10`.
+
+### Vietnamese law (summary of a research pass)
+
+**For a "cited" row, the status is what commentary reports, unverified**: it is
+not a checked fact until read on vbpl.vn or congbao.chinhphu.vn.
+
+| Text | Status found | Basis |
+| --- | --- | --- |
+| Thông tư 99/2025/TT-BTC | Reported: issued 27/10/2025, in force 01/01/2026, for financial years from that date; replaces Thông tư 200/2014 (not 133/2016) | cited |
+| Thông tư 96/2020/TT-BTC (disclosure) | In force (2020 text read). Reported amended by Thông tư 68/2024, 18/2025 and 08/2026 (consolidated 10/VBHN-BTC 2026); deadlines in Điều 14 reported unchanged | 2020 text read; amendments cited |
+| Quyết định 450/QĐ-UBCK (IDS) | Reported superseded: 245/QĐ-UBCK (2024), 877/QĐ-UBCK (2024), then 820/QĐ-UBCK (23/10/2025), which reportedly names the portal `ids.ssc.gov.vn` | cited |
+| Luật Sở hữu trí tuệ (as amended 2022, and 131/2025/QH15 from 01/04/2026) | Điều 15: no copyright in bare data (*số liệu*). Điều 22: a data collection is protected only for a creative selection or arrangement. No separate database right was found. Điều 25: one copy for personal, non-commercial research | Điều 22 read; others cited |
+| Luật Chứng khoán 54/2019 (amended 56/2024), Nghị định 155/2020 | Nothing found that restricts an individual collecting public disclosures for private use | partly read |
+| Bộ luật Hình sự Điều 289 (unauthorised access) | Reported to require overcoming warnings, passwords or firewalls, "or other means", plus taking control, interfering or taking data | cited |
+| Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15, Nghị định 356/2025/NĐ-CP | Reported in force 01/01/2026; personal data only | cited |
+| Luật An ninh mạng 116/2025/QH15 | Reported in force from 01/07/2026; its collection ban reportedly concerns personal data | cited |
+| Luật Dữ liệu 60/2024/QH15 | **Not checked** | — |
+
+No text was found that makes reading publicly accessible data unlawful in
+itself, in the texts checked; Luật Dữ liệu 60/2024/QH15 was not checked.
+
+### What this changes in the decision
+
+- **Pacing: at least 10 seconds between reads**, as `Crawl-delay: 10` asks.
+  The verification reads (1.5–2 s apart) were faster than that; the provider
+  is not.
+- **What is stored stays minimal:** the five canonical numbers per period, and
+  the raw response for audit. Bare figures carry no copyright (Điều 15);
+  Vietcap's presentation is not reproduced, and nothing is published,
+  distributed or sold.
+- **Personal data:** statements can carry officers' or shareholders' names.
+  The provider stores none of them.
+- **ADR-029 cites Quyết định 450/QĐ-UBCK as current; it is reported
+  superseded by 820/QĐ-UBCK (2025)** (cited, unverified). ADR-029's reasoning
+  is unchanged; a note is added there.
+
+### Open: needs a Vietnamese lawyer before the first import
+
+1. Whether keeping a local copy of the numbers is "tải xuống … để sử dụng cho
+   mục đích cá nhân" (permitted) or "sao chép" (forbidden) under Vietcap's
+   terms, and whether those terms bind as a contract.
+2. Whether calling an undocumented API with no login, at the robots.txt pace,
+   can fall under Điều 289's "other means".
+3. Whether Luật Dữ liệu 60/2024 reaches this use.
+4. The current consolidated texts of 96/2020 and 820/2025.
+
+**Gate:** the first import runs only on the Moderator's explicit OK, given with
+these open points in view.
 
 ## Alternatives
 

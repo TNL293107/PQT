@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
+from personal_quant.analytics.calibration import CostModel
+from personal_quant.analytics.calibration_run import calibration_metrics
 from personal_quant.analytics.evaluation import evaluate_factor, factor_correlation
 from personal_quant.factors.momentum import Momentum
 from personal_quant.factors.transforms import TRANSFORMS
@@ -39,11 +41,13 @@ from personal_quant.research.momentum_slice import SliceResult, run_momentum_sli
 from personal_quant.research.protocols import FeatureEngine
 
 __all__ = [
+    "CALIBRATION",
     "Handler",
     "JobOutcome",
     "JobRejectedError",
     "RunReader",
     "TrialFailedError",
+    "calibration_handler",
     "default_handlers",
     "describe",
     "factor_correlation_handler",
@@ -80,6 +84,24 @@ MOMENTUM_SLICE = "momentum_slice"
 REPRODUCE_RUN = "reproduce_run"
 FACTOR_EVALUATION = "factor_evaluation"
 FACTOR_CORRELATION = "factor_correlation"
+CALIBRATION = "calibration"
+
+_CALIBRATION_SUFFIX = "-calibration"
+_CALIBRATION_VERSIONS = frozenset({"cal-1"})
+_COST_FIELDS = ("buy_fee", "sell_fee", "sell_tax", "spread", "slippage")
+_CALIBRATION_FIELDS = frozenset(
+    {
+        "experiment",
+        "dataset_id",
+        "dataset_version",
+        "feature",
+        "transform_version",
+        "quantiles",
+        "calibration_version",
+        "cost_model_version",
+        *_COST_FIELDS,
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +300,83 @@ def factor_correlation_handler(
     return handle
 
 
+def calibration_handler(
+    dataset_root: Path, engines: Sequence[FeatureEngine] | None = None
+) -> Handler:
+    """Build the handler that calibrates one feature's running probabilities (ADR-037).
+
+    One job is one trial, as for the factor evaluation (ADR-036 §5): every
+    payload field counts, the cost figures included, so a changed fee is a new
+    trial. The run is recorded under ``<experiment>-calibration`` so it never
+    adds to the evaluation's ``trial_count``.
+
+    Args:
+        dataset_root: The directory the backend exports datasets into.
+        engines: The features available; the catalogue's when ``None``.
+
+    Returns:
+        The handler.
+    """
+    provider = LocalDatasetProvider(dataset_root)
+
+    def handle(payload: Mapping[str, Any]) -> JobOutcome:
+        _exactly(payload, _CALIBRATION_FIELDS)
+        experiment, dataset_id, version, transform = _labelled_payload(payload)
+        quantiles = _whole(payload, "quantiles", 0, 1, _MAX_QUANTILES)
+
+        if payload["calibration_version"] not in _CALIBRATION_VERSIONS:
+            raise JobRejectedError(
+                f"'calibration_version' {payload['calibration_version']!r} is not one this code "
+                f"computes ({', '.join(sorted(_CALIBRATION_VERSIONS))})."
+            )
+
+        cost_version = payload["cost_model_version"]
+
+        if not isinstance(cost_version, str) or not cost_version.strip():
+            raise JobRejectedError("'cost_model_version' must name the cost model.")
+
+        cost = CostModel(*(_fraction(payload, name) for name in _COST_FIELDS))
+
+        started = datetime.now(UTC)
+        labelled = LabelledDataset.open(provider, dataset_id, engines, version)
+        declared = {feature.name: feature for feature in labelled.request.features}
+        feature = payload["feature"]
+
+        if feature not in declared:
+            raise JobRejectedError(
+                f"Dataset {dataset_id} v{version} was not built for '{feature}'; "
+                f"its request names {', '.join(sorted(declared))}."
+            )
+
+        # A reproduction re-runs under the experiment the run was recorded in,
+        # which already carries the suffix; it is added once, never twice.
+        recorded_under = (
+            experiment
+            if experiment.endswith(_CALIBRATION_SUFFIX)
+            else experiment + _CALIBRATION_SUFFIX
+        )
+        parameters = {key: value for key, value in payload.items() if key != "experiment"}
+        factor_version = f"{feature}@{declared[feature].version}"
+
+        try:
+            metrics = calibration_metrics(labelled, feature, TRANSFORMS[transform], quantiles, cost)
+        except PointInTimeError:
+            raise
+        except Exception as error:
+            failed = _labelled_run(
+                recorded_under, CALIBRATION, factor_version, labelled, parameters, {}, started
+            )
+            raise TrialFailedError(error, replace(failed, status="failed")) from error
+
+        run = _labelled_run(
+            recorded_under, CALIBRATION, factor_version, labelled, parameters, metrics, started
+        )
+
+        return JobOutcome(result={"feature": feature, "metrics": _json(metrics)}, run=run)
+
+    return handle
+
+
 def reproduce_run_handler(
     dataset_root: Path, runs: RunReader, engines: Sequence[FeatureEngine] | None = None
 ) -> Handler:
@@ -300,6 +399,7 @@ def reproduce_run_handler(
     provider = LocalDatasetProvider(dataset_root)
     momentum = momentum_slice_handler(dataset_root)
     evaluation = factor_evaluation_handler(dataset_root, engines)
+    calibration = calibration_handler(dataset_root, engines)
 
     def handle(payload: Mapping[str, Any]) -> JobOutcome:
         if set(payload) != {"run_id"}:
@@ -315,7 +415,7 @@ def reproduce_run_handler(
         if recorded is None:
             raise JobRejectedError(f"No research run {run_id} is recorded.")
 
-        if recorded.strategy not in (MOMENTUM_SLICE, FACTOR_EVALUATION):
+        if recorded.strategy not in (MOMENTUM_SLICE, FACTOR_EVALUATION, CALIBRATION):
             raise JobRejectedError(
                 f"Run {run_id} ran '{recorded.strategy}', which cannot be reproduced."
             )
@@ -338,9 +438,11 @@ def reproduce_run_handler(
             )
 
         try:
-            rerun = (momentum if recorded.strategy == MOMENTUM_SLICE else evaluation)(
-                {**recorded.parameters, "experiment": recorded.experiment}
-            )
+            rerun = {
+                MOMENTUM_SLICE: momentum,
+                FACTOR_EVALUATION: evaluation,
+                CALIBRATION: calibration,
+            }[recorded.strategy]({**recorded.parameters, "experiment": recorded.experiment})
         except TrialFailedError as failure:
             # A failed reproduction is not a trial (ADR-036 §5): it names the run
             # it re-executed, keeps status failed and takes no index.
@@ -381,6 +483,7 @@ def default_handlers(dataset_root: Path, runs: RunReader) -> dict[str, Handler]:
         REPRODUCE_RUN: reproduce_run_handler(dataset_root, runs),
         FACTOR_EVALUATION: factor_evaluation_handler(dataset_root),
         FACTOR_CORRELATION: factor_correlation_handler(dataset_root),
+        CALIBRATION: calibration_handler(dataset_root),
     }
 
 
@@ -561,6 +664,18 @@ def _json(metrics: Mapping[str, float | None]) -> dict[str, float | None]:
         name: None if value is None or not math.isfinite(value) else value
         for name, value in metrics.items()
     }
+
+
+def _fraction(payload: Mapping[str, Any], field: str) -> float:
+    value = payload[field]
+
+    # bool is an int in Python; true is not a fee.
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 or value >= 1:
+        raise JobRejectedError(
+            f"'{field}' must be a fraction of notional from 0 to under 1, not {value!r}."
+        )
+
+    return float(value)
 
 
 def _factor_version(factor: Momentum) -> str:

@@ -89,6 +89,11 @@ export const VERBS: readonly FunctionSpec[] = [
     summary: "Workspaces — save this session's views by name, load one to replay it",
     options: [],
   },
+  {
+    code: "RUNS",
+    summary: "Research runs, newest first — each metric beside its experiment's trial count",
+    options: ["experiment", "limit"],
+  },
   { code: "KEY", summary: "Hold the operator key for this tab, or 'key clear'", options: [] },
   { code: "CLEAR", summary: "Empty the transcript", options: [] },
 ];
