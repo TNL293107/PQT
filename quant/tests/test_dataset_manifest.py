@@ -58,6 +58,12 @@ def _raw(name: str) -> dict[str, Any]:
         "v5-request.json",
         # Schema 5 written by the .NET build, so the parity runs both ways.
         "v5-export.json",
+        # Schema 6 (ADR-038): fundamentals.vendor_rows, hashed from schema 6 only,
+        # as `vendor:{n},` after the row count. Hand-built from v5-request; its
+        # hash comes from v6-vendor.canonical.txt, rendered by hand.
+        "v6-vendor.json",
+        # Schema 6 written by the .NET build, so the parity runs both ways.
+        "v6-export.json",
     ],
 )
 def test_the_content_hash_matches_the_one_dotnet_recorded(name: str) -> None:
@@ -76,6 +82,65 @@ def test_the_schema_5_fixture_hash_is_the_hand_rendered_canonical_string() -> No
         hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         == _raw("v5-request.json")["content_hash"]
     )
+
+
+def test_the_schema_6_fixture_hash_is_the_hand_rendered_canonical_string() -> None:
+    canonical = (FIXTURES / "v6-vendor.canonical.txt").read_text(encoding="utf-8")
+
+    assert (
+        hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        == _raw("v6-vendor.json")["content_hash"]
+    )
+
+
+def test_vendor_rows_enter_the_hash_from_schema_6_only() -> None:
+    # A schema 5 manifest is hashed as it was written, so a vendor_rows key it
+    # never carried cannot change its hash; at schema 6 an edited count breaks it.
+    v5 = _raw("v5-request.json")
+    v5["fundamentals"]["vendor_rows"] = 99
+    assert content_hash_of(DatasetManifest.from_json(v5)) == v5["content_hash"]
+
+    v6 = _raw("v6-vendor.json")
+    v6["fundamentals"]["vendor_rows"] = 38
+    assert content_hash_of(DatasetManifest.from_json(v6)) != v6["content_hash"]
+
+
+def test_a_vendor_row_count_of_zero_is_hashed_not_dropped() -> None:
+    # From schema 6, vendor_rows 0 is a stated count ("vendor:0,"), not an
+    # absent one: a reader that tested it for truth would drop it and agree
+    # with a manifest that never stated it.
+    v6 = _raw("v6-vendor.json")
+    v6["fundamentals"]["vendor_rows"] = 0
+    manifest = DatasetManifest.from_json(v6)
+
+    assert manifest.fundamentals is not None
+    assert manifest.fundamentals.vendor_rows == 0
+    # 0 renders as "vendor:0,": the canonical string with the count removed
+    # must hash differently, so a rule that skips a falsy count is caught.
+    canonical = (FIXTURES / "v6-vendor.canonical.txt").read_text(encoding="utf-8")
+    with_zero = canonical.replace("vendor:37,", "vendor:0,", 1)
+    without = canonical.replace("vendor:37,", "", 1)
+    assert content_hash_of(manifest) == hashlib.sha256(with_zero.encode("utf-8")).hexdigest()
+    assert content_hash_of(manifest) != hashlib.sha256(without.encode("utf-8")).hexdigest()
+
+
+def test_a_schema_6_manifest_without_vendor_rows_is_refused() -> None:
+    # QA v6-M1: the schema requires the count from 6. A file with it removed
+    # is not a manifest this reader can hash, not a KeyError.
+    v6 = _raw("v6-vendor.json")
+    del v6["fundamentals"]["vendor_rows"]
+
+    with pytest.raises(UnsupportedManifestError, match="vendor_rows"):
+        DatasetManifest.from_json(v6)
+
+
+def test_more_vendor_rows_than_rows_is_refused() -> None:
+    # QA v6-L: a vendor row is a row of fundamentals.parquet.
+    v6 = _raw("v6-vendor.json")
+    v6["fundamentals"]["vendor_rows"] = v6["fundamentals"]["rows"] + 1
+
+    with pytest.raises(UnsupportedManifestError, match="vendor_rows"):
+        DatasetManifest.from_json(v6)
 
 
 def test_a_schema_1_manifest_reads_as_an_as_of_export() -> None:
@@ -124,9 +189,9 @@ def test_an_edited_spell_no_longer_matches_its_hash() -> None:
 
 def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
     raw = _raw("v4-fundamentals.json")
-    raw["schema_version"] = 6
+    raw["schema_version"] = 7
 
-    with pytest.raises(UnsupportedManifestError, match="schema version 6"):
+    with pytest.raises(UnsupportedManifestError, match="schema version 7"):
         DatasetManifest.from_json(raw)
 
 

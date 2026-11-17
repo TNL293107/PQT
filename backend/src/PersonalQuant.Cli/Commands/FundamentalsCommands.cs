@@ -79,6 +79,7 @@ internal sealed class FundamentalsCommands(
         output.Field("reports recorded", Count(report.ReportsRecorded), 22);
         output.Field("without values", Count(report.ReportsWithoutValues), 22);
         output.Field("already held", Count(report.ReportsAlreadyHeld), 22);
+        output.Field("vendor joined", Count(report.ReportsJoined), 22);
         output.Field("lines recorded", Count(report.LinesRecorded), 22);
         output.Field("lines restated", Count(report.LinesRestated), 22);
         output.Field("late", Count(report.Late.Count), 22);

@@ -126,6 +126,11 @@ public sealed record RatioValue(decimal? Value, string? Absent, RatioAbsence? Re
 /// <param name="ActionsApplied">Share-count actions applied to the balance sheet's count.</param>
 /// <param name="ActionsWithheld">Actions in the window not yet announced, or never dated.</param>
 /// <param name="Findings">What the share-count checks found, in words; empty when they found nothing.</param>
+/// <param name="BuiltOnVendor">
+/// Whether any value of the quarters the row was read from (its balance
+/// sheet, its trailing profit quarters, and the year-earlier equity) was a
+/// vendor's (ADR-038). A dataset counts these rows as <c>vendor_rows</c>.
+/// </param>
 public sealed record FundamentalRatios(
     InstrumentId InstrumentId,
     DateOnly Session,
@@ -145,7 +150,8 @@ public sealed record FundamentalRatios(
     IReadOnlyList<FiscalQuarter> ProfitQuarters,
     int ActionsApplied,
     int ActionsWithheld,
-    IReadOnlyList<string> Findings);
+    IReadOnlyList<string> Findings,
+    bool BuiltOnVendor = false);
 
 /// <summary>
 /// Computes point-in-time ratios on read (ADR-030).
@@ -291,11 +297,26 @@ public sealed class FundamentalRatioService(
         var lines = StatementLines.From(statements.Values, statements.Scope);
         var balance = lines.LatestBalanceSheet();
 
-        var (shares, applied, withheld, registeredEarly) = SharesAt(lines, balance, adjustments, session, announcedBy, findings);
+        // A vendor's balance sheet states no charter capital (ADR-038), so the
+        // share count is read from the latest one that does, adjusted for the
+        // actions since it, as for any balance sheet (QA H1). That is the
+        // ordinary vendor era and says nothing; a capital more than a year
+        // older than the balance sheet is a finding, since the count rests on
+        // actions alone for that long.
+        var capital = balance is { } latest ? lines.LatestCapital(latest) : null;
+
+        if (capital is { } basis && balance is { } sheetQuarter && basis.CompareTo(sheetQuarter.YearEarlier) < 0)
+        {
+            findings.Add(
+                $"The share count is read from {basis}'s charter capital, more than a year before {sheetQuarter}'s balance sheet, "
+                    + "which states none; it is adjusted only for the actions recorded since.");
+        }
+
+        var (shares, applied, withheld, registeredEarly) = SharesAt(lines, capital ?? balance, adjustments, session, announcedBy, findings);
 
         if (!registeredEarly)
         {
-            CheckUnexplainedStep(lines, balance, adjustments, session, announcedBy, findings);
+            CheckUnexplainedStep(lines, capital ?? balance, adjustments, session, announcedBy, findings);
         }
         var (profit, quarters) = lines.TrailingProfit();
         CheckPar(lines, quarters, findings);
@@ -322,7 +343,7 @@ public sealed class FundamentalRatioService(
 
         IReadOnlyList<FinancialReportId> balanceReports = balance is { } sheet
             ? [.. statements.Values
-                .Where(value => value.Statement == FinancialStatement.BalanceSheet && value.Period == sheet && value.Template == lines.Template)
+                .Where(value => value.Statement == FinancialStatement.BalanceSheet && value.Period == sheet && lines.Reads(value.Template))
                 .Select(value => value.ReportId)
                 .Distinct()
                 .OrderBy(id => id.Value)]
@@ -347,7 +368,47 @@ public sealed class FundamentalRatioService(
             quarters,
             applied,
             withheld,
-            findings);
+            findings,
+            BuiltOnVendor(statements.Values, balance, capital, quarters));
+    }
+
+    /// <summary>
+    /// Whether a vendor stated any value of the quarters a row reads: the
+    /// balance sheet, the charter capital the share count is read from, the
+    /// trailing profit quarters and the equity a year before the latest of
+    /// them (ADR-038).
+    /// </summary>
+    /// <remarks>
+    /// Judged by quarter rather than by line, so a vendor value of a quarter
+    /// the row reads counts even when no ratio used that line: the count may
+    /// overstate the vendor share, never understate it. That holds while a
+    /// vendor states quarter-span profit and no charter capital, as Vietcap
+    /// does: a vendor year-to-date row would be read for the quarter before
+    /// the trailing year, and a vendor capital in the step checks, outside
+    /// this set (QA v6 L1).
+    /// </remarks>
+    private static bool BuiltOnVendor(
+        IReadOnlyList<FundamentalValue> values,
+        FiscalQuarter? balance,
+        FiscalQuarter? capital,
+        IReadOnlyList<FiscalQuarter> quarters)
+    {
+        var read = new HashSet<FiscalQuarter>(quarters);
+
+        foreach (var quarter in new[] { balance, capital })
+        {
+            if (quarter is { } sheet)
+            {
+                read.Add(sheet);
+            }
+        }
+
+        if (quarters.Count > 0)
+        {
+            read.Add(quarters[^1].YearEarlier);
+        }
+
+        return values.Any(value => value.Basis == ValueBasis.Vendor && read.Contains(value.Period));
     }
 
     private async Task<RatioValue> CloseAsync(
