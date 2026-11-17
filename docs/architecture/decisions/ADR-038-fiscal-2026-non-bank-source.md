@@ -338,16 +338,20 @@ of each value feature's inputs) needs the value, so the dataset carries it.
   span. Net profit TTM, EPS and P/E follow the trailing quarters; book value
   and P/B follow the balance sheet's equity; ROE follows the trailing
   quarters, the closing equity and the year-earlier equity. The close and the
-  dividend yield are never flagged. The share count is not pinned: Vietcap
-  states no charter capital (Trade-offs).
+  dividend yield are never flagged.
+- **Shares and dividend yield carry no flag.** A vendor states no charter
+  capital (Trade-offs), so the share count and the dividend yield, which
+  divides by it, rest on no vendor line today. If a vendor ever supplies
+  capital, both flags have to be reconsidered (QA 11.6 LOW-2).
 - **Point in time.** A vendor value fetched after the read instant is not
   held, so it flags nothing.
-- **Absent values.** As built, an absent value keeps the flag of the vendor
-  inputs read before another went missing (an ROE whose closing equity is
-  unknown, a book value with no share count), because QA's acceptance pins
-  it that way. Whether an absent value may carry a flag is still with QA. A
-  feature's vendor share counts only rows whose inputs are all present, so
-  either answer leaves the share unchanged.
+- **Absent values.** An absent value keeps the flag of the vendor inputs that
+  were read even though another input is missing: an ROE whose closing equity
+  is unknown, a book value with no share count, or a trailing year with a
+  quarter missing whose other quarters include a vendor's (QA 11.6 LOW-1).
+  The flag records what was read, not whether the value came out. QA settled
+  this on 2026-11-17 (NOTE 1). A feature's vendor share counts only rows whose
+  inputs are all present, so these flags leave the share unchanged.
 - **File shape.** `fundamentals.parquet` gains a non-null boolean
   `<value>_vendor` column for each of its nine values. The columns come
   after `findings`, so every earlier column keeps its position.

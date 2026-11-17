@@ -147,6 +147,31 @@ public sealed class VendorPerValueFlagTests
         }
     }
 
+    [Fact]
+    public async Task A_trailing_year_missing_a_quarter_is_still_flagged_when_a_vendor_quarter_was_read()
+    {
+        // QA 11.6 LOW-1: 2025Q4's profit is unknown, so the trailing year is
+        // absent, yet its vendor 2026Q1 was read. As for any absent value
+        // (NOTE 1, settled 2026-11-17), the flag says what was read.
+        var issuer = new Issuer();
+        issuer.Filed(FiscalQuarter.Create(2025, 1), profit: 250_000_000_000m, equity: 9_250_000_000_000m);
+        issuer.Filed(FiscalQuarter.Create(2025, 2), profit: 250_000_000_000m);
+        issuer.Filed(FiscalQuarter.Create(2025, 3), profit: 250_000_000_000m);
+        issuer.Filed(FiscalQuarter.Create(2025, 4), capital: 1_000_000_000_000m, equity: 10_000_000_000_000m);
+        issuer.Vendor(Q2026_1, profit: 300_000_000_000m);
+
+        var ratios = await issuer.ReadAsync(November);
+
+        Assert.Null(ratios.NetProfitTtm.Value);
+        Assert.Equal(RatioAbsence.MissingQuarter, ratios.NetProfitTtm.Reason);
+        AssertFlags(
+            ratios,
+            vendor: [nameof(FundamentalRatios.NetProfitTtm), nameof(FundamentalRatios.EpsTtm), nameof(FundamentalRatios.PriceToEarnings),
+                nameof(FundamentalRatios.ReturnOnEquity)],
+            filed: [nameof(FundamentalRatios.Close), nameof(FundamentalRatios.BookValuePerShare), nameof(FundamentalRatios.PriceToBook),
+                nameof(FundamentalRatios.DividendYield)]);
+    }
+
     private static void AssertFlags(FundamentalRatios ratios, string[] vendor, string[] filed)
     {
         var values = Values(ratios).ToDictionary(pair => pair.Name, pair => pair.Value, StringComparer.Ordinal);

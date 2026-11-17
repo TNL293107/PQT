@@ -284,25 +284,23 @@ internal sealed class StatementLines
             return (RatioValue.Missing(RatioAbsence.NoQuarterlyProfit, "no quarterly profit known"), []);
         }
 
-        var quarters = new List<FiscalQuarter>();
-        var sum = 0m;
-        var vendor = false;
+        var reads = Enumerable.Range(0, 4)
+            .Select(back => Back(end, 3 - back))
+            .Select(quarter => (Quarter: quarter, Read: QuarterProfitRead(quarter)))
+            .ToList();
 
-        for (var back = 3; back >= 0; back--)
+        // Every quarter is read before judging, so a year missing one still
+        // says whether a vendor stated another (QA 11.6 LOW-1, NOTE 1).
+        var vendor = reads.Any(entry => entry.Read.Vendor);
+
+        var gap = reads.FindIndex(entry => entry.Read.Value is null);
+
+        if (gap >= 0)
         {
-            var quarter = Back(end, back);
-
-            if (QuarterProfitRead(quarter) is not { Value: { } profit } read)
-            {
-                return (RatioValue.Missing(RatioAbsence.MissingQuarter, $"profit for {quarter} is not known; four consecutive quarters are needed"), []);
-            }
-
-            quarters.Add(quarter);
-            sum += profit;
-            vendor |= read.Vendor;
+            return (RatioValue.Missing(RatioAbsence.MissingQuarter, $"profit for {reads[gap].Quarter} is not known; four consecutive quarters are needed") with { FromVendor = vendor }, []);
         }
 
-        return (RatioValue.Known(sum) with { FromVendor = vendor }, quarters);
+        return (RatioValue.Known(reads.Sum(entry => entry.Read.Value!.Value)) with { FromVendor = vendor }, [.. reads.Select(entry => entry.Quarter)]);
     }
 
     private Read Profit(FiscalQuarter quarter, PeriodSpan span)
