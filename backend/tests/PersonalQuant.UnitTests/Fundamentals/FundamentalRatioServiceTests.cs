@@ -190,6 +190,26 @@ public sealed class FundamentalRatioServiceTests
     }
 
     [Fact]
+    public async Task A_share_count_read_from_capital_exactly_a_year_old_is_not_a_finding()
+    {
+        // Boundary of the one above (QA verify L1): 2026Q4's balance sheet on
+        // 2025Q4's capital is within the year, so nothing is said.
+        var issuer = new MixedIssuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [4]);
+
+        for (var quarter = 1; quarter <= 4; quarter++)
+        {
+            issuer.Vendor(FiscalQuarter.Create(2026, quarter), profit: 250_000_000_000m, equity: 10_000_000_000_000m);
+        }
+
+        var ratios = await issuer.ReadAsync(new DateOnly(2027, 6, 1));
+
+        Assert.Equal(FiscalQuarter.Create(2026, 4), ratios.BalanceSheet);
+        Assert.Equal(100_000_000m, ratios.Shares.Value);
+        Assert.DoesNotContain(ratios.Findings, finding => finding.Contains("charter capital", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_vendor_value_of_a_quarter_the_row_does_not_read_is_not_counted()
     {
         // Control for the two above: the same filed year, and a vendor value
