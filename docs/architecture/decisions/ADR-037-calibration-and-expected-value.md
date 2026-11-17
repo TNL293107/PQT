@@ -100,7 +100,10 @@ rather than being "refused". The realised outcome at *t* is read through
 ### 5. Recording
 
 No new table. A run has `strategy = "calibration"`, under the experiment
-`<experiment>-calibration`, and parameters `feature`, `transform_version`,
+`<experiment>-calibration` (the suffix is not added twice to a name that
+already ends with it; with no `--experiment` the name defaults to the job kind,
+so the run is recorded under `calibration-calibration`; a name the suffix pushes
+past 128 characters is refused), and parameters `feature`, `transform_version`,
 `quantiles`, `calibration_version` (v1 `"cal-1"`), `cost_model_version` and
 the five cost figures. ADR-036 §5 applies verbatim: a trial is one
 `parameters_hash` on one dataset version, so every payload field counts; a

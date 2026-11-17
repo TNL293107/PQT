@@ -62,3 +62,26 @@ def test_a_field_the_backend_does_not_write_is_refused_by_the_worker(
 
     with pytest.raises(JobRejectedError, match="Unknown payload field"):
         handler({**_payload(kind), "hypothesis": "not a payload field"})
+
+
+# --- The calibration job kind (sprint 11.1, ADR-037 §5) ----------------------
+
+
+def test_the_backend_s_calibration_payload_is_accepted_by_the_worker(tmp_path: Path) -> None:
+    # The handler's own acceptance file writes the 60-session build this needs.
+    from personal_quant.worker.handlers import calibration_handler
+    from test_calibration_handler_acceptance import DATASET as CALIBRATION_DATASET
+    from test_calibration_handler_acceptance import ENGINES as CALIBRATION_ENGINES
+    from test_calibration_handler_acceptance import _write as write_calibration_build
+
+    payload: dict[str, Any] = json.loads(
+        (FIXTURES / "calibration.json").read_text(encoding="utf-8")
+    )
+    assert payload["dataset_id"] == CALIBRATION_DATASET
+    write_calibration_build(tmp_path)
+
+    outcome = calibration_handler(tmp_path, CALIBRATION_ENGINES)(payload)
+
+    assert outcome.run is not None
+    assert outcome.run.strategy == "calibration"
+    assert outcome.run.experiment == "acceptance-calibration"
