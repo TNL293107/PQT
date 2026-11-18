@@ -26,9 +26,10 @@ Checks:
                  the seed manifest of the portable data volume
   E  store       the folder's checksums, free space on the stick
 
-The seed manifest contract (docker-compose.portable.yml): the volume <project>_pqt-data holds
-/.seed-manifest.sha256, one line per file under data/fixtures and data/schemas, as
-"<sha256>  <path relative to data/, with forward slashes>", sorted by path (ordinal).
+The seed manifest is the one tools/stack/seed-data.ps1 writes: SHA256SUMS at the root of the volume
+<project>_pqt-data, in sha256sum -c format, one line per file under data/fixtures and data/schemas,
+as "<sha256>  <path relative to data/, with forward slashes>". D5 checks that the volume's files
+match it (sha256sum -c inside the volume) and that it matches the checkout, in any order.
 #>
 param(
     [Parameter(Mandatory)] [ValidateSet('desktop', 'laptop')] [string] $Role,
@@ -253,14 +254,17 @@ if ($Stage -ne 'before-restore' -and $dockerUp) {
                 }
             }
         })
-        $seeded = Invoke-Quiet docker run --rm -v "${dataVolume}:/d:ro" $Image cat /d/.seed-manifest.sha256
+        $seeded = Invoke-Quiet docker run --rm -v "${dataVolume}:/d:ro" $Image cat /d/SHA256SUMS
         if ($seeded.Code -ne 0) {
-            Report FAIL D5 "$dataVolume has no /.seed-manifest.sha256; re-run the seed script"
+            Report FAIL D5 "$dataVolume has no SHA256SUMS; run tools/stack/seed-data.ps1"
         } else {
+            $selfCheck = Invoke-Quiet docker run --rm -v "${dataVolume}:/d:ro" $Image sh -c 'cd /d && sha256sum -c -s SHA256SUMS'
+            if ($selfCheck.Code -eq 0) { Report PASS D5 "the files in $dataVolume match its SHA256SUMS" }
+            else { Report FAIL D5 "the files in $dataVolume do not match its SHA256SUMS; re-run tools/stack/seed-data.ps1" }
             $theirs = @($seeded.Output | Where-Object { $_ })
             $diff = @(Compare-Object $local $theirs -CaseSensitive)
-            if ($diff.Count -eq 0) { Report PASS D5 "seed manifest matches data/fixtures and data/schemas ($($local.Count) files)" }
-            else { Report FAIL D5 "seed manifest differs from the checkout in $($diff.Count) line(s); re-run the seed script" }
+            if ($diff.Count -eq 0) { Report PASS D5 "SHA256SUMS matches data/fixtures and data/schemas in the checkout ($($local.Count) files)" }
+            else { Report FAIL D5 "SHA256SUMS differs from the checkout in $($diff.Count) line(s); re-run tools/stack/seed-data.ps1" }
         }
     }
 }

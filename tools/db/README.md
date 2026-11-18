@@ -116,12 +116,12 @@ inventories stop comparing. Preflight fails on it.
 | D1 | `HOLDER.txt` names this role. When the token is in transit, `-From` must be its folder |
 | D2 | After `up`, the live inventory against the token's folder. Equal is PASS. A changed table is WARN (expected only if this machine wrote). Fewer rows or an older migration is FAIL |
 | D3, D4 | `/health` answers 200. `/app/data/fixtures` in the backend is not empty. `schema status` has no pending migration |
-| D5 | With the portable override, the seed manifest in `<project>_pqt-data` equals the checkout's `data/fixtures` and `data/schemas` |
+| D5 | With the portable override, the files in `<project>_pqt-data` match its `SHA256SUMS`, and `SHA256SUMS` equals the checkout's `data/fixtures` and `data/schemas` |
 | E1, E2 | `-From`'s checksums check out. The stick has room for two more exports |
 
-The seed manifest is `/.seed-manifest.sha256` in the volume. It has one line per file under
-`data/fixtures` and `data/schemas`, in the form `<sha256>  <path relative to data/, forward slashes>`.
-The seed script writes it.
+The seed manifest is `SHA256SUMS` at the root of the volume, written by `tools/stack/seed-data.ps1`
+in `sha256sum -c` format. It has one line per file under `data/fixtures` and `data/schemas`, in the
+form `<sha256>  <path relative to data/, forward slashes>`. Line order does not matter to D5.
 
 ## Keeping folders
 
