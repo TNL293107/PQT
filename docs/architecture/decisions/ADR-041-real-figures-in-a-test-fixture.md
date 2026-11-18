@@ -151,3 +151,9 @@ would carry it, and with it all four figures, into their history. So:
 
   A full local scan therefore reports these 13. Any other hit is new and must
   be looked at.
+
+  **Confirmed against the stored filings on 2026-11-18** (offshore QA + QC,
+  read-only, on the offshore database that ran the IDS imports): each P figure
+  in the test files is held in `quant.statement_lines` as an `as_filed` IDS line
+  of the named issuer, and the store holds no vendor-basis line at all. The
+  classification above stands; the Moderator decided no replacement is needed.
