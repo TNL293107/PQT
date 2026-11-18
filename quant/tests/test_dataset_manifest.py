@@ -189,9 +189,9 @@ def test_an_edited_spell_no_longer_matches_its_hash() -> None:
 
 def test_an_unknown_schema_version_is_refused_rather_than_guessed() -> None:
     raw = _raw("v4-fundamentals.json")
-    raw["schema_version"] = 7
+    raw["schema_version"] = 8
 
-    with pytest.raises(UnsupportedManifestError, match="schema version 7"):
+    with pytest.raises(UnsupportedManifestError, match="schema version 8"):
         DatasetManifest.from_json(raw)
 
 

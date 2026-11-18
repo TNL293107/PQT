@@ -685,8 +685,22 @@ internal sealed class DatasetExportService(
         WriteIndented = false,
     };
 
-    private static DatasetFundamentalsRow Row(FundamentalRatios ratios) =>
-        new(
+    private static DatasetFundamentalsRow Row(FundamentalRatios ratios)
+    {
+        RatioValue[] values =
+        [
+            ratios.Close,
+            ratios.Shares,
+            ratios.NetProfitTtm,
+            ratios.EpsTtm,
+            ratios.BookValuePerShare,
+            ratios.PriceToEarnings,
+            ratios.PriceToBook,
+            ratios.ReturnOnEquity,
+            ratios.DividendYield,
+        ];
+
+        return new(
             ratios.InstrumentId.Value,
             ratios.Session,
             ratios.KnownAsOfUtc,
@@ -702,19 +716,10 @@ internal sealed class DatasetExportService(
             ratios.ProfitQuarters.Count > 0 ? ratios.ProfitQuarters[^1].ToString() : null,
             ratios.ActionsApplied,
             ratios.ActionsWithheld,
-            [.. new[]
-            {
-                ratios.Close,
-                ratios.Shares,
-                ratios.NetProfitTtm,
-                ratios.EpsTtm,
-                ratios.BookValuePerShare,
-                ratios.PriceToEarnings,
-                ratios.PriceToBook,
-                ratios.ReturnOnEquity,
-                ratios.DividendYield,
-            }.Select(value => (value.Value, value.Value is null ? AbsenceCode(value.Reason) : null))],
-            JsonSerializer.Serialize(ratios.Findings.Order(StringComparer.Ordinal).ToList(), ArrayJson));
+            [.. values.Select(value => (value.Value, value.Value is null ? AbsenceCode(value.Reason) : null))],
+            JsonSerializer.Serialize(ratios.Findings.Order(StringComparer.Ordinal).ToList(), ArrayJson),
+            [.. values.Select(value => value.FromVendor)]);
+    }
 
     /// <summary>The <see cref="RatioAbsence"/> code in snake_case, as the file carries it.</summary>
     internal static string AbsenceCode(RatioAbsence? reason) =>

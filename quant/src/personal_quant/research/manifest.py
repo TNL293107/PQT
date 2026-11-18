@@ -54,7 +54,7 @@ __all__ = [
 
 Membership = Literal["as_of", "point_in_time"]
 
-SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4, 5, 6})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2, 3, 4, 5, 6, 7})
 
 HISTORY_SCHEMA_VERSION = 3
 """The first schema whose manifests carry history and removal announcements."""
@@ -66,6 +66,11 @@ REQUEST_SCHEMA_VERSION = 5
 """The first schema whose manifests carry the labelled-dataset request."""
 
 VENDOR_SCHEMA_VERSION = 6
+VENDOR_FLAGS_SCHEMA_VERSION = 7
+"""From schema 7 every value of ``fundamentals.parquet`` carries a vendor flag (11.6, ADR-038).
+
+The flags are in the file, which the manifest hashes by its SHA-256, so the
+content hash adds no part for them: it is schema 6's, with the version 7."""
 """The first schema whose fundamentals object counts vendor rows (ADR-038)."""
 
 SUPPORTED_RATIO_VERSIONS = frozenset({1, 2})

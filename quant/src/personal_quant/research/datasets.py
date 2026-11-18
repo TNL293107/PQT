@@ -56,6 +56,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from personal_quant.research.manifest import (
+    VENDOR_FLAGS_SCHEMA_VERSION,
     DatasetInstrument,
     DatasetManifest,
     UnsupportedManifestError,
@@ -89,6 +90,12 @@ FUNDAMENTAL_VALUES = (
     "dividend_yield",
 )
 """The value columns of ``fundamentals.parquet``, each beside its ``_absent`` reason."""
+
+VENDOR_FLAG_SUFFIX = "_vendor"
+"""From schema 7, each value column's vendor flag is ``<value>_vendor``, a non-null bool.
+
+A flag says a vendor input was read for the value, so an absent value can carry
+one (an ROE whose closing equity is missing still read a vendor quarter)."""
 
 _BUILD = re.compile(r"v(?P<version>[1-9][0-9]*)")
 _COLUMNS = [
@@ -179,7 +186,9 @@ class CanonicalDataset:
         self._bars = {key: MappingProxyType(value) for key, value in by_instrument.items()}
         self._sessions = tuple(sorted({bar.session for bar in bars}))
         self._all = frozenset(instrument.instrument_id for instrument in manifest.instruments)
-        self._fundamentals = _index_fundamentals(fundamentals)
+        self._fundamentals = _index_fundamentals(
+            fundamentals, manifest.schema_version >= VENDOR_FLAGS_SCHEMA_VERSION
+        )
 
     @property
     def manifest(self) -> DatasetManifest:
@@ -545,11 +554,30 @@ def _verify_fundamentals(manifest: DatasetManifest, table: Any) -> None:  # noqa
                     )
                 )
 
+        if manifest.schema_version >= VENDOR_FLAGS_SCHEMA_VERSION:
+            _verify_vendor_flags(columns, index, f"{instrument_id} on {session}")
+
         for name in ("report_ids", "findings"):
             if not _string_list(columns[name][index]):
                 raise DatasetIntegrityError(
                     f"{instrument_id} on {session}: {name} is not a JSON array of strings."
                 )
+
+
+def _verify_vendor_flags(columns: Mapping[str, list[Any]], index: int, where: str) -> None:
+    for name in FUNDAMENTAL_VALUES:
+        flag_column = name + VENDOR_FLAG_SUFFIX
+
+        if flag_column not in columns:
+            raise DatasetIntegrityError(
+                f"Schema {VENDOR_FLAGS_SCHEMA_VERSION} requires {flag_column} "
+                f"in {FUNDAMENTALS_FILE}."
+            )
+
+        flag = columns[flag_column][index]
+
+        if not isinstance(flag, bool):
+            raise DatasetIntegrityError(f"{where}: {flag_column} is {flag!r}, not true or false.")
 
 
 def _member_on(manifest: DatasetManifest, instrument: DatasetInstrument, session: date) -> bool:
@@ -676,6 +704,7 @@ def _read_bars(payload: bytes) -> list[Bar]:
 
 def _index_fundamentals(
     table: Any,  # noqa: ANN401 - pyarrow ships no types.
+    flagged: bool,
 ) -> dict[str, MappingProxyType[date, FundamentalsRow]]:
     if table is None:
         return {}
@@ -687,12 +716,18 @@ def _index_fundamentals(
             {name: None if row[name] is None else Decimal(row[name]) for name in FUNDAMENTAL_VALUES}
         )
         absent = MappingProxyType({name: row[f"{name}_absent"] for name in FUNDAMENTAL_VALUES})
+        # Before schema 7 there are no flags, and none is read from a column
+        # the verifier did not hold to the build.
+        vendor = frozenset(
+            name for name in FUNDAMENTAL_VALUES if flagged and row[name + VENDOR_FLAG_SUFFIX]
+        )
         by_instrument.setdefault(row["instrument_id"], {})[row["session"]] = FundamentalsRow(
             instrument_id=row["instrument_id"],
             session=row["session"],
             values=values,
             absent=absent,
             findings=row["findings"],
+            vendor=vendor,
         )
 
     return {key: MappingProxyType(value) for key, value in by_instrument.items()}
