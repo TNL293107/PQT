@@ -22,7 +22,7 @@ Checks:
                  73588e3 is not an ancestor, the portable override on a removable drive, .env keys,
                  MARKET_DATA_IMPORT_ON_STARTUP=false, nothing tracked under tmp/
   C  Docker      the project's volumes, no container on them before a restore, free host ports
-  D  token, DB   HOLDER.txt names this role; after up: inventory, /health, /app/data, schema status,
+  D  token, DB   HOLDER.txt names this role; after up: inventory, /health/ready, /app/data, schema status,
                  the seed manifest of the portable data volume
   E  store       the folder's checksums, free space on the stick
 
@@ -62,7 +62,13 @@ $holder = if (Test-Path $Store) { Read-Holder $Store } else { $null }
 $pgVolume = "${Project}_postgres-data"
 $dsVolume = "${Project}_dataset-data"
 $dataVolume = "${Project}_pqt-data"
-$composeFiles = if ($envMap['COMPOSE_FILE']) { $envMap['COMPOSE_FILE'] } else { '' }
+# Compose takes COMPOSE_FILE from the shell first and from .env only when the shell has none.
+$composeSource = 'shell'
+$composeFiles = $env:COMPOSE_FILE
+if (-not $composeFiles) {
+    $composeSource = '.env'
+    $composeFiles = if ($envMap['COMPOSE_FILE']) { $envMap['COMPOSE_FILE'] } else { '' }
+}
 $portableInUse = $composeFiles -match 'docker-compose\.portable\.yml'
 
 Write-Host "preflight: role=$Role stage=$Stage repo=$Repo"
@@ -134,9 +140,9 @@ $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$drive'" -ErrorActi
 $removable = $disk -and $disk.DriveType -eq 2
 $portableFile = Test-Path (Join-Path $Repo 'docker-compose.portable.yml')
 if ($removable) {
-    if ($portableFile -and $portableInUse) { Report PASS B4 'repo on a removable drive, and .env COMPOSE_FILE uses docker-compose.portable.yml' }
+    if ($portableFile -and $portableInUse) { Report PASS B4 "repo on a removable drive, and COMPOSE_FILE ($composeSource) uses docker-compose.portable.yml" }
     elseif (-not $portableFile) { Report FAIL B4 'repo on a removable drive, and docker-compose.portable.yml is missing: ./data cannot be bind-mounted' }
-    else { Report FAIL B4 'repo on a removable drive, and .env COMPOSE_FILE does not include docker-compose.portable.yml' }
+    else { Report FAIL B4 "repo on a removable drive, and COMPOSE_FILE ($composeSource) does not include docker-compose.portable.yml" }
 } else {
     Report PASS B4 "repo on a fixed drive$(if ($portableInUse) { '; the portable override is in use' })"
 }
@@ -224,9 +230,10 @@ if ($Stage -eq 'after-up' -and $dockerUp) {
 
     $apiPort = if ($envMap['API_PORT']) { $envMap['API_PORT'] } else { '8080' }
     try {
-        $health = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "http://localhost:$apiPort/health"
-        if ($health.StatusCode -eq 200) { Report PASS D3 '/health answers 200' } else { Report FAIL D3 "/health answers $($health.StatusCode)" }
-    } catch { Report FAIL D3 '/health does not answer' }
+        # /health/ready, not /health: it checks the database and Redis too (PLAN G1).
+        $health = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "http://localhost:$apiPort/health/ready"
+        if ($health.StatusCode -eq 200) { Report PASS D3 '/health/ready answers 200' } else { Report FAIL D3 "/health/ready answers $($health.StatusCode)" }
+    } catch { Report FAIL D3 '/health/ready does not answer 200' }
 
     $fixtures = Invoke-Quiet docker compose --project-directory $Repo exec -T backend sh -c 'ls -A /app/data/fixtures | wc -l'
     if ($fixtures.Code -ne 0) { Report FAIL D3 'cannot list /app/data/fixtures in the backend container' }
