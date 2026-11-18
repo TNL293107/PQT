@@ -113,8 +113,38 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Fails on any high or critical advisory except those allowed below.
+      # GHSA-fc5q-39xc-vjpf (picomatch ReDoS, <=4.0.7): no fixed picomatch is
+      # published, and npm's only fix is a vite major downgrade. picomatch is
+      # dev-only (vite/vitest globbing our own paths; `npm ls picomatch
+      # --omit=dev` is empty), so it never ships. Remove it from ALLOWED once
+      # picomatch publishes a fixed release. A package passes only when every
+      # high/critical advisory reaching it, through its `via` chain, is allowed.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: |
+          npm audit --json > audit.json || true
+          node - audit.json <<'EOF'
+          const ALLOWED = new Set(["GHSA-fc5q-39xc-vjpf"]);
+          const audit = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+          if (!audit.vulnerabilities) {
+            console.error("npm audit gave no vulnerability report:", audit.error ?? audit);
+            process.exit(1);
+          }
+          const advisories = (name, seen = new Set()) => {
+            if (seen.has(name)) return [];
+            seen.add(name);
+            return (audit.vulnerabilities[name]?.via ?? []).flatMap((via) =>
+              typeof via === "string" ? advisories(via, seen) : [via]);
+          };
+          const blocking = Object.keys(audit.vulnerabilities).flatMap((name) =>
+            advisories(name)
+              .filter((a) => ["high", "critical"].includes(a.severity))
+              .filter((a) => !ALLOWED.has(a.url.split("/").pop()))
+              .map((a) => `${name}: ${a.severity} ${a.url} ${a.title}`));
+          for (const line of new Set(blocking)) console.error(line);
+          if (blocking.length) process.exit(1);
+          console.log("No high or critical advisory outside the allow-list.");
+          EOF
 
       - name: Lint
         run: npm run lint
