@@ -91,8 +91,11 @@ public sealed class VendorJoinTests
     {
         // IDS holds the H1 report only. Vietcap has no half-year row, and a Q2
         // is not an H1: a different period type, so a finding.
+        // Recorded after its 20 August filing, so the H1 is held and the join
+        // really sees it: recorded at IdsRead (2 May) it was refused at import.
         var harness = new Harness();
-        await harness.ImportIdsAsync(BlankHalfYear(2026));
+        await harness.ImportIdsAtAsync(new DateTimeOffset(2026, 8, 21, 9, 0, 0, TimeSpan.Zero), BlankHalfYear(2026));
+        Assert.Equal(FinancialReportKind.SemiAnnualReviewed, Assert.Single(harness.Store.Reports).Kind);
 
         var report = await harness.ImportVendorAsync(Vendor(2026, 2));
 
