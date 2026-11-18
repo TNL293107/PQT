@@ -100,7 +100,12 @@ public static class InfrastructureServiceCollectionExtensions
         {
             // The endpoint gzips its statements whether asked or not.
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-        });
+        })
+        // The factory's default handlers log every request URI at Information,
+        // which would print the vendor's URL wherever an import runs, the CLI's
+        // terminal included (QA, PR #32). The provider's own log lines name the
+        // ticker and section, which is all an operator needs.
+        .RemoveAllLoggers();
 
         services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(provider =>
             new Fundamentals.VietcapStatementProvider(

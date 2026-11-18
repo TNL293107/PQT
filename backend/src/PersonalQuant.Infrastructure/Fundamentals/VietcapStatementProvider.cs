@@ -175,8 +175,11 @@ internal sealed class VietcapStatementProvider(IHttpClientFactory clients, ICloc
             || (error is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
             // A cancellation the caller did not ask for is HttpClient's timeout.
+            // The kind of failure only, not its message: a DNS or socket
+            // error names the host, and the CLI prints this text (PR #32).
+            var kind = error is TaskCanceledException ? "timed out" : "connection failed";
             throw new MarketDataProviderException(
-                $"Vietcap could not be reached for {ticker} {section} ({error.Message}); the run stopped and nothing was joined.",
+                $"Vietcap could not be reached for {ticker} {section} ({kind}); the run stopped and nothing was joined.",
                 isTransient: true,
                 error);
         }
