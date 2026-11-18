@@ -57,6 +57,38 @@ command exits 1. The commands that never ingest — `provider`, `quality`,
 Nothing about the CLI starts the API's hosted services. It never migrates, never
 seeds and never begins a scheduled pass.
 
+### On a drive Docker cannot bind-mount
+
+Docker Desktop cannot bind-mount every drive. A repository on a USB stick is the
+known case. A failed bind mount does not stop the container: the backend starts
+with an empty `/app/data`, so it finds no instrument list, calendar or universe.
+On such a checkout, use the portable overlay, which mounts the named volume
+`personal-quant-terminal_pqt-data` at `/app/data` instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/stack/seed-data.ps1
+$env:COMPOSE_FILE = "docker-compose.yml;docker-compose.portable.yml"
+docker compose up -d postgres redis backend
+docker compose exec backend sh -c "cd /app/data && sha256sum -c --status SHA256SUMS && echo seeded"
+```
+
+- The seed script copies `data/fixtures` and `data/schemas` only, and never
+  `data/tmp`. It empties the volume first, and it writes `SHA256SUMS` beside them.
+- It copies the working tree, not git. An untracked or ignored file under
+  either folder goes into the volume too, and `SHA256SUMS` lists it. Run
+  `git status data` first.
+- The container reads a snapshot. Re-run the script after changing either
+  folder, then restart the backend.
+- Every `docker compose` command for that stack must read both files, `exec`
+  included, or Compose reads the plain file and plans a bind mount again.
+  `COMPOSE_FILE` does that for the shell it is set in. The separator is `;` on
+  Windows and `:` elsewhere. Without it, give `-f docker-compose.yml -f
+  docker-compose.portable.yml` to each command.
+- The backend image has GNU `sha256sum`, which takes `--status`. The busybox
+  `-s` form fails there.
+- The internal disk of the desktop, `E:\PQT`, bind-mounts normally (probed on
+  2026-11-18), so the overlay is needed only on a drive that fails.
+
 ---
 
 ## Commands
