@@ -17,8 +17,9 @@ What it does:
 - It checks SHA256SUMS.txt first.
 - A real restore obeys HOLDER.txt in the store (the folder that holds -From). It goes ahead only
   when the database is in transit and the token's dump SHA-256 equals this folder's pqt.dump, or
-  when this role already holds the database and -From is one of its own snapshots (a rollback).
-  Anything else is refused unless -Force.
+  when this role already holds the database and rolls back: to the folder HOLDER.txt names (its
+  last restore or hand-over), or to one of its own snapshots no older than that folder. Anything
+  else is refused unless -Force.
 - It refuses to run while any container uses the target volumes. Stop the stack first:
   docker compose down. Do not use -v.
 - If a target volume already exists, it needs -Replace. The old volume is then saved as
@@ -93,8 +94,21 @@ if ($dryRun) {
             $refusal = "HOLDER.txt is in transit with $($holder['folder']), whose dump SHA-256 is not this folder's ($folder)."
         }
     } elseif ($holder['holder'] -eq $Role) {
-        if ((Get-FolderRole $From) -ne $Role) {
+        # A rollback: the folder this role last took the database from, or one of its own snapshots
+        # taken since then. An older snapshot predates the last hand-over and would lose the other
+        # machine's work.
+        $baseStamp = Get-FolderStamp $holder['folder']
+        $fromStamp = Get-FolderStamp $From
+        if ($folder -eq $holder['folder']) {
+            if ($holder['dump_sha256'] -and $holder['dump_sha256'] -ne $dumpSha) {
+                $refusal = "$folder is the folder HOLDER.txt names, but its dump SHA-256 has changed."
+            }
+        } elseif ((Get-FolderRole $From) -ne $Role) {
             $refusal = "$Role already holds the database, and $folder is not one of its own snapshots."
+        } elseif (-not $baseStamp -or -not $fromStamp) {
+            $refusal = "Cannot tell whether $folder is newer than $($holder['folder']), the folder HOLDER.txt names."
+        } elseif ($fromStamp -lt $baseStamp) {
+            $refusal = "$folder is older than $($holder['folder']), the last restore or hand-over HOLDER.txt names; it would lose the work done since."
         }
     } else {
         $refusal = "HOLDER.txt names $($holder['holder']). Hand the database over from there first (export-db.ps1 -Handover)."

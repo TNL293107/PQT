@@ -41,11 +41,27 @@ function Assert-Volume([string] $Name) {
 # The dumps hold IDS figures, role password hashes and possibly vendor lines. They must never sit
 # inside a git work tree, where one `git add` would commit them.
 function Assert-StoreOutsideRepo([string] $Store) {
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return }
-    $probe = Invoke-Quiet git -C $Store rev-parse --show-toplevel
-    if ($probe.Code -eq 0) {
-        throw "-Store $Store is inside the git work tree $($probe.Output[0]). Keep dumps outside any repository (the stick's db folder)."
+    $message = "Keep dumps outside any repository (the stick's db folder)."
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $probe = Invoke-Quiet git -C $Store rev-parse --show-toplevel
+        if ($probe.Code -eq 0) { throw "-Store $Store is inside the git work tree $($probe.Output[0]). $message" }
     }
+    # git refuses a work tree it calls "dubious ownership" (a stick's NTFS or exFAT owner), and then
+    # rev-parse fails as if there were none. So look for .git (a folder, or a worktree's file) too.
+    $dir = (Resolve-Path $Store).Path
+    while ($dir) {
+        if (Test-Path -LiteralPath (Join-Path $dir '.git')) { throw "-Store $Store is inside the git work tree $dir. $message" }
+        $parent = Split-Path $dir -Parent
+        if ($parent -eq $dir) { break }
+        $dir = $parent
+    }
+}
+
+# The yyyyMMdd-HHmm stamp a folder name starts with, or $null. Stamps compare as strings.
+function Get-FolderStamp([string] $Folder) {
+    $name = Split-Path $Folder -Leaf
+    if ($name -match '^(\d{8}-\d{4})-') { return $Matches[1] }
+    return $null
 }
 
 function Get-FileSha256([string] $Path) {

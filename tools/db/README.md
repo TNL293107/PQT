@@ -37,7 +37,10 @@ The file also records the folder, its dump SHA-256, the Postgres image digest an
   - `-InitHolder` writes the first token in an empty store.
 - **Restore** into the project's volumes is allowed in two cases:
   - the token is `in-transit` and its SHA-256 matches `-From`'s `pqt.dump`;
-  - this role holds the database and `-From` is one of its own snapshots (a rollback).
+  - this role holds the database and rolls back, either to the folder the token names (its last
+    restore or hand-over) or to one of its own snapshots that is no older than that folder. An
+    older snapshot predates the last hand-over, so restoring it would lose the other machine's
+    work.
 
   Anything else is refused unless `-Force`. A dry run, into the throwaway volumes `-PgVolume` and
   `-DatasetVolume`, ignores the token and leaves it unchanged.
@@ -111,11 +114,11 @@ inventories stop comparing. Preflight fails on it.
 | Id | Check |
 | --- | --- |
 | A2–A6 | Docker answers. The Postgres image is present, with its digest compared to the token's. The .NET SDK that `global.json` asks for is installed. `quant\.venv` imports `personal_quant`. `frontend\node_modules` is present |
-| B1–B6 | The tree is clean, and HEAD contains the commit the database was written with. Not behind `origin/develop`. `73588e3` is not an ancestor. On a removable drive, `.env` `COMPOSE_FILE` includes `docker-compose.portable.yml`. `.env` has the Postgres keys and `RESEARCH_DB_PASSWORD`, and `MARKET_DATA_IMPORT_ON_STARTUP` is false. Nothing under `tmp/` or `data/tmp/` is tracked |
+| B1–B6 | The tree is clean, and HEAD contains the commit the database was written with. Not behind `origin/develop`. `73588e3` is not an ancestor. On a removable drive, `COMPOSE_FILE` (from the shell first, else `.env`, as Compose reads it) includes `docker-compose.portable.yml`. `.env` has the Postgres keys and `RESEARCH_DB_PASSWORD`, and `MARKET_DATA_IMPORT_ON_STARTUP` is false. Nothing under `tmp/` or `data/tmp/` is tracked |
 | C1–C3 | The project's volumes exist. No container uses them before a restore. The host ports are free before `up` |
 | D1 | `HOLDER.txt` names this role. When the token is in transit, `-From` must be its folder |
 | D2 | After `up`, the live inventory against the token's folder. Equal is PASS. A changed table is WARN (expected only if this machine wrote). Fewer rows or an older migration is FAIL |
-| D3, D4 | `/health` answers 200. `/app/data/fixtures` in the backend is not empty. `schema status` has no pending migration |
+| D3, D4 | `/health/ready` answers 200. `/app/data/fixtures` in the backend is not empty. `schema status` has no pending migration |
 | D5 | With the portable override, the files in `<project>_pqt-data` match its `SHA256SUMS`, and `SHA256SUMS` equals the checkout's `data/fixtures` and `data/schemas` |
 | E1, E2 | `-From`'s checksums check out. The stick has room for two more exports |
 
