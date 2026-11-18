@@ -378,6 +378,21 @@ jobs:
       - name: Validate Docker Compose configuration
         run: docker compose --env-file .env.example config --quiet
 
+      # The portable overlay (a checkout Docker Desktop cannot bind-mount) must
+      # still merge, and must leave the backend with no bind mount at all: one
+      # left over would fail silently on such a drive.
+      - name: Validate the portable Compose overlay
+        run: |
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.portable.yml config --quiet
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.portable.yml config --format json > portable-compose.json
+          python3 - portable-compose.json <<'PY'
+          import json, sys
+          config = json.load(open(sys.argv[1], encoding="utf-8"))
+          binds = [m["target"] for m in config["services"]["backend"]["volumes"] if m["type"] == "bind"]
+          assert not binds, f"bind mounts left in the backend: {binds}"
+          assert config["volumes"]["pqt-data"]["name"] == "personal-quant-terminal_pqt-data"
+          PY
+
   # ---------------------------------------------------------------------------
   # Single required status for branch protection.
   # ---------------------------------------------------------------------------
