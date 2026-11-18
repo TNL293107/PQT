@@ -1,0 +1,29 @@
+# Overlay for a checkout whose drive Docker Desktop cannot bind-mount, such as
+# a repository on a USB stick:
+#
+#   pwsh tools/stack/seed-data.ps1
+#   docker compose -f docker-compose.yml -f docker-compose.portable.yml up -d postgres redis backend
+#
+# It replaces one mount. The backend's ./data bind mount becomes the named
+# volume pqt-data, which tools/stack/seed-data.ps1 fills from data/fixtures and
+# data/schemas with docker cp. A bind mount that fails on such a drive does not
+# stop the container: the backend starts with an empty /app/data and finds no
+# instrument list, calendar or universe. A volume cannot fail that way, and the
+# seed script leaves a SHA256SUMS file in it to check against the checkout.
+#
+# The container reads a snapshot, not the checkout. Re-run the seed script
+# after changing anything under data/fixtures or data/schemas.
+#
+# The volume name is fixed, like every volume of this project, so that a
+# checkout in a folder with another name still finds it.
+
+services:
+  backend:
+    volumes: !override
+      # Read-only, as the bind mount it replaces.
+      - pqt-data:/app/data:ro
+      - dataset-data:/app/datasets
+
+volumes:
+  pqt-data:
+    name: personal-quant-terminal_pqt-data

@@ -57,6 +57,29 @@ command exits 1. The commands that never ingest — `provider`, `quality`,
 Nothing about the CLI starts the API's hosted services. It never migrates, never
 seeds and never begins a scheduled pass.
 
+### On a drive Docker cannot bind-mount
+
+Docker Desktop cannot bind-mount every drive. A repository on a USB stick is the
+known case. A failed bind mount does not stop the container: the backend starts
+with an empty `/app/data`, so it finds no instrument list, calendar or universe.
+On such a checkout, use the portable overlay, which mounts the named volume
+`personal-quant-terminal_pqt-data` at `/app/data` instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/stack/seed-data.ps1
+docker compose -f docker-compose.yml -f docker-compose.portable.yml up -d postgres redis backend
+docker compose exec backend sh -c "cd /app/data && sha256sum -c -s SHA256SUMS && echo seeded"
+```
+
+- The seed script copies `data/fixtures` and `data/schemas` only, and never
+  `data/tmp`. It empties the volume first, and it writes `SHA256SUMS` beside them.
+- The container reads a snapshot. Re-run the script after changing either
+  folder, then restart the backend.
+- Give both `-f` files to every `docker compose` command for that stack, `exec`
+  included, or Compose reads the plain file and plans a bind mount again.
+- The internal disk of the desktop, `E:\PQT`, bind-mounts normally (probed on
+  2026-11-18), so the overlay is needed only on a drive that fails.
+
 ---
 
 ## Commands
