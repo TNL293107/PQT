@@ -139,6 +139,11 @@ services:
       MarketData__IdsFilingsDirectory: ${MARKET_DATA_IDS_FILINGS:-}
       MarketData__UniverseDirectory: ${MARKET_DATA_UNIVERSES:-/app/data/fixtures/universes}
       MarketData__VietcapBaseUrl: ${MARKET_DATA_VIETCAP_URL:-}
+      # Vietcap's financial statements, a vendor fundamentals source (ADR-038),
+      # and a different source from the bars above. Empty leaves it
+      # unregistered; the tickers are the non-bank VN30 members.
+      MarketData__VietcapStatementsBaseUrl: ${MARKET_DATA_VIETCAP_STATEMENTS_URL:-}
+      MarketData__VietcapStatementsTickers: ${MARKET_DATA_VIETCAP_STATEMENTS_TICKERS:-}
       MarketData__CafefBaseUrl: ${MARKET_DATA_CAFEF_URL:-}
       MarketData__IngestionSource: ${MARKET_DATA_INGESTION_SOURCE:-}
       MarketData__ImportReferenceDataOnStartup: ${MARKET_DATA_IMPORT_ON_STARTUP:-false}

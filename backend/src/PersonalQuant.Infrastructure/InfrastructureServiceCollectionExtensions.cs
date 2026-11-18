@@ -71,8 +71,9 @@ public static class InfrastructureServiceCollectionExtensions
     /// Registers Vietcap's statements as a vendor fundamentals provider (ADR-038).
     /// </summary>
     /// <remarks>
-    /// ponytail: not called from <see cref="AddInfrastructure"/>; it is wired
-    /// to configuration with the first live import, which the Moderator approves.
+    /// <see cref="AddInfrastructure"/> calls it when
+    /// <c>MarketData:VietcapStatementsBaseUrl</c> is set, with the tickers from
+    /// <c>MarketData:VietcapStatementsTickers</c>. Nothing is registered by default.
     /// </remarks>
     /// <param name="services">The service collection to add to.</param>
     /// <param name="baseAddress">The API root the statement paths are relative to.</param>
@@ -99,7 +100,12 @@ public static class InfrastructureServiceCollectionExtensions
         {
             // The endpoint gzips its statements whether asked or not.
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-        });
+        })
+        // The factory's default handlers log every request URI at Information,
+        // which would print the vendor's URL wherever an import runs, the CLI's
+        // terminal included (QA, PR #32). The provider's own log lines name the
+        // ticker and section, which is all an operator needs.
+        .RemoveAllLoggers();
 
         services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(provider =>
             new Fundamentals.VietcapStatementProvider(
@@ -307,6 +313,23 @@ public static class InfrastructureServiceCollectionExtensions
 
             services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(
                 _ => new Fundamentals.IdsFilingFileProvider(directory));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.VietcapStatementsBaseUrl))
+        {
+            var root = options.VietcapStatementsBaseUrl.EndsWith('/')
+                ? options.VietcapStatementsBaseUrl
+                : options.VietcapStatementsBaseUrl + "/";
+            var tickers = options.VietcapStatementsTickers
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            AddVietcapStatements(services, new Uri(root, UriKind.Absolute), tickers);
+
+            // The operator's check that the wiring took (plan 11.6 step 7):
+            // one startup line with the ticker count, never the URL.
+            services.AddHostedService(provider => new Fundamentals.VietcapStatementsStartupLog(
+                tickers.Length,
+                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Fundamentals.VietcapStatementsStartupLog>>()));
         }
 
         if (!string.IsNullOrWhiteSpace(options.UniverseDirectory))

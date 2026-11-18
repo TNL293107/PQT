@@ -188,6 +188,29 @@ public sealed class MarketDataOptions : IValidatableObject
     public string VietcapBaseUrl { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the API root of Vietcap's financial statements, a vendor
+    /// fundamentals source (ADR-038).
+    /// </summary>
+    /// <remarks>
+    /// Empty by default, which leaves the statement provider unregistered:
+    /// setting it reaches a third party, and the first live import is the
+    /// Moderator's to approve. It is a different source from
+    /// <see cref="VietcapBaseUrl"/>, which serves adjusted bars, and neither
+    /// switches the other on.
+    /// </remarks>
+    public string VietcapStatementsBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the tickers the statement provider reads, comma separated.
+    /// </summary>
+    /// <remarks>
+    /// Empty by default. ADR-038 covers non-bank Circular 99 forms only, so the
+    /// list is the non-bank VN30 members, and it lives in the deployment's
+    /// environment, not in the repository.
+    /// </remarks>
+    public string VietcapStatementsTickers { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the base address of the CafeF public price-history
     /// endpoint, or an empty string to leave that source unregistered.
     /// </summary>
