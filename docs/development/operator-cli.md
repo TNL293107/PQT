@@ -67,16 +67,25 @@ On such a checkout, use the portable overlay, which mounts the named volume
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/stack/seed-data.ps1
-docker compose -f docker-compose.yml -f docker-compose.portable.yml up -d postgres redis backend
-docker compose exec backend sh -c "cd /app/data && sha256sum -c -s SHA256SUMS && echo seeded"
+$env:COMPOSE_FILE = "docker-compose.yml;docker-compose.portable.yml"
+docker compose up -d postgres redis backend
+docker compose exec backend sh -c "cd /app/data && sha256sum -c --status SHA256SUMS && echo seeded"
 ```
 
 - The seed script copies `data/fixtures` and `data/schemas` only, and never
   `data/tmp`. It empties the volume first, and it writes `SHA256SUMS` beside them.
+- It copies the working tree, not git. An untracked or ignored file under
+  either folder goes into the volume too, and `SHA256SUMS` lists it. Run
+  `git status data` first.
 - The container reads a snapshot. Re-run the script after changing either
   folder, then restart the backend.
-- Give both `-f` files to every `docker compose` command for that stack, `exec`
+- Every `docker compose` command for that stack must read both files, `exec`
   included, or Compose reads the plain file and plans a bind mount again.
+  `COMPOSE_FILE` does that for the shell it is set in. The separator is `;` on
+  Windows and `:` elsewhere. Without it, give `-f docker-compose.yml -f
+  docker-compose.portable.yml` to each command.
+- The backend image has GNU `sha256sum`, which takes `--status`. The busybox
+  `-s` form fails there.
 - The internal disk of the desktop, `E:\PQT`, bind-mounts normally (probed on
   2026-11-18), so the overlay is needed only on a drive that fails.
 
