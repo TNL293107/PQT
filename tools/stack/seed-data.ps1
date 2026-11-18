@@ -34,7 +34,9 @@
 param(
     [string] $Repo,
     [string] $Volume = 'personal-quant-terminal_pqt-data',
-    [string] $Image = 'alpine:3.20'
+    # The stack's own Postgres image: already present wherever the stack runs, so an offline
+    # machine needs no pull. It is alpine-based, so busybox tar and sha256sum are there.
+    [string] $Image = 'postgres:17-alpine'
 )
 
 $ErrorActionPreference = 'Stop'
