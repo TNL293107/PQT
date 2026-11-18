@@ -71,6 +71,10 @@ public sealed record DatasetBar(
 /// <param name="ActionsWithheld">Actions in the window not yet announced.</param>
 /// <param name="Values">The nine values, in <see cref="DatasetFundamentalsRow.ValueNames"/> order.</param>
 /// <param name="Findings">What the share-count checks found, as a JSON array.</param>
+/// <param name="VendorFlags">
+/// Whether a vendor value went into each value, in <see cref="DatasetFundamentalsRow.ValueNames"/>
+/// order (schema 7, ADR-038), absent values included. All false when null.
+/// </param>
 public sealed record DatasetFundamentalsRow(
     Guid InstrumentId,
     DateOnly Session,
@@ -83,8 +87,12 @@ public sealed record DatasetFundamentalsRow(
     int ActionsApplied,
     int ActionsWithheld,
     IReadOnlyList<(decimal? Value, string? Absent)> Values,
-    string Findings)
+    string Findings,
+    IReadOnlyList<bool>? VendorFlags = null)
 {
+    /// <summary>The suffix of each value's vendor flag column, written after <c>findings</c> (schema 7).</summary>
+    public const string VendorFlagSuffix = "_vendor";
+
     /// <summary>The value columns, each followed in the file by its <c>_absent</c> companion.</summary>
     public static readonly IReadOnlyList<string> ValueNames =
     [

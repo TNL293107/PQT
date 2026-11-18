@@ -90,6 +90,15 @@ public enum RatioAbsence
 /// <param name="Reason">Why there is no value, as a code, or null when there is one.</param>
 public sealed record RatioValue(decimal? Value, string? Absent, RatioAbsence? Reason = null)
 {
+    /// <summary>
+    /// Gets whether a vendor value was read for this one (ADR-038; manifest
+    /// schema 7): one of its own inputs, not merely a quarter its row reads.
+    /// Set on an absent value too when a vendor input was read before another
+    /// went missing, so the flag says what the value rests on, not whether it
+    /// came out.
+    /// </summary>
+    public bool FromVendor { get; init; }
+
     /// <summary>A known value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The ratio.</returns>
@@ -103,7 +112,7 @@ public sealed record RatioValue(decimal? Value, string? Absent, RatioAbsence? Re
 
     /// <summary>The same absence, carried to a ratio built on this one.</summary>
     /// <returns>The ratio.</returns>
-    public RatioValue Carried() => new(null, Absent, Reason);
+    public RatioValue Carried() => new(null, Absent, Reason) { FromVendor = FromVendor };
 }
 
 /// <summary>An issuer's ratios at a session, and what they were built from.</summary>
@@ -323,19 +332,19 @@ public sealed class FundamentalRatioService(
 
         var eps = Divide(profit, shares);
         var bookValue = balance is { } quarter && lines.EquityToParent(quarter) is { } equity
-            ? Divide(RatioValue.Known(equity), shares)
+            ? Divide(RatioValue.Known(equity) with { FromVendor = lines.EquityIsVendor(quarter) }, shares)
             : RatioValue.Missing(RatioAbsence.NoBalanceSheet, "no balance sheet known");
 
         var priceToEarnings = eps.Value is { } perShare
             ? perShare > 0m
                 ? Divide(close, eps)
-                : RatioValue.Missing(RatioAbsence.TrailingLoss, "trailing loss; no earnings multiple")
+                : RatioValue.Missing(RatioAbsence.TrailingLoss, "trailing loss; no earnings multiple") with { FromVendor = eps.FromVendor }
             : eps.Carried();
 
         var priceToBook = bookValue.Value is { } book
             ? book > 0m
                 ? Divide(close, bookValue)
-                : RatioValue.Missing(RatioAbsence.EquityNotPositive, "book value is not positive")
+                : RatioValue.Missing(RatioAbsence.EquityNotPositive, "book value is not positive") with { FromVendor = bookValue.FromVendor }
             : bookValue.Carried();
 
         var returnOnEquity = ReturnOnEquity(lines, profit, quarters);
@@ -683,16 +692,17 @@ public sealed class FundamentalRatioService(
         }
 
         var latest = quarters[^1];
+        var vendor = profit.FromVendor || lines.EquityIsVendor(latest) || lines.EquityIsVendor(latest.YearEarlier);
 
         if (lines.EquityToParent(latest) is not { } closing || lines.EquityToParent(latest.YearEarlier) is not { } opening)
         {
-            return RatioValue.Missing(RatioAbsence.EquityNotKnownAtBothEnds, "equity is not known at both ends of the trailing year");
+            return RatioValue.Missing(RatioAbsence.EquityNotKnownAtBothEnds, "equity is not known at both ends of the trailing year") with { FromVendor = vendor };
         }
 
         var average = (closing + opening) / 2m;
-        return average > 0m
+        return (average > 0m
             ? RatioValue.Known(trailing / average)
-            : RatioValue.Missing(RatioAbsence.EquityNotPositive, "average equity is not positive");
+            : RatioValue.Missing(RatioAbsence.EquityNotPositive, "average equity is not positive")) with { FromVendor = vendor };
     }
 
     private static RatioValue DividendYield(
@@ -746,16 +756,18 @@ public sealed class FundamentalRatioService(
 
     private static RatioValue Divide(RatioValue numerator, RatioValue denominator)
     {
+        var vendor = numerator.FromVendor || denominator.FromVendor;
+
         if (numerator.Value is not { } top)
         {
-            return numerator.Carried();
+            return numerator.Carried() with { FromVendor = vendor };
         }
 
         if (denominator.Value is not { } bottom || bottom == 0m)
         {
-            return denominator.Value is null ? denominator.Carried() : RatioValue.Missing(RatioAbsence.Unspecified, "division by zero");
+            return (denominator.Value is null ? denominator.Carried() : RatioValue.Missing(RatioAbsence.Unspecified, "division by zero")) with { FromVendor = vendor };
         }
 
-        return RatioValue.Known(top / bottom);
+        return RatioValue.Known(top / bottom) with { FromVendor = vendor };
     }
 }

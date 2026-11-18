@@ -640,7 +640,8 @@ public sealed class DatasetExportServiceTests : IDisposable
 
         var columns = await harness.ColumnsAsync(manifest, IDatasetStore.FundamentalsFileName);
 
-        Assert.Equal(10 + (2 * DatasetFundamentalsRow.ValueNames.Count) + 1, columns.Count);
+        // From schema 7 each value also has its vendor flag, after findings.
+        Assert.Equal(10 + (3 * DatasetFundamentalsRow.ValueNames.Count) + 1, columns.Count);
         Assert.All(columns["scope"], scope => Assert.Equal("consolidated", scope));
         Assert.All(columns["balance_sheet_quarter"], quarter => Assert.Equal("2026Q2", quarter));
         Assert.All(columns["report_ids"], ids => Assert.Equal($"[\"{report.Id.Value}\"]", ids));
@@ -684,14 +685,14 @@ public sealed class DatasetExportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task An_export_whose_values_were_all_filed_states_vendor_rows_0_on_schema_6()
+    public async Task An_export_whose_values_were_all_filed_states_vendor_rows_0_from_schema_6()
     {
         var harness = new Harness(root);
         harness.FileReport(harness.InstrumentId);
 
         var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
 
-        Assert.Equal(DatasetManifest.VendorSchemaVersion, manifest.SchemaVersion);
+        Assert.Equal(DatasetManifest.CurrentSchemaVersion, manifest.SchemaVersion);
         Assert.Equal(0L, manifest.Fundamentals!.VendorRows);
         Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
     }
@@ -722,6 +723,116 @@ public sealed class DatasetExportServiceTests : IDisposable
 
         Assert.Equal(5L, manifest.Fundamentals!.Rows);
         Assert.Equal(0L, manifest.Fundamentals.VendorRows);
+    }
+
+    // --- 11.6 option A: a vendor flag per value, manifest schema 7 (QA v6-M2) --
+
+    // The value columns of fundamentals.parquet (ADR-031), as the Python reader
+    // names them. A flag column is found as the one whose name starts with the
+    // value's and contains "vendor": its exact name is Dev's to choose.
+    private static readonly string[] FundamentalValueColumns =
+        ["close_raw", "shares", "net_profit_ttm", "eps_ttm", "book_value_per_share", "pe", "pb", "roe", "dividend_yield"];
+
+    [Fact]
+    public async Task An_export_with_fundamentals_writes_manifest_schema_7()
+    {
+        var harness = new Harness(root);
+        harness.FillBlankReportFromVendor(harness.InstrumentId);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+
+        Assert.Equal(7, DatasetManifest.CurrentSchemaVersion);
+        Assert.Equal(7, manifest.SchemaVersion);
+        Assert.Equal(5L, manifest.Fundamentals!.VendorRows);
+        Assert.True((await harness.VerifyAsync(manifest.DatasetId, 1)).IsIntact);
+    }
+
+    [Fact]
+    public async Task Every_value_column_of_the_fundamentals_file_has_a_vendor_flag_beside_it()
+    {
+        var harness = new Harness(root);
+        harness.FileReport(harness.InstrumentId);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+        var flags = await VendorFlagsAsync(harness, manifest);
+
+        Assert.Equal(FundamentalValueColumns.Length, flags.Count);
+
+        // A filed-only export: no value rests on a vendor value.
+        foreach (var (name, values) in flags)
+        {
+            Assert.All(values, flag => Assert.False(flag, $"{name} is flagged vendor in a filed-only export."));
+        }
+    }
+
+    [Fact]
+    public async Task A_vendor_balance_sheet_is_flagged_on_the_book_values_and_never_on_the_close()
+    {
+        // The vendor-filled 2026Q2 report states equity and one quarter's
+        // profit: book value and P/B rest on the vendor's equity, the close on a bar.
+        var harness = new Harness(root);
+        harness.FillBlankReportFromVendor(harness.InstrumentId);
+
+        var manifest = (await harness.ExportAsync(pointInTime: true, fundamentals: true)).Manifest!;
+        var flags = await VendorFlagsAsync(harness, manifest);
+
+        Assert.Equal(5, flags["book_value_per_share"].Count);
+        Assert.All(flags["book_value_per_share"], Assert.True);
+        Assert.All(flags["pb"], Assert.True);
+        Assert.All(flags["close_raw"], Assert.False);
+        Assert.All(flags["dividend_yield"], Assert.False);
+    }
+
+    /// <summary>
+    /// Reads each value column's vendor flag from fundamentals.parquet, keyed by
+    /// the value column; fails if a value has no flag column.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<bool>>> VendorFlagsAsync(Harness harness, DatasetManifest manifest)
+    {
+        var path = Path.Combine(harness.Root, manifest.DatasetId, $"v{manifest.DatasetVersion}", IDatasetStore.FundamentalsFileName);
+
+        await using var stream = File.OpenRead(path);
+        await using var reader = await ParquetReader.CreateAsync(stream, cancellationToken: TestContext.Current.CancellationToken);
+        using var group = reader.OpenRowGroupReader(0);
+
+        var flags = new Dictionary<string, IReadOnlyList<bool>>(StringComparer.Ordinal);
+
+        foreach (var value in FundamentalValueColumns)
+        {
+            var field = reader.Schema.DataFields.SingleOrDefault(candidate =>
+                candidate.Name != value
+                && candidate.Name.StartsWith(value, StringComparison.Ordinal)
+                && candidate.Name.Contains("vendor", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(field is not null, $"fundamentals.parquet has no vendor flag column for {value} (11.6 option A, schema 7).");
+
+            flags[value] = await ReadFlagsAsync(group, field!);
+        }
+
+        return flags;
+    }
+
+    private static async Task<IReadOnlyList<bool>> ReadFlagsAsync(ParquetRowGroupReader group, Parquet.Schema.DataField field)
+    {
+        var token = TestContext.Current.CancellationToken;
+
+        if (field.ClrType == typeof(bool) && field.IsNullable)
+        {
+            var values = new bool?[group.RowCount];
+            await group.ReadAsync(field, values.AsMemory(), cancellationToken: token);
+            return [.. values.Select(flag => flag ?? throw new InvalidDataException($"{field.Name} holds a null flag."))];
+        }
+
+        if (field.ClrType == typeof(bool))
+        {
+            var values = new bool[group.RowCount];
+            await group.ReadAsync(field, values.AsMemory(), cancellationToken: token);
+            return values;
+        }
+
+        var text = new string?[group.RowCount];
+        await group.ReadAsync(field, text.AsMemory(), cancellationToken: token);
+        return [.. text.Select(flag => bool.Parse(flag ?? throw new InvalidDataException($"{field.Name} holds a null flag.")))];
     }
 
     [Theory]
