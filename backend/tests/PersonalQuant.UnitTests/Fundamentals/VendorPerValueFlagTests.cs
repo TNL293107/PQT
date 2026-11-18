@@ -187,6 +187,28 @@ public sealed class VendorPerValueFlagTests
         }
     }
 
+    // --- QA + QC, test gap from the PR #26 gate (Tester's survivor c) --------
+
+    [Fact]
+    public async Task A_trailing_loss_that_rests_on_a_vendor_quarter_keeps_the_vendor_flag_on_pe()
+    {
+        // 2025 filed at +250bn a quarter, then a vendor 2026Q1 loss of -2,000bn:
+        // the trailing year 2025Q2–2026Q1 sums to -1,250bn, so EPS is negative
+        // and P/E is absent as a trailing loss. That absence still rests on the
+        // vendor quarter, so it must keep EPS's vendor flag (survivor c).
+        var issuer = new Issuer();
+        issuer.FiledYear(2025, capitalAt: 4, equityAt: [4]);
+        issuer.Vendor(Q2026_1, profit: -2_000_000_000_000m, equity: 9_000_000_000_000m);
+
+        var ratios = await issuer.ReadAsync(November);
+
+        Assert.True(ratios.EpsTtm.Value < 0m, "the trailing year must be a loss for this case");
+        Assert.True(IsVendor(ratios.EpsTtm), "EPS rests on a vendor quarter.");
+        Assert.Null(ratios.PriceToEarnings.Value);
+        Assert.Equal(RatioAbsence.TrailingLoss, ratios.PriceToEarnings.Reason);
+        Assert.True(IsVendor(ratios.PriceToEarnings), "a trailing-loss P/E dropped the vendor flag of the EPS it rests on.");
+    }
+
     private static IEnumerable<(string Name, RatioValue Value)> Values(FundamentalRatios ratios) =>
     [
         (nameof(ratios.Close), ratios.Close),

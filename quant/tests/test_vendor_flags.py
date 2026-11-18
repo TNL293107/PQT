@@ -6,6 +6,8 @@ these pin how the reader holds the flags to the build. Every value invented.
 
 from __future__ import annotations
 
+import json
+import math
 from pathlib import Path
 
 import pyarrow as pa
@@ -18,8 +20,9 @@ from personal_quant.research.datasets import (
     DatasetIntegrityError,
     LocalDatasetProvider,
 )
+from personal_quant.research.manifest import DatasetManifest, content_hash_of
 from synthetic import SyntheticBar, SyntheticDataset, SyntheticFundamentals, write_dataset
-from test_vendor_share_acceptance import ROWS, SESSIONS, VENDOR_FLAG, _write_schema_7
+from test_vendor_share_acceptance import ROWS, SESSIONS, VENDOR_FLAG, Row, _write_schema_7
 
 DATASET = "0123456789abcdef"
 
@@ -128,3 +131,45 @@ def test_every_value_column_has_its_flag_named_once() -> None:
     assert [VENDOR_FLAG.format(name) for name in FUNDAMENTAL_VALUES] == [
         f"{name}_vendor" for name in FUNDAMENTAL_VALUES
     ]
+
+
+# --- QA + QC, test gaps from the PR #26 gate (Tester's survivors a and b) -----
+
+
+def test_a_feature_whose_input_is_present_on_no_row_has_a_share_of_nan(tmp_path: Path) -> None:
+    # quality_roe reads roe alone. With roe absent on every row there is nothing
+    # to share, so the share is nan, not 0.0: 0.0 would claim "measured, none
+    # vendor" for a feature that was never measured (survivor a).
+    rows: list[Row] = [
+        (name, session, flagged, {**values, "roe": None}) for name, session, flagged, values in ROWS
+    ]
+    _write_schema_7(tmp_path, rows)
+
+    share = vendor_shares(LocalDatasetProvider(tmp_path).open(DATASET))["quality_roe"]
+
+    assert math.isnan(share)
+
+
+def test_flag_columns_in_a_schema_6_build_are_not_read(tmp_path: Path) -> None:
+    # Flags exist from schema 7. A schema 6 build that happens to carry flag
+    # columns (set True here) must still read as unflagged: the verifier never
+    # held those columns to the build. A reader gating on ">= 6" reads them
+    # (survivor b).
+    _write_schema_7(tmp_path, ROWS)
+    _rewrite_fundamentals(tmp_path, lambda table: table)  # re-seal before the schema edit
+    build = next(tmp_path.glob("*/v1"))
+    raw = json.loads((build / "manifest.json").read_text(encoding="utf-8"))
+    raw["schema_version"] = 6
+    raw["content_hash"] = content_hash_of(DatasetManifest.from_json(raw))
+    (build / "manifest.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
+
+    dataset = LocalDatasetProvider(tmp_path).open(DATASET)
+    rows = [
+        row
+        for instrument in dataset.manifest.instruments
+        for row in dataset.fundamentals_of(instrument.instrument_id).values()
+    ]
+
+    assert any(flagged for _, _, flagged, _ in ROWS)  # the columns do carry True flags
+    assert rows
+    assert all(not row.vendor for row in rows)
