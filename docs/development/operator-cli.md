@@ -685,6 +685,8 @@ trace is logged at debug and stays one variable away:
 Logging__LogLevel__Default=Debug pqt schema status
 ```
 
+Do not paste Debug output outside this machine: the trace includes inner exceptions, and a vendor's network error names the vendor's host.
+
 ---
 
 ## Worked example — a first real backfill
