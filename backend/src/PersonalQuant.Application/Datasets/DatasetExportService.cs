@@ -184,7 +184,7 @@ internal sealed class DatasetExportService(
             return DatasetVerification.NotFound(datasetId, version);
         }
 
-        var problems = new List<string>();
+        var problems = new List<string>(VendorCountProblems(manifest));
 
         foreach (var file in manifest.Files)
         {
@@ -219,6 +219,29 @@ internal sealed class DatasetExportService(
         }
 
         return new DatasetVerification(datasetId, version, manifest.Files.Count, problems);
+    }
+
+    /// <summary>
+    /// What is wrong with a manifest's vendor row count, which its hash cannot
+    /// catch: the hash renders a missing count as 0 (ADR-038; QA v6-M1, v6-L).
+    /// </summary>
+    private static IEnumerable<string> VendorCountProblems(DatasetManifest manifest)
+    {
+        if (manifest.SchemaVersion < DatasetManifest.VendorSchemaVersion || manifest.Fundamentals is not { } fundamentals)
+        {
+            yield break;
+        }
+
+        if (fundamentals.VendorRows is not { } vendorRows)
+        {
+            yield return $"Schema {manifest.SchemaVersion} requires fundamentals.vendor_rows; this manifest has none.";
+            yield break;
+        }
+
+        if (vendorRows > fundamentals.Rows)
+        {
+            yield return $"fundamentals.vendor_rows ({vendorRows}) exceeds fundamentals.rows ({fundamentals.Rows}).";
+        }
     }
 
     /// <summary>
@@ -610,6 +633,7 @@ internal sealed class DatasetExportService(
         var rows = new List<DatasetFundamentalsRow>();
         var notCollected = new List<DatasetNotCollected>();
         var sources = new SortedSet<string>(StringComparer.Ordinal);
+        var vendorRows = 0L;
 
         foreach (var (instrumentId, ticker, membership) in ranges.OrderBy(range => range.Instrument.Value))
         {
@@ -633,6 +657,7 @@ internal sealed class DatasetExportService(
                 .ConfigureAwait(false);
 
             rows.AddRange(read.Select(Row));
+            vendorRows += read.Count(ratios => ratios.BuiltOnVendor);
         }
 
         var described = new DatasetFundamentals(
@@ -641,7 +666,8 @@ internal sealed class DatasetExportService(
             sources.Count == 0 ? IDatasetLicenceRegistry.UnstatedNote : string.Join(" ", sources.Select(licences.NoteFor).Distinct(StringComparer.Ordinal)),
             DatasetFundamentals.SessionCut,
             rows.Count,
-            [.. notCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal)]);
+            [.. notCollected.OrderBy(gap => gap.InstrumentId.ToString(), StringComparer.Ordinal)],
+            vendorRows);
 
         return (rows, described);
     }
@@ -659,8 +685,22 @@ internal sealed class DatasetExportService(
         WriteIndented = false,
     };
 
-    private static DatasetFundamentalsRow Row(FundamentalRatios ratios) =>
-        new(
+    private static DatasetFundamentalsRow Row(FundamentalRatios ratios)
+    {
+        RatioValue[] values =
+        [
+            ratios.Close,
+            ratios.Shares,
+            ratios.NetProfitTtm,
+            ratios.EpsTtm,
+            ratios.BookValuePerShare,
+            ratios.PriceToEarnings,
+            ratios.PriceToBook,
+            ratios.ReturnOnEquity,
+            ratios.DividendYield,
+        ];
+
+        return new(
             ratios.InstrumentId.Value,
             ratios.Session,
             ratios.KnownAsOfUtc,
@@ -676,19 +716,10 @@ internal sealed class DatasetExportService(
             ratios.ProfitQuarters.Count > 0 ? ratios.ProfitQuarters[^1].ToString() : null,
             ratios.ActionsApplied,
             ratios.ActionsWithheld,
-            [.. new[]
-            {
-                ratios.Close,
-                ratios.Shares,
-                ratios.NetProfitTtm,
-                ratios.EpsTtm,
-                ratios.BookValuePerShare,
-                ratios.PriceToEarnings,
-                ratios.PriceToBook,
-                ratios.ReturnOnEquity,
-                ratios.DividendYield,
-            }.Select(value => (value.Value, value.Value is null ? AbsenceCode(value.Reason) : null))],
-            JsonSerializer.Serialize(ratios.Findings.Order(StringComparer.Ordinal).ToList(), ArrayJson));
+            [.. values.Select(value => (value.Value, value.Value is null ? AbsenceCode(value.Reason) : null))],
+            JsonSerializer.Serialize(ratios.Findings.Order(StringComparer.Ordinal).ToList(), ArrayJson),
+            [.. values.Select(value => value.FromVendor)]);
+    }
 
     /// <summary>The <see cref="RatioAbsence"/> code in snake_case, as the file carries it.</summary>
     internal static string AbsenceCode(RatioAbsence? reason) =>

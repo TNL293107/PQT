@@ -14,6 +14,12 @@ namespace PersonalQuant.Infrastructure.Diagnostics;
 internal static partial class InfrastructureLog
 {
     [LoggerMessage(
+        EventId = 1160,
+        Level = LogLevel.Information,
+        Message = "Vietcap statements are registered as a vendor fundamentals provider (ADR-038) for {TickerCount} tickers.")]
+    public static partial void VietcapStatementsRegistered(ILogger logger, int tickerCount);
+
+    [LoggerMessage(
         EventId = 1000,
         Level = LogLevel.Error,
         Message = "PostgreSQL health check failed.")]

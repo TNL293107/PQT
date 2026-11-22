@@ -67,6 +67,58 @@ public static class InfrastructureServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers Vietcap's statements as a vendor fundamentals provider (ADR-038).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AddInfrastructure"/> calls it when
+    /// <c>MarketData:VietcapStatementsBaseUrl</c> is set, with the tickers from
+    /// <c>MarketData:VietcapStatementsTickers</c>. Nothing is registered by default.
+    /// </remarks>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="baseAddress">The API root the statement paths are relative to.</param>
+    /// <param name="tickers">The tickers it reads; none by default.</param>
+    /// <returns>The same service collection, to allow chaining.</returns>
+    public static IServiceCollection AddVietcapStatements(
+        IServiceCollection services,
+        Uri baseAddress,
+        IReadOnlyList<string>? tickers = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(baseAddress);
+
+        services.AddHttpClient(Fundamentals.VietcapStatementProvider.ClientName, client =>
+        {
+            client.BaseAddress = baseAddress;
+
+            // Named as itself, as the market data adapter is (ADR-015): no
+            // browser agent, no Referer, no Origin.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("PersonalQuantTerminal/0.1 (+research)");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            // The endpoint gzips its statements whether asked or not.
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+        })
+        // The factory's default handlers log every request URI at Information,
+        // which would print the vendor's URL wherever an import runs, the CLI's
+        // terminal included (QA, PR #32). The provider's own log lines name the
+        // ticker and section, which is all an operator needs.
+        .RemoveAllLoggers();
+
+        services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(provider =>
+            new Fundamentals.VietcapStatementProvider(
+                provider.GetRequiredService<IHttpClientFactory>(),
+                provider.GetRequiredService<IClock>(),
+                provider.GetRequiredService<IDelayScheduler>())
+            {
+                Tickers = tickers ?? [],
+            });
+
+        return services;
+    }
+
     private static void AddPostgres(IServiceCollection services)
     {
         // One data source per process: it owns the connection pool and is
@@ -261,6 +313,23 @@ public static class InfrastructureServiceCollectionExtensions
 
             services.AddSingleton<Application.Fundamentals.IFundamentalsProvider>(
                 _ => new Fundamentals.IdsFilingFileProvider(directory));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.VietcapStatementsBaseUrl))
+        {
+            var root = options.VietcapStatementsBaseUrl.EndsWith('/')
+                ? options.VietcapStatementsBaseUrl
+                : options.VietcapStatementsBaseUrl + "/";
+            var tickers = options.VietcapStatementsTickers
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            AddVietcapStatements(services, new Uri(root, UriKind.Absolute), tickers);
+
+            // The operator's check that the wiring took (plan 11.6 step 7):
+            // one startup line with the ticker count, never the URL.
+            services.AddHostedService(provider => new Fundamentals.VietcapStatementsStartupLog(
+                tickers.Length,
+                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Fundamentals.VietcapStatementsStartupLog>>()));
         }
 
         if (!string.IsNullOrWhiteSpace(options.UniverseDirectory))

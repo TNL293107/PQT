@@ -113,8 +113,38 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Fails on any high or critical advisory except those allowed below.
+      # GHSA-fc5q-39xc-vjpf (picomatch ReDoS, <=4.0.7): no fixed picomatch is
+      # published, and npm's only fix is a vite major downgrade. picomatch is
+      # dev-only (vite/vitest globbing our own paths; `npm ls picomatch
+      # --omit=dev` is empty), so it never ships. Remove it from ALLOWED once
+      # picomatch publishes a fixed release. A package passes only when every
+      # high/critical advisory reaching it, through its `via` chain, is allowed.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: |
+          npm audit --json > audit.json || true
+          node - audit.json <<'EOF'
+          const ALLOWED = new Set(["GHSA-fc5q-39xc-vjpf"]);
+          const audit = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+          if (!audit.vulnerabilities) {
+            console.error("npm audit gave no vulnerability report:", audit.error ?? audit);
+            process.exit(1);
+          }
+          const advisories = (name, seen = new Set()) => {
+            if (seen.has(name)) return [];
+            seen.add(name);
+            return (audit.vulnerabilities[name]?.via ?? []).flatMap((via) =>
+              typeof via === "string" ? advisories(via, seen) : [via]);
+          };
+          const blocking = Object.keys(audit.vulnerabilities).flatMap((name) =>
+            advisories(name)
+              .filter((a) => ["high", "critical"].includes(a.severity))
+              .filter((a) => !ALLOWED.has(a.url.split("/").pop()))
+              .map((a) => `${name}: ${a.severity} ${a.url} ${a.title}`));
+          for (const line of new Set(blocking)) console.error(line);
+          if (blocking.length) process.exit(1);
+          console.log("No high or critical advisory outside the allow-list.");
+          EOF
 
       - name: Lint
         run: npm run lint
@@ -333,10 +363,35 @@ jobs:
             exit 1
           fi
 
+      # ADR-041: no real vendor figure in a test file or fixture. The scanner
+      # compares against digests of known real figures, so CI needs no real
+      # data and the log never prints a figure. Docs are not scanned here yet
+      # (--scope docs is the Moderator's call, PR #22 H4).
+      - name: Test the real-figure scanner
+        run: python3 -m unittest discover -s tools/real-figure-scan -p 'test_*.py'
+
+      - name: Fail on a real vendor figure in tests or fixtures (ADR-041)
+        run: python3 tools/real-figure-scan/scan.py --denylist tools/real-figure-scan/denylist.txt
+
       # Compose interpolates variables while validating, so the example file
       # stands in for a real .env. It is committed and contains no secret.
       - name: Validate Docker Compose configuration
         run: docker compose --env-file .env.example config --quiet
+
+      # The portable overlay (a checkout Docker Desktop cannot bind-mount) must
+      # still merge, and must leave the backend with no bind mount at all: one
+      # left over would fail silently on such a drive.
+      - name: Validate the portable Compose overlay
+        run: |
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.portable.yml config --quiet
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.portable.yml config --format json > portable-compose.json
+          python3 - portable-compose.json <<'PY'
+          import json, sys
+          config = json.load(open(sys.argv[1], encoding="utf-8"))
+          binds = [m["target"] for m in config["services"]["backend"]["volumes"] if m["type"] == "bind"]
+          assert not binds, f"bind mounts left in the backend: {binds}"
+          assert config["volumes"]["pqt-data"]["name"] == "personal-quant-terminal_pqt-data"
+          PY
 
   # ---------------------------------------------------------------------------
   # Single required status for branch protection.

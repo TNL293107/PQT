@@ -158,7 +158,7 @@ and VNM only, so FPT's restatements come from `fpt-later-readings.txt`.
   basis and never overwrites an `as_filed` one.
 - **VNM 2024Q4's IDS form holds placeholders**: revenue exactly
   20,000,000,000,000 and profit exactly 2,000,000,000,000. Vietcap's
-  15,477,073,125,441 and 2,123,649,268,482 are the real figures. Here the
+  14- and 13-digit figures, neither round, are the real ones (not quoted, ADR-041). Here the
   filed form is wrong and the vendor right. A filed placeholder is an
   `as_filed` value PQT stores today; finding such values is a data-quality
   item of its own, recorded in the Phase 6 backlog table
@@ -294,6 +294,13 @@ these open points in view.
   labelled and measurable, not eliminated.
 - **A second source to keep collecting.** The vendor read runs beside the IDS
   collector, under the same pacing and personal-use bounds.
+- **A share issue in the vendor year can go unflagged.** Vietcap states no
+  charter capital, so a vendor-era share count is the last filed capital
+  adjusted for the actions recorded since. Within a year of that capital the
+  ratio service says nothing about it; an issue with no recorded action in
+  that year changes no count and raises no finding. The row is still marked
+  `BuiltOnVendor`, and a capital more than a year older than the balance
+  sheet is a finding (QA verify of PR #20, L2).
 - **Licence footing is the vendor's written personal-use grant.** Local,
   personal, never redistributed; if PQT ever earns revenue, this reopens
   first, as ADR-015 and ADR-029 already say.
@@ -316,3 +323,47 @@ these open points in view.
   vendor line as a revision; an unmapped C99 item is absent; a read reports
   its vendor share.
 - Phase 7's report states the vendor share of each value feature's inputs.
+
+## Amendment — 2026-11-17 (sprint 11.6, option A): a vendor flag per value, manifest schema 7
+
+`vendor_rows` says how many rows rest on any vendor value; it cannot say
+which value. A row whose balance sheet is filed but whose trailing profit has
+a vendor quarter is one vendor row, yet its book value and P/B rest on no
+vendor value. The last consequence above (the report states the vendor share
+of each value feature's inputs) needs the value, so the dataset carries it.
+
+- **Per value, by its own inputs.** `RatioValue.FromVendor` is set when a
+  vendor line was read for that value, not merely for a quarter its row
+  reads. `StatementLines` tracks vendor lines by statement, code, quarter and
+  span. Net profit TTM, EPS and P/E follow the trailing quarters; book value
+  and P/B follow the balance sheet's equity; ROE follows the trailing
+  quarters, the closing equity and the year-earlier equity. The close and the
+  dividend yield are never flagged.
+- **Shares and dividend yield carry no flag.** A vendor states no charter
+  capital (Trade-offs), so the share count rests on no vendor line today.
+  The dividend yield rests on corporate actions and the close, not on a
+  statement line. If a vendor ever supplies capital, the share count's flag
+  has to be reconsidered (QA 11.6 LOW-2).
+- **Point in time.** A vendor value fetched after the read instant is not
+  held, so it flags nothing.
+- **Absent values.** An absent value keeps the flag of the vendor inputs that
+  were read even though another input is missing: an ROE whose closing equity
+  is unknown, a book value with no share count, or a trailing year with a
+  quarter missing whose other quarters include a vendor's (QA 11.6 LOW-1).
+  The flag records what was read, not whether the value came out. QA settled
+  this on 2026-11-17 (NOTE 1). A feature's vendor share counts only rows whose
+  inputs are all present, so these flags leave the share unchanged.
+- **File shape.** `fundamentals.parquet` gains a non-null boolean
+  `<value>_vendor` column for each of its nine values. The columns come
+  after `findings`, so every earlier column keeps its position.
+- **Manifest schema 7.** No manifest field is added and the content hash
+  gains no part, because the flags live in the file, which its `sha256`
+  covers. The version still moves to 7, so a reader knows to expect and check
+  the columns: the Python reader refuses a schema 7 build with a flag column
+  missing or a flag that is not a plain true or false, and reads no flags
+  before schema 7. `vendor_rows` is unchanged and keeps its schema 6 meaning
+  (`BuiltOnVendor`). See `docs/schemas/dataset-manifest-v7.schema.json`;
+  `v7-export.json` is the parity fixture both languages hash.
+- **The report.** `personal_quant.factors.catalogue.vendor_shares` reads the
+  share of each value feature from a schema 7 build alone: no database and no
+  ratio service. It refuses an older build rather than call its share 0.

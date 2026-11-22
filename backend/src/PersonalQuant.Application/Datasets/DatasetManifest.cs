@@ -221,8 +221,17 @@ public sealed record DatasetManifest(
     /// Version 5: <c>request</c>, the labelled-dataset request the export was
     /// resolved from, or null. See ADR-034.
     /// </para>
+    /// <para>
+    /// Version 6: <c>fundamentals.vendor_rows</c>, the rows built on any
+    /// vendor value, stated even when 0. See ADR-038.
+    /// </para>
+    /// <para>
+    /// Version 7: <c>fundamentals.parquet</c> carries a <c>&lt;value&gt;_vendor</c>
+    /// flag beside every value. The manifest gains no field and the content
+    /// hash no part: the flags are in the file, hashed by its SHA-256.
+    /// </para>
     /// </remarks>
-    public const int CurrentSchemaVersion = RequestSchemaVersion;
+    public const int CurrentSchemaVersion = VendorFlagsSchemaVersion;
 
     /// <summary>
     /// The first schema version whose manifests carry history and removal
@@ -241,6 +250,18 @@ public sealed record DatasetManifest(
     /// request, and hash it.
     /// </summary>
     public const int RequestSchemaVersion = 5;
+
+    /// <summary>
+    /// The first schema version whose fundamentals object counts vendor rows,
+    /// and hashes the count (ADR-038).
+    /// </summary>
+    public const int VendorSchemaVersion = 6;
+
+    /// <summary>
+    /// The first schema version whose fundamentals file flags, per value,
+    /// whether a vendor value went into it (ADR-038; sprint 11.6 option A).
+    /// </summary>
+    public const int VendorFlagsSchemaVersion = 7;
 
     /// <summary>Gets the total rows across every file.</summary>
     public long RowCount => Files.Sum(file => file.RowCount);
@@ -281,13 +302,17 @@ public sealed record DatasetSource(string Code, string LicenceNote);
 /// The exported instruments with no report held at all, each with why. They
 /// have no rows: a gap is not a name whose ratios are all absent.
 /// </param>
+/// <param name="VendorRows">
+/// Rows built on any vendor value (ADR-038), from schema 6; null before it.
+/// </param>
 public sealed record DatasetFundamentals(
     int RatioVersion,
     string Source,
     string LicenceNote,
     string Cut,
     long Rows,
-    IReadOnlyList<DatasetNotCollected> NotCollected)
+    IReadOnlyList<DatasetNotCollected> NotCollected,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? VendorRows = null)
 {
     /// <summary>The cut every row is read at.</summary>
     public const string SessionCut = "session_date_00utc";
