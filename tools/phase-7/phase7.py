@@ -7,6 +7,7 @@ Run from the repository root with the quant project's environment
     phase7.py request --to 2026-11-13 > req.json
     phase7.py runs --experiment phase-7-vn30-s11 > runs.jsonl
     phase7.py tables --experiment phase-7-vn30-s11 runs.jsonl
+    phase7.py vendor-shares --root datasets --dataset <id> [--version N]
 """
 
 from __future__ import annotations
@@ -20,11 +21,12 @@ from pathlib import Path
 
 import psycopg
 
+from personal_quant.research.datasets import LocalDatasetProvider
 from personal_quant.research.factor_report import (
-    ReportError,
     build_request,
     read_runs,
     render_tables,
+    render_vendor_shares,
     runs_from_jsonl,
     runs_to_jsonl,
 )
@@ -54,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
     tables.add_argument("--experiment", required=True)
     tables.add_argument("runs_file", type=Path)
 
+    shares = commands.add_parser(
+        "vendor-shares", help="render the vendor share per value feature from a schema 7 build"
+    )
+    shares.add_argument("--root", type=Path, required=True, help="the datasets folder")
+    shares.add_argument("--dataset", required=True, help="the dataset id")
+    shares.add_argument("--version", type=int, default=None, help="default: the latest")
+
     arguments = parser.parse_args(argv)
 
     try:
@@ -72,10 +81,16 @@ def main(argv: list[str] | None = None) -> int:
 
             with psycopg.connect(url) as connection:
                 sys.stdout.write(runs_to_jsonl(read_runs(connection, arguments.experiment)))
+        elif arguments.command == "vendor-shares":
+            dataset = LocalDatasetProvider(arguments.root).open(
+                arguments.dataset, arguments.version
+            )
+            sys.stdout.write(render_vendor_shares(dataset))
         else:
             text = arguments.runs_file.read_text(encoding="utf-8")
             sys.stdout.write(render_tables(runs_from_jsonl(text), arguments.experiment))
-    except ReportError as error:
+    # ReportError; vendor_shares refusing a pre-schema-7 build; no such build.
+    except (ValueError, FileNotFoundError) as error:
         sys.stderr.write(f"phase7: {error}\n")
         return 1
 

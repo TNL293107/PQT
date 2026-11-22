@@ -46,5 +46,18 @@ Run from the repository root.
    than leaving a cell blank; and its count line states trials, reproductions,
    failed runs and runs recorded without a job.
 
+4. **Vendor share** (ADR-038 amendment), read from the build the runs read,
+   with no database:
+
+   ```
+   uv run --project quant python tools/phase-7/phase7.py vendor-shares --root <datasets folder> --dataset <id> --version <N>
+   ```
+
+   One row per value feature in catalogue order, with its inputs and the
+   share of its present rows that rest on a vendor value. A feature whose
+   inputs are present on no row reads `—`, never 0. The heading names the
+   dataset id, version, schema and content hash. A build before schema 7 is
+   refused, since it states no flags.
+
 The prose of the report (window statement, the ADR-033 §5 sentence, the t
 values above 2 named, Known limits) is written by QA + QC around these tables.

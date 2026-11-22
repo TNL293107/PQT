@@ -8,7 +8,9 @@ keeps them here so a refresh is a re-run (``tools/phase-7/README.md``):
 - :func:`read_runs` reads an experiment's runs and their metrics in one
   read-only transaction, and :func:`runs_to_jsonl` keeps what it read;
 - :func:`render_tables` turns those runs into the report's tables, so no number
-  in the report is typed by hand.
+  in the report is typed by hand;
+- :func:`render_vendor_shares` states, per value feature, the share of its
+  inputs a vendor supplied, read from the dataset build alone (ADR-038).
 
 The tables list factors in catalogue order and never rank them, and the count
 line states every trial, failed ones included (ADR-033 §5, ADR-036).
@@ -17,6 +19,7 @@ line states every trial, failed ones included (ADR-033 §5, ADR-036).
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date
@@ -25,7 +28,8 @@ from typing import Any
 import psycopg
 from psycopg import sql
 
-from personal_quant.factors.catalogue import CATALOGUE
+from personal_quant.factors.catalogue import CATALOGUE, vendor_shares
+from personal_quant.research.datasets import CanonicalDataset
 
 __all__ = [
     "ReportError",
@@ -33,6 +37,7 @@ __all__ = [
     "build_request",
     "read_runs",
     "render_tables",
+    "render_vendor_shares",
     "runs_from_jsonl",
     "runs_to_jsonl",
 ]
@@ -231,6 +236,53 @@ def render_tables(runs: Sequence[ReportRun], experiment: str) -> str:
         _run_id_section(trials, reproductions),
     ]
     return "\n\n".join(sections) + "\n"
+
+
+def render_vendor_shares(dataset: CanonicalDataset) -> str:
+    """Render the vendor share of each value feature's inputs, from one build.
+
+    One row per catalogue entry with a fundamentals input, in catalogue order:
+    its inputs and :func:`~personal_quant.factors.catalogue.vendor_shares`'
+    share. A feature whose inputs are present on no row has nothing to share
+    and reads "—", never 0. The heading names the build (id, version, schema,
+    content hash) and its ``vendor_rows``, so the table is tied to the dataset
+    the runs read.
+
+    Raises:
+        ValueError: The build is before schema 7 and states no flags
+            (``vendor_shares``' own refusal, raised through).
+    """
+    shares = vendor_shares(dataset)
+    manifest = dataset.manifest
+    fundamentals = manifest.fundamentals
+    rows_line = (
+        f"{fundamentals.vendor_rows} of {fundamentals.rows} fundamentals rows "
+        "rest on a vendor value"
+        if fundamentals is not None
+        else "no fundamentals"
+    )
+    lines = [
+        "## Vendor share per value feature",
+        "",
+        f"Dataset `{manifest.dataset_id}` v{manifest.dataset_version}, "
+        f"schema {manifest.schema_version}, content hash `{manifest.content_hash}`; "
+        f"{rows_line} (ADR-038).",
+        "",
+        "| feature | inputs | vendor share |",
+        "| --- | --- | --- |",
+    ]
+
+    for entry in CATALOGUE:
+        name = entry.engine.name
+
+        if name not in shares:
+            continue
+
+        share = shares[name]
+        cell = "—" if math.isnan(share) else f"{share:.4f}"
+        lines.append(f"| {name} | {', '.join(entry.inputs)} | {cell} |")
+
+    return "\n".join(lines) + "\n"
 
 
 def _count_section(
