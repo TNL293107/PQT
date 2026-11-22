@@ -229,7 +229,7 @@ def render_tables(runs: Sequence[ReportRun], experiment: str) -> str:
 
     count = max(run.trial_count or 0 for run in trials)
     sections = [
-        _count_section(experiment, own, trials, reproductions, count),
+        _count_section(experiment, own, trials, reproductions, count, correlations),
         _feature_section(trials),
         _decay_section(trials),
         _correlation_section(correlations),
@@ -291,8 +291,10 @@ def _count_section(
     trials: Sequence[ReportRun],
     reproductions: Sequence[ReportRun],
     count: int,
+    correlations: Sequence[ReportRun],
 ) -> str:
     first = trials[0]
+    correlation_runs = "run" if len(correlations) == 1 else "runs"
     failed = sum(run.status == "failed" for run in own)
     unqueued = sum(run.job_id is None for run in own)
     reproduced = "reproduction" if len(reproductions) == 1 else "reproductions"
@@ -307,7 +309,13 @@ def _count_section(
             f"| Experiment | `{experiment}`: {len(own)} runs, made of {len(trials)} trials and "
             f"{len(reproductions)} {reproduced}; latest `trial_count` {count}; {failed} failed; "
             f"{unqueued} without a job |",
-            "| Code | " + ", ".join(sorted({f"`{run.code_commit}`" for run in own})) + " |",
+            # QA PR #34 M1: the correlation runs' failures and missing jobs count too.
+            f"| Correlation | `{experiment}-correlation`: {len(correlations)} {correlation_runs}; "
+            f"{sum(run.status == 'failed' for run in correlations)} failed; "
+            f"{sum(run.job_id is None for run in correlations)} without a job |",
+            "| Code | "
+            + ", ".join(sorted({f"`{run.code_commit}`" for run in [*own, *correlations]}))
+            + " |",
         ]
     )
 
@@ -367,26 +375,42 @@ def _decay_section(trials: Sequence[ReportRun]) -> str:
     parts = ["## Decay: mean rank IC (periods)"]
 
     for transform in _TRANSFORMS:
-        rows = [
-            f"| {run.params['feature']} | "
-            + " | ".join(
-                f"{_signed(run.metrics.get(f'decay_rank_ic_mean_h{h}'), 4)} "
-                f"({_whole(run.metrics.get(f'decay_periods_h{h}'))})"
-                for h in horizons
-            )
-            + " |"
-            for run in _in_catalogue_order(trials, transform)
-            if run.status == "succeeded"
-        ]
+        rows = [_decay_row(run, horizons) for run in _in_catalogue_order(trials, transform)]
         parts.append(f"### `{transform}`\n\n{header}\n" + "\n".join(rows))
 
     return "\n\n".join(parts)
 
 
+def _decay_row(run: ReportRun, horizons: Sequence[int]) -> str:
+    # A trial that did not succeed is said with its status, never dropped.
+    if run.status != "succeeded":
+        return f"| {run.params['feature']} | {run.status} |"
+
+    return (
+        f"| {run.params['feature']} | "
+        + " | ".join(
+            f"{_signed(run.metrics.get(f'decay_rank_ic_mean_h{h}'), 4)} "
+            f"({_whole(run.metrics.get(f'decay_periods_h{h}'))})"
+            for h in horizons
+        )
+        + " |"
+    )
+
+
 def _correlation_section(correlations: Sequence[ReportRun]) -> str:
     parts = ["## Correlation between features"]
 
+    if not correlations:
+        parts.append("No correlation run was recorded for this experiment.")
+
     for run in correlations:
+        if run.status != "succeeded":
+            parts.append(
+                f"The correlation run under `{run.params.get(_TRANSFORM)}`: {run.status} "
+                f"(run `{run.run_id}`); it has no pairs to show."
+            )
+            continue
+
         pairs = sorted(
             name.removeprefix("corr_").removesuffix("_mean").split("__")
             for name in run.metrics

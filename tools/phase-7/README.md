@@ -43,8 +43,10 @@ Run from the repository root.
 
    The renderer refuses runs over more than one dataset build. It lists
    factors in catalogue order, never ranked; says `absent` or `failed` rather
-   than leaving a cell blank; and its count line states trials, reproductions,
-   failed runs and runs recorded without a job.
+   than leaving a cell blank, in the feature, decay and correlation tables
+   alike; and its count lines state trials, reproductions, failed runs and
+   runs recorded without a job, for the experiment and for its
+   `-correlation` experiment.
 
 4. **Vendor share** (ADR-038 amendment), read from the build the runs read,
    with no database:

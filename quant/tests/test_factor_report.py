@@ -140,12 +140,17 @@ def _evaluation(
     )
 
 
-def _correlation(transform: str = "wz-1") -> ReportRun:
+def _correlation(
+    transform: str = "wz-1",
+    *,
+    status: str = "succeeded",
+    job: str | None = "00000000-0000-0000-0000-00000000000j",
+) -> ReportRun:
     return ReportRun(
         run_id="00000000-0000-0000-0000-0000000000cc",
         experiment=f"{EXPERIMENT}-correlation",
         strategy="factor_correlation",
-        status="succeeded",
+        status=status,
         content_hash="a" * 64,
         factor_version="catalogue@1",
         params={"dataset_id": DATASET_ID, "dataset_version": 1, "transform_version": transform},
@@ -153,13 +158,17 @@ def _correlation(transform: str = "wz-1") -> ReportRun:
         trial_index=1,
         trial_count=1,
         reproduces_run_id=None,
-        job_id="00000000-0000-0000-0000-00000000000j",
-        metrics={
-            "corr_size__value_bp_mean": -0.21044,
-            "corr_size__value_bp_periods": 24.0,
-            "corr_liquidity_20__size_mean": None,
-            "corr_liquidity_20__size_periods": 0.0,
-        },
+        job_id=job,
+        metrics=(
+            {
+                "corr_size__value_bp_mean": -0.21044,
+                "corr_size__value_bp_periods": 24.0,
+                "corr_liquidity_20__size_mean": None,
+                "corr_liquidity_20__size_periods": 0.0,
+            }
+            if status == "succeeded"
+            else {}
+        ),
         dataset_id=DATASET_ID,
         dataset_version=1,
         schema_version=6,
@@ -205,6 +214,21 @@ def test_a_run_recorded_without_a_job_is_counted() -> None:
     assert "latest `trial_count` 5; 1 failed; 1 without a job" in render_tables(runs, EXPERIMENT)
 
 
+def test_the_correlation_runs_are_counted_with_their_failures_and_missing_jobs() -> None:
+    # QA PR #34 M1: a failed or unqueued correlation run is stated, not hidden.
+    runs = [*_runs()[:-1], _correlation(status="failed", job=None), _correlation("raw")]
+
+    tables = render_tables(runs, EXPERIMENT)
+
+    assert f"`{EXPERIMENT}-correlation`: 2 runs; 1 failed; 1 without a job" in tables
+
+
+def test_a_clean_correlation_experiment_is_counted_as_clean() -> None:
+    tables = render_tables(_runs(), EXPERIMENT)
+
+    assert f"`{EXPERIMENT}-correlation`: 1 run; 0 failed; 0 without a job" in tables
+
+
 def test_rows_follow_the_catalogue_order_and_print_the_trial_count_rule() -> None:
     tables = render_tables(_runs(), EXPERIMENT)
 
@@ -248,6 +272,32 @@ def test_decay_prints_each_horizon_with_its_periods() -> None:
     decay = tables.split("## Decay")[1].split("## Correlation")[0]
     assert "| feature | h=5 | h=21 | h=63 |" in decay
     assert "| momentum_12_1 | +0.0070 (24) | +0.0784 (24) | absent (0) |" in decay
+
+
+def test_a_trial_that_did_not_succeed_has_a_decay_row_with_its_status() -> None:
+    # QA PR #34 L1: the failed size trial under wz-1 is said, not dropped.
+    tables = render_tables(_runs(), EXPERIMENT)
+
+    decay = tables.split("## Decay")[1].split("## Correlation")[0]
+    wz = decay.split("### `wz-1`")[1]
+    assert "| size | failed |" in wz
+
+
+def test_a_correlation_run_that_did_not_succeed_is_said_with_its_status() -> None:
+    runs = [*_runs()[:-1], _correlation(status="failed")]
+
+    correlation = render_tables(runs, EXPERIMENT).split("## Correlation")[1].split("## Run ids")[0]
+
+    assert "under `wz-1`: failed" in correlation
+    assert "| pair |" not in correlation
+
+
+def test_no_correlation_run_is_said_not_left_as_an_empty_section() -> None:
+    correlation = (
+        render_tables(_runs()[:-1], EXPERIMENT).split("## Correlation")[1].split("## Run ids")[0]
+    )
+
+    assert "No correlation run" in correlation
 
 
 def test_correlation_pairs_are_in_name_order_with_absent_pairs_said() -> None:

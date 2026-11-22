@@ -10,9 +10,9 @@ from __future__ import annotations
 import os
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 import pytest
@@ -128,8 +128,45 @@ def test_the_read_returns_both_experiments_in_trial_order_with_their_metrics(sch
     assert runs[3].metrics == {"corr_a__b_mean": 0.5}
 
 
+class _ReadOnlyProbe:
+    """A connection that asks, before each statement but BEGIN, if it is read-only.
+
+    The server answers ``SHOW transaction_read_only`` inside the transaction
+    the statement runs in, so the answer is read_runs' own state.
+    """
+
+    def __init__(self, connection: psycopg.Connection[Any]) -> None:
+        self._connection = connection
+        self.read_only: list[str] = []
+
+    def execute(
+        self, query: str | sql.Composed, params: Mapping[str, object] | None = None
+    ) -> psycopg.Cursor[Any]:
+        if not (isinstance(query, str) and query.startswith("BEGIN")):
+            shown = self._connection.execute("SHOW transaction_read_only").fetchone()
+            assert shown is not None
+            self.read_only.append(shown[0])
+
+        return self._connection.execute(query, params)
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+
+def test_the_read_runs_in_a_read_only_transaction(schema: str) -> None:
+    # QA PR #34 L2: read_runs' own query runs read-only, so the report cannot
+    # write to the run store; this fails if read_runs drops BEGIN READ ONLY.
+    with psycopg.connect(DATABASE_URL) as connection:
+        probe = _ReadOnlyProbe(connection)
+
+        read_runs(cast("psycopg.Connection[Any]", probe), "p7", schema)
+
+        assert probe.read_only == ["on"]
+        assert connection.info.transaction_status == psycopg.pq.TransactionStatus.IDLE
+
+
 def test_the_read_cannot_write(schema: str) -> None:
-    # The transaction is read-only: a write slipped into it is refused.
+    # The server half: a write in a read-only transaction is refused.
     with psycopg.connect(DATABASE_URL) as connection:
         read_runs(connection, "p7", schema)
         connection.execute("BEGIN READ ONLY")
