@@ -380,7 +380,11 @@ public static class InfrastructureServiceCollectionExtensions
                 AutomaticDecompression = DecompressionMethods.GZip
                     | DecompressionMethods.Deflate
                     | DecompressionMethods.Brotli,
-            });
+            })
+            // The factory's default handlers log every request URI at
+            // Information, which would print the vendor's URL wherever a bar
+            // import runs, the CLI's terminal included (QA L1, PR #32).
+            .RemoveAllLoggers();
 
             services.AddSingleton<IMarketDataProvider>(provider =>
                 new VietcapMarketDataProvider(
@@ -417,7 +421,9 @@ public static class InfrastructureServiceCollectionExtensions
                 AutomaticDecompression = DecompressionMethods.GZip
                     | DecompressionMethods.Deflate
                     | DecompressionMethods.Brotli,
-            });
+            })
+            // As for the Vietcap bars client: no request URI in any log.
+            .RemoveAllLoggers();
 
             services.AddSingleton<IMarketDataProvider>(provider =>
                 new CafefMarketDataProvider(
